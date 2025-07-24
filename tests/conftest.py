@@ -1,15 +1,15 @@
 """Pytest configuration and fixtures for LitVar-Link tests."""
 
 import asyncio
-import json
 from collections.abc import AsyncGenerator
+import json
 from typing import Any, Optional
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
-from httpx import AsyncClient
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from httpx import AsyncClient
+import pytest
 
 from litvar_link.api.client import LitVar2Client
 from litvar_link.config import settings
@@ -69,7 +69,7 @@ def mock_variant_service(mock_litvar_client, mock_logger):
             "misses": 0,
             "hit_rate": 0.0,
             "total_requests": 0,
-        }
+        },
     )
 
     return service
@@ -95,7 +95,7 @@ async def async_client(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
     from httpx import ASGITransport
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test",
     ) as client:
         yield client
 

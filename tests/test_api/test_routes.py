@@ -516,7 +516,7 @@ class TestHealthRoutes:
                 "success_rate": 99.5,
                 "avg_response_time": 123.45,
                 "current_rate": 2.1,
-            }
+            },
         )
 
         mock_service = AsyncMock()
@@ -603,7 +603,7 @@ class TestDependencyInjection:
         mock_logger = MagicMock()
 
         # Override dependencies
-        from litvar_link.api.routes.dependencies import get_variant_service, get_logger
+        from litvar_link.api.routes.dependencies import get_logger, get_variant_service
 
         app = create_app()
         app.dependency_overrides[get_variant_service] = lambda: mock_service

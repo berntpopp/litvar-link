@@ -311,7 +311,7 @@ class TestLitVar2Client:
             mock_response.text = mock_ndjson
             mock_response.headers = {"content-type": "text/plain"}
             mock_response.json = MagicMock(
-                side_effect=json.JSONDecodeError("No JSON", "", 0)
+                side_effect=json.JSONDecodeError("No JSON", "", 0),
             )
             mock_response.raise_for_status = MagicMock()
             mock_request.return_value = mock_response

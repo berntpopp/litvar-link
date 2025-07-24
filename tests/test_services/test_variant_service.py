@@ -377,7 +377,7 @@ class TestVariantService:
     ) -> None:
         """Test concurrent access to cached data."""
         # Mock client response with delay to test concurrency
-        async def delayed_response(*args, **kwargs):
+        async def delayed_response(*_args, **_kwargs):
             await asyncio.sleep(0.1)
             return [sample_variant_data]
 
@@ -462,7 +462,7 @@ class TestVariantService:
     ) -> None:
         """Test response time tracking."""
         # Mock client with delay
-        async def delayed_response(*args, **kwargs):
+        async def delayed_response(*_args, **_kwargs):
             await asyncio.sleep(0.1)  # 100ms delay
             return [sample_variant_data]
 
@@ -507,8 +507,8 @@ class TestVariantService:
     def test_cache_key_generation(
         self,
         service: VariantService,
-        mock_client: AsyncMock,
-        mock_logger: MagicMock,
+        mock_client: AsyncMock,  # noqa: ARG002
+        mock_logger: MagicMock,  # noqa: ARG002
     ) -> None:
         """Test cache key generation for different methods."""
         # Access private method for testing

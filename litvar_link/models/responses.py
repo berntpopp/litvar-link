@@ -113,7 +113,7 @@ class SensorResponse(BaseResponse):
     gene: Optional[list[str]] = Field(None, description="Associated genes")
     variant_name: Optional[str] = Field(None, description="Variant name if available")
     search_time_ms: Optional[float] = Field(
-        None, description="Search execution time in milliseconds"
+        None, description="Search execution time in milliseconds",
     )
     cached: bool = Field(
         default=False,
@@ -130,7 +130,7 @@ class GeneVariantsResponse(BaseResponse):
 
     # Gene-specific statistics
     pathogenic_count: int = Field(
-        default=0, description="Number of pathogenic variants"
+        default=0, description="Number of pathogenic variants",
     )
     benign_count: int = Field(default=0, description="Number of benign variants")
     uncertain_count: int = Field(
@@ -138,12 +138,12 @@ class GeneVariantsResponse(BaseResponse):
         description="Number of variants with uncertain significance",
     )
     total_publications: int = Field(
-        default=0, description="Total number of publications"
+        default=0, description="Total number of publications",
     )
 
     # Response metadata
     search_time_ms: Optional[float] = Field(
-        None, description="Search execution time in milliseconds"
+        None, description="Search execution time in milliseconds",
     )
     cached: bool = Field(
         default=False,

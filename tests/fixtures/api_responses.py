@@ -99,7 +99,7 @@ class MockLitVarResponses:
     @staticmethod
     def sensor_response_not_available() -> None:
         """Mock sensor response for unavailable variant."""
-        return None
+        return
 
     @staticmethod
     def publications_response() -> list[str]:

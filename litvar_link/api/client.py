@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+import types
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin
 
@@ -26,6 +27,10 @@ if TYPE_CHECKING:
 
 class TokenBucketRateLimiter:
     """Token bucket rate limiter for API requests."""
+
+    # Constants for rate calculation
+    _RATE_WINDOW_SECONDS = 10.0
+    _MIN_REQUESTS_FOR_RATE = 2
 
     def __init__(self, rate: float, burst: int = 1) -> None:
         """Initialize rate limiter.
@@ -58,8 +63,8 @@ class TokenBucketRateLimiter:
                 self.tokens -= 1
                 # Track request time for rate calculation
                 self.request_times.append(now)
-                # Keep only recent requests (last 10 seconds)
-                self.request_times = [t for t in self.request_times if now - t <= 10.0]
+                # Keep only recent requests
+                self.request_times = [t for t in self.request_times if now - t <= self._RATE_WINDOW_SECONDS]
                 return 0.0
             # Calculate wait time for next token
             return (1 - self.tokens) / self.rate
@@ -79,9 +84,9 @@ class TokenBucketRateLimiter:
         """
         now = time.time()
         # Clean up old request times
-        recent_requests = [t for t in self.request_times if now - t <= 10.0]
+        recent_requests = [t for t in self.request_times if now - t <= self._RATE_WINDOW_SECONDS]
 
-        if len(recent_requests) < 2:
+        if len(recent_requests) < self._MIN_REQUESTS_FOR_RATE:
             return 0.0
 
         # Calculate rate based on requests over time window
@@ -94,6 +99,11 @@ class TokenBucketRateLimiter:
 
 class LitVar2Client:
     """HTTP client for LitVar2 API with rate limiting and error handling."""
+
+    # HTTP status code constants
+    _HTTP_TOO_MANY_REQUESTS = 429
+    _HTTP_SERVER_ERROR = 500
+    _HTTP_CLIENT_ERROR = 400
 
     def __init__(
         self,
@@ -138,7 +148,12 @@ class LitVar2Client:
         """Async context manager entry."""
         return self
 
-    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: types.TracebackType | None,
+    ) -> None:
         """Async context manager exit."""
         await self.close()
 
@@ -155,8 +170,8 @@ class LitVar2Client:
             List of parsed JSON objects
         """
         results = []
-        for line in text.strip().split("\n"):
-            line = line.strip()
+        for raw_line in text.strip().split("\n"):
+            line = raw_line.strip()
             if line:
                 try:
                     # Try parsing as-is first
@@ -237,19 +252,19 @@ class LitVar2Client:
                     )
 
                 # Handle different status codes
-                if response.status_code == 429:
+                if response.status_code == self._HTTP_TOO_MANY_REQUESTS:
                     retry_after = float(response.headers.get("Retry-After", 60))
                     msg = f"Rate limit exceeded for {url}"
                     raise RateLimitError(
                         msg,
                         retry_after=retry_after,
                     )
-                if response.status_code >= 500:
+                if response.status_code >= self._HTTP_SERVER_ERROR:
                     msg = f"LitVar2 service error: HTTP {response.status_code}"
                     raise ServiceUnavailableError(
                         msg,
                     )
-                if response.status_code >= 400:
+                if response.status_code >= self._HTTP_CLIENT_ERROR:
                     error_text = (
                         response.text[:200] if response.text else "Unknown error"
                     )
@@ -458,7 +473,7 @@ class LitVar2Client:
             raise ValueError("Gene name too long (max 50 characters)")
 
         endpoint = self.config.endpoints["gene_variants"].format(
-            gene_name=gene_name.strip()
+            gene_name=gene_name.strip(),
         )
         response = await self._make_request("GET", endpoint)
 
