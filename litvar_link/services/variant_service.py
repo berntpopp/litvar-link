@@ -101,8 +101,7 @@ class VariantService:
                 return await self.client.search_variants(q, limit=lim)
 
             self._search_cache = alru_cache(
-                maxsize=self.cache_config.size,
-                ttl=self.cache_config.ttl
+                maxsize=self.cache_config.size, ttl=self.cache_config.ttl
             )(_search_wrapper)
 
         return await self._search_cache(query, limit)
