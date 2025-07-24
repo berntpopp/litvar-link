@@ -64,7 +64,11 @@ class TokenBucketRateLimiter:
                 # Track request time for rate calculation
                 self.request_times.append(now)
                 # Keep only recent requests
-                self.request_times = [t for t in self.request_times if now - t <= self._RATE_WINDOW_SECONDS]
+                self.request_times = [
+                    t
+                    for t in self.request_times
+                    if now - t <= self._RATE_WINDOW_SECONDS
+                ]
                 return 0.0
             # Calculate wait time for next token
             return (1 - self.tokens) / self.rate
@@ -84,7 +88,9 @@ class TokenBucketRateLimiter:
         """
         now = time.time()
         # Clean up old request times
-        recent_requests = [t for t in self.request_times if now - t <= self._RATE_WINDOW_SECONDS]
+        recent_requests = [
+            t for t in self.request_times if now - t <= self._RATE_WINDOW_SECONDS
+        ]
 
         if len(recent_requests) < self._MIN_REQUESTS_FOR_RATE:
             return 0.0

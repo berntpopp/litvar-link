@@ -40,14 +40,16 @@ class AutocompleteVariantItem(BaseModel):
     hgvs: str = Field(default="", description="HGVS notation")
     pmids_count: int = Field(description="Number of associated publications")
     flag_gene_variant: bool = Field(
-        default=False, description="True if this is a gene-level variant",
+        default=False,
+        description="True if this is a gene-level variant",
     )
     flag_clingen_variant: bool = Field(
         default=False,
         description="True if this variant is in ClinGen database",
     )
     flag_rsid_variant: bool = Field(
-        default=False, description="True if this variant has an RSID",
+        default=False,
+        description="True if this variant has an RSID",
     )
 
     # Optional fields that sometimes appear

@@ -2,11 +2,78 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from pydantic import Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class APIConfigModel(BaseModel):
+    """LitVar2 API configuration model."""
+
+    base_url: str = Field(
+        default="https://www.ncbi.nlm.nih.gov/research/litvar2-api/",
+        description="Base URL for LitVar2 API",
+    )
+    timeout: int = Field(
+        default=30, ge=1, le=300, description="Request timeout in seconds"
+    )
+    rate_limit_per_second: float = Field(
+        default=2.0, gt=0.0, le=10.0, description="API rate limit (requests per second)"
+    )
+    burst_size: int = Field(
+        default=5, ge=1, le=20, description="Maximum burst size for rate limiting"
+    )
+    max_retries: int = Field(
+        default=3, ge=0, le=10, description="Maximum number of retry attempts"
+    )
+    retry_delay: float = Field(
+        default=1.0,
+        ge=0.1,
+        le=10.0,
+        description="Delay between retry attempts in seconds",
+    )
+    user_agent: str = Field(
+        default="LitVar-Link/0.1.0", description="User agent string for API requests"
+    )
+    endpoints: dict[str, str] = Field(
+        default={
+            "autocomplete": "variant/autocomplete/",
+            "variant_details": "variant/get/{variant_id}",
+            "variant_publications": "variant/get/{variant_id}/publications",
+            "sensor": "sensor/{rsid}",
+            "gene_variants": "variant/search/gene/{gene_name}",
+        },
+        description="API endpoint URL patterns",
+    )
+
+    @field_validator("base_url")
+    @classmethod
+    def validate_base_url(cls, v: str) -> str:
+        """Ensure base URL ends with forward slash."""
+        if not v.endswith("/"):
+            return f"{v}/"
+        return v
+
+
+class CacheConfigModel(BaseModel):
+    """Cache configuration model."""
+
+    size: int = Field(
+        default=1000, ge=10, le=10000, description="Maximum number of cached items"
+    )
+    ttl: int = Field(
+        default=3600,
+        ge=60,
+        le=86400,
+        description="Time-to-live for cached items in seconds",
+    )
+    stats_enabled: bool = Field(
+        default=True, description="Enable cache statistics tracking"
+    )
+    cleanup_interval: int = Field(
+        default=300, ge=60, le=3600, description="Cache cleanup interval in seconds"
+    )
 
 
 class ServerSettings(BaseSettings):
@@ -63,10 +130,14 @@ class ServerSettings(BaseSettings):
     )
     log_show_caller: bool = Field(default=False, description="Show caller info in logs")
 
-    # Transport mode
-    transport: Literal["unified", "http", "stdio"] = Field(
-        default="unified",
-        description="Transport mode for server",
+    # API configuration
+    api: APIConfigModel = Field(
+        default_factory=APIConfigModel, description="LitVar2 API configuration"
+    )
+
+    # Cache configuration
+    cache: CacheConfigModel = Field(
+        default_factory=CacheConfigModel, description="Caching configuration"
     )
 
     @field_validator("mcp_path")
@@ -86,67 +157,23 @@ class ServerSettings(BaseSettings):
         return v
 
 
-@dataclass
-class APIConfig:
-    """LitVar2 API configuration."""
-
-    base_url: str
-    timeout: int
-    rate_limit_per_second: float
-    burst_size: int = 1
-    max_retries: int = 3
-    retry_delay: float = 1.0
-    user_agent: str = "LitVar-Link/0.1.0"
-
-    # API endpoints
-    endpoints: dict[str, str] = field(
-        default_factory=lambda: {
-            "autocomplete": "variant/autocomplete/",
-            "variant_details": "variant/get/{variant_id}",
-            "variant_publications": "variant/get/{variant_id}/publications",
-            "sensor": "sensor/{rsid}",
-            "gene_variants": "variant/search/gene/{gene_name}",
-        },
-    )
-
-
-@dataclass
-class CacheConfig:
-    """Cache configuration."""
-
-    size: int = 1000
-    ttl: int = 3600  # 1 hour
-    stats_enabled: bool = True
-    cleanup_interval: int = 300  # 5 minutes
-
-
-# Default configurations
-DEFAULT_API_CONFIG = APIConfig(
-    base_url="https://www.ncbi.nlm.nih.gov/research/litvar2-api/",
-    timeout=30,
-    rate_limit_per_second=2.0,  # Conservative rate limiting
-    burst_size=5,
-    max_retries=3,
-    retry_delay=1.0,
-)
-
-DEFAULT_CACHE_CONFIG = CacheConfig(
-    size=1000,
-    ttl=3600,
-    stats_enabled=True,
-    cleanup_interval=300,
-)
-
 # Global settings instance
 settings = ServerSettings()
 
 
-# Configuration factory
-def get_api_config() -> APIConfig:
-    """Get API configuration."""
-    return DEFAULT_API_CONFIG
+# Configuration accessors for backward compatibility
+def get_api_config() -> APIConfigModel:
+    """Get API configuration from global settings."""
+    return settings.api
 
 
-def get_cache_config() -> CacheConfig:
-    """Get cache configuration."""
-    return DEFAULT_CACHE_CONFIG
+def get_cache_config() -> CacheConfigModel:
+    """Get cache configuration from global settings."""
+    return settings.cache
+
+
+# Aliases for backward compatibility
+APIConfig = APIConfigModel
+CacheConfig = CacheConfigModel
+DEFAULT_API_CONFIG = settings.api
+DEFAULT_CACHE_CONFIG = settings.cache

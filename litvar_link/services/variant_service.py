@@ -5,10 +5,9 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING, Any
 
-from async_lru import alru_cache
-
 from litvar_link.exceptions import ValidationError
-from litvar_link.logging_config import log_cache_operation, log_error_with_context
+from litvar_link.logging_config import log_error_with_context
+from litvar_link.utils.caching import create_service_cache_decorator
 from litvar_link.models import (
     GeneVariantsResponse,
     PublicationResponse,
@@ -44,7 +43,12 @@ class VariantService:
         self.client = client
         self.cache_config = cache_config
         self.logger = logger
-        self._cache_stats = {"hits": 0, "misses": 0}
+
+        # Initialize centralized cache manager
+        self.cache = create_service_cache_decorator(logger)
+
+        # Apply caching decorators to methods
+        self._setup_cached_methods()
 
     def _generate_cache_key(self, operation: str, **kwargs: Any) -> str:
         """Generate cache key for operation.
@@ -63,70 +67,64 @@ class VariantService:
 
     @property
     def cache_stats(self) -> dict[str, Any]:
-        """Get cache statistics."""
-        total_requests = self._cache_stats["hits"] + self._cache_stats["misses"]
-        hit_rate = (
-            self._cache_stats["hits"] / total_requests if total_requests > 0 else 0.0
+        """Get comprehensive cache statistics."""
+        return self.cache.cache_stats
+
+    def _setup_cached_methods(self) -> None:
+        """Set up cached methods using the cache manager."""
+        # Use config values or defaults for search variants
+        search_maxsize = (
+            self.cache_config.size if hasattr(self.cache_config, "size") else 256
+        )
+        search_ttl = (
+            self.cache_config.ttl if hasattr(self.cache_config, "ttl") else 3600
         )
 
-        return {
-            "hits": self._cache_stats["hits"],
-            "misses": self._cache_stats["misses"],
-            "hit_rate": hit_rate * 100.0,  # Convert to percentage
-            "total_requests": total_requests,
-        }
+        self._cached_search_variants = self.cache.cached(
+            maxsize=search_maxsize, ttl=search_ttl, key_pattern="search_variants"
+        )(self._search_variants_impl)
 
-    def _log_cache_hit(self, key: str) -> None:
-        """Log cache hit."""
-        self._cache_stats["hits"] += 1
-        if self.logger:
-            log_cache_operation(self.logger, "hit", key, hit=True)
+        self._cached_get_variant_details = self.cache.cached(
+            maxsize=500, ttl=7200, key_pattern="variant_details"
+        )(self._get_variant_details_impl)
 
-    def _log_cache_miss(self, key: str) -> None:
-        """Log cache miss."""
-        self._cache_stats["misses"] += 1
-        if self.logger:
-            log_cache_operation(self.logger, "miss", key, hit=False)
+        self._cached_get_variant_publications = self.cache.cached(
+            maxsize=500, ttl=3600, key_pattern="variant_publications"
+        )(self._get_variant_publications_impl)
 
-    async def _cached_search_variants(
+        self._cached_sensor_lookup = self.cache.cached(
+            maxsize=1000, ttl=86400, key_pattern="sensor_lookup"
+        )(self._sensor_lookup_impl)
+
+        self._cached_get_variants_by_gene = self.cache.cached(
+            maxsize=200, ttl=3600, key_pattern="gene_variants"
+        )(self._get_variants_by_gene_impl)
+
+    async def _search_variants_impl(
         self,
         query: str,
         limit: int,
     ) -> list[dict[str, Any]]:
-        """Search variants with caching."""
-        # Create cache with dynamic TTL if not exists
-        if not hasattr(self, "_search_cache"):
-            # Create a wrapper function to cache
-            async def _search_wrapper(q: str, lim: int) -> list[dict[str, Any]]:
-                return await self.client.search_variants(q, limit=lim)
+        """Search variants implementation."""
+        return await self.client.search_variants(query, limit=limit)
 
-            self._search_cache = alru_cache(
-                maxsize=self.cache_config.size, ttl=self.cache_config.ttl,
-            )(_search_wrapper)
-
-        return await self._search_cache(query, limit)
-
-    @alru_cache(maxsize=500, ttl=7200)  # 2 hour TTL for variant details
-    async def _cached_get_variant_details(self, variant_id: str) -> dict[str, Any]:
-        """Retrieve variant details with caching."""
+    async def _get_variant_details_impl(self, variant_id: str) -> dict[str, Any]:
+        """Get variant details implementation."""
         return await self.client.get_variant_details(variant_id)
 
-    @alru_cache(maxsize=500, ttl=3600)  # 1 hour TTL for publications
-    async def _cached_get_variant_publications(self, variant_id: str) -> list[str]:
-        """Retrieve variant publications with caching."""
+    async def _get_variant_publications_impl(self, variant_id: str) -> list[str]:
+        """Get variant publications implementation."""
         return await self.client.get_variant_publications(variant_id)
 
-    @alru_cache(maxsize=1000, ttl=86400)  # 24 hour TTL for sensor data
-    async def _cached_sensor_lookup(self, rsid: str) -> dict[str, Any]:
-        """Look up RSID sensor data with caching."""
+    async def _sensor_lookup_impl(self, rsid: str) -> dict[str, Any]:
+        """RSID sensor lookup implementation."""
         return await self.client.sensor_lookup(rsid)
 
-    @alru_cache(maxsize=200, ttl=3600)  # 1 hour TTL for gene variants
-    async def _cached_get_variants_by_gene(
+    async def _get_variants_by_gene_impl(
         self,
         gene_name: str,
     ) -> list[dict[str, Any]]:
-        """Retrieve gene variants with caching."""
+        """Get variants by gene implementation."""
         return await self.client.get_variants_by_gene(gene_name)
 
     async def search_variants(
@@ -161,33 +159,20 @@ class VariantService:
             raise ValidationError(msg, field="limit")
 
         query = query.strip()
-        cache_key = f"search:{query}:{limit}"
 
         try:
             start_time = time.time()
 
-            # Check if result is cached
-            if not hasattr(self, "_search_cache"):
-                initial_hits = 0
-                cached = False
-            else:
-                cache_info = self._search_cache.cache_info()
-                initial_hits = cache_info.hits
-
-            # Make cached call
+            # Check cache info before call
+            cache_info_before = self._cached_search_variants.cache_info() if hasattr(self._cached_search_variants, 'cache_info') else None
+            initial_hits = cache_info_before.hits if cache_info_before else 0
+            
+            # Make cached call (caching logic handled by decorator)
             variant_data = await self._cached_search_variants(query, limit)
-
+            
             # Check if cache was hit
-            if hasattr(self, "_search_cache"):
-                new_cache_info = self._search_cache.cache_info()
-                cached = new_cache_info.hits > initial_hits
-            else:
-                cached = False
-
-            if cached:
-                self._log_cache_hit(cache_key)
-            else:
-                self._log_cache_miss(cache_key)
+            cache_info_after = self._cached_search_variants.cache_info() if hasattr(self._cached_search_variants, 'cache_info') else None
+            cached = cache_info_after.hits > initial_hits if cache_info_after else False
 
             # Parse variants using the endpoint-specific model
             from litvar_link.models.endpoint_specific import AutocompleteVariantItem
@@ -247,24 +232,17 @@ class VariantService:
             raise ValidationError(msg, field="variant_id")
 
         variant_id = variant_id.strip()
-        cache_key = f"details:{variant_id}"
-
         try:
-            # Check if result is cached
-            cache_info = self._cached_get_variant_details.cache_info()
-            initial_hits = cache_info.hits
-
-            # Make cached call
+            # Check cache info before call
+            cache_info_before = self._cached_get_variant_details.cache_info() if hasattr(self._cached_get_variant_details, 'cache_info') else None
+            initial_hits = cache_info_before.hits if cache_info_before else 0
+            
+            # Make cached call (caching logic handled by decorator)
             variant_data = await self._cached_get_variant_details(variant_id)
-
+            
             # Check if cache was hit
-            new_cache_info = self._cached_get_variant_details.cache_info()
-            cached = new_cache_info.hits > initial_hits
-
-            if cached:
-                self._log_cache_hit(cache_key)
-            else:
-                self._log_cache_miss(cache_key)
+            cache_info_after = self._cached_get_variant_details.cache_info() if hasattr(self._cached_get_variant_details, 'cache_info') else None
+            cached = cache_info_after.hits > initial_hits if cache_info_after else False
 
             # Parse variant details
             variant = VariantDetails(**variant_data)
@@ -302,24 +280,17 @@ class VariantService:
             raise ValidationError(msg, field="variant_id")
 
         variant_id = variant_id.strip()
-        cache_key = f"publications:{variant_id}"
-
         try:
-            # Check if result is cached
-            cache_info = self._cached_get_variant_publications.cache_info()
-            initial_hits = cache_info.hits
-
-            # Make cached call
+            # Check cache info before call
+            cache_info_before = self._cached_get_variant_publications.cache_info() if hasattr(self._cached_get_variant_publications, 'cache_info') else None
+            initial_hits = cache_info_before.hits if cache_info_before else 0
+            
+            # Make cached call (caching logic handled by decorator)
             pmids = await self._cached_get_variant_publications(variant_id)
-
+            
             # Check if cache was hit
-            new_cache_info = self._cached_get_variant_publications.cache_info()
-            cached = new_cache_info.hits > initial_hits
-
-            if cached:
-                self._log_cache_hit(cache_key)
-            else:
-                self._log_cache_miss(cache_key)
+            cache_info_after = self._cached_get_variant_publications.cache_info() if hasattr(self._cached_get_variant_publications, 'cache_info') else None
+            cached = cache_info_after.hits > initial_hits if cache_info_after else False
 
             # Create publication objects (simplified for now)
             from litvar_link.models.variants import Publication
@@ -370,24 +341,17 @@ class VariantService:
             msg = "Invalid RSID format"
             raise ValidationError(msg, field="rsid")
 
-        cache_key = f"sensor:{rsid}"
-
         try:
-            # Check if result is cached
-            cache_info = self._cached_sensor_lookup.cache_info()
-            initial_hits = cache_info.hits
-
-            # Make cached call
+            # Check cache info before call
+            cache_info_before = self._cached_sensor_lookup.cache_info() if hasattr(self._cached_sensor_lookup, 'cache_info') else None
+            initial_hits = cache_info_before.hits if cache_info_before else 0
+            
+            # Make cached call (caching logic handled by decorator)
             sensor_data = await self._cached_sensor_lookup(rsid)
-
+            
             # Check if cache was hit
-            new_cache_info = self._cached_sensor_lookup.cache_info()
-            cached = new_cache_info.hits > initial_hits
-
-            if cached:
-                self._log_cache_hit(cache_key)
-            else:
-                self._log_cache_miss(cache_key)
+            cache_info_after = self._cached_sensor_lookup.cache_info() if hasattr(self._cached_sensor_lookup, 'cache_info') else None
+            cached = cache_info_after.hits > initial_hits if cache_info_after else False
 
             # Parse sensor response - handle None case
             if sensor_data is None:
@@ -445,24 +409,17 @@ class VariantService:
             raise ValidationError(msg, field="gene_name")
 
         gene_name = gene_name.strip().upper()
-        cache_key = f"gene_variants:{gene_name}"
-
         try:
-            # Check if result is cached
-            cache_info = self._cached_get_variants_by_gene.cache_info()
-            initial_hits = cache_info.hits
-
-            # Make cached call
+            # Check cache info before call
+            cache_info_before = self._cached_get_variants_by_gene.cache_info() if hasattr(self._cached_get_variants_by_gene, 'cache_info') else None
+            initial_hits = cache_info_before.hits if cache_info_before else 0
+            
+            # Make cached call (caching logic handled by decorator)
             variant_data = await self._cached_get_variants_by_gene(gene_name)
-
+            
             # Check if cache was hit
-            new_cache_info = self._cached_get_variants_by_gene.cache_info()
-            cached = new_cache_info.hits > initial_hits
-
-            if cached:
-                self._log_cache_hit(cache_key)
-            else:
-                self._log_cache_miss(cache_key)
+            cache_info_after = self._cached_get_variants_by_gene.cache_info() if hasattr(self._cached_get_variants_by_gene, 'cache_info') else None
+            cached = cache_info_after.hits > initial_hits if cache_info_after else False
 
             # Parse variants using the endpoint-specific model
             from litvar_link.models.endpoint_specific import GeneVariantItem
@@ -536,7 +493,7 @@ class VariantService:
             raise
 
     async def clear_cache(self, pattern: str | None = None) -> dict[str, int]:
-        """Clear service cache.
+        """Clear service cache using centralized cache manager.
 
         Args:
             pattern: Optional pattern to match cache keys
@@ -544,28 +501,12 @@ class VariantService:
         Returns:
             Dictionary with cleared cache statistics
         """
-        cleared_count = 0
+        return self.cache.clear_all_caches(pattern)
 
-        # Clear all caches (since async_lru doesn't support pattern matching)
-        caches = [
-            self._cached_search_variants,
-            self._cached_get_variant_details,
-            self._cached_get_variant_publications,
-            self._cached_sensor_lookup,
-            self._cached_get_variants_by_gene,
-        ]
+    def get_cache_info(self) -> dict[str, Any]:
+        """Get detailed cache information for all cached methods.
 
-        for cache in caches:
-            info_before = cache.cache_info()
-            cache.cache_clear()
-            cleared_count += info_before.currsize
-
-        if self.logger:
-            log_cache_operation(
-                self.logger,
-                "clear",
-                pattern or "all",
-                size=cleared_count,
-            )
-
-        return {"cleared_count": cleared_count}
+        Returns:
+            Dictionary with cache information for each cached method
+        """
+        return self.cache.get_cache_info()

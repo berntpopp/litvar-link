@@ -95,7 +95,8 @@ async def async_client(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
     from httpx import ASGITransport
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test",
+        transport=ASGITransport(app=app),
+        base_url="http://test",
     ) as client:
         yield client
 
