@@ -376,7 +376,6 @@ class TestVariantService:
         sample_variant_data: dict,
     ) -> None:
         """Test concurrent access to cached data."""
-
         # Mock client response with delay to test concurrency
         async def delayed_response(*args, **kwargs):
             await asyncio.sleep(0.1)
@@ -462,7 +461,6 @@ class TestVariantService:
         sample_variant_data: dict,
     ) -> None:
         """Test response time tracking."""
-
         # Mock client with delay
         async def delayed_response(*args, **kwargs):
             await asyncio.sleep(0.1)  # 100ms delay

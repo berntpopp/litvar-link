@@ -9,7 +9,7 @@ from litvar_link.server_manager import UnifiedServerManager
 
 
 def main() -> None:
-    """Main entry point for MCP server."""
+    """Start MCP server."""
     # Set transport mode and disable FastMCP banner/colors
     os.environ["TRANSPORT"] = "stdio"
     os.environ["FASTMCP_DISABLE_BANNER"] = "1"

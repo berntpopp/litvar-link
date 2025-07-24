@@ -170,7 +170,7 @@ def mock_httpx_client() -> AsyncMock:
 
 
 @pytest.fixture
-def mock_litvar_client() -> MagicMock:
+def mock_litvar_client_v2() -> MagicMock:
     """Mock LitVar2 client for testing."""
     client = MagicMock()
 
@@ -238,6 +238,7 @@ class MockResponse:
         status_code: int = 200,
         headers: Optional[dict[str, str]] = None,
     ):
+        """Initialize mock response."""
         self.json_data = json_data
         self.status_code = status_code
         self.headers = headers or {"content-type": "application/json"}

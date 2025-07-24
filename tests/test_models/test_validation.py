@@ -287,12 +287,12 @@ class TestResponseModels:
     def test_publication_response(self) -> None:
         """Test publication response."""
         from litvar_link.models.variants import Publication
-        
+
         publications = [
             Publication(pmid="17634449"),
             Publication(pmid="18425111"),
         ]
-        
+
         response = PublicationResponse(
             variant_id="litvar@rs1061170##",
             publications=publications,

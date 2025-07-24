@@ -93,33 +93,33 @@ class VariantService:
         query: str,
         limit: int,
     ) -> list[dict[str, Any]]:
-        """Cached variant search."""
+        """Search variants with caching."""
         # Create cache with dynamic TTL if not exists
-        if not hasattr(self, '_search_cache'):
+        if not hasattr(self, "_search_cache"):
             # Create a wrapper function to cache
             async def _search_wrapper(q: str, lim: int) -> list[dict[str, Any]]:
                 return await self.client.search_variants(q, limit=lim)
-            
+
             self._search_cache = alru_cache(
-                maxsize=self.cache_config.size, 
+                maxsize=self.cache_config.size,
                 ttl=self.cache_config.ttl
             )(_search_wrapper)
-        
+
         return await self._search_cache(query, limit)
 
     @alru_cache(maxsize=500, ttl=7200)  # 2 hour TTL for variant details
     async def _cached_get_variant_details(self, variant_id: str) -> dict[str, Any]:
-        """Cached variant details retrieval."""
+        """Retrieve variant details with caching."""
         return await self.client.get_variant_details(variant_id)
 
     @alru_cache(maxsize=500, ttl=3600)  # 1 hour TTL for publications
     async def _cached_get_variant_publications(self, variant_id: str) -> list[str]:
-        """Cached variant publications retrieval."""
+        """Retrieve variant publications with caching."""
         return await self.client.get_variant_publications(variant_id)
 
     @alru_cache(maxsize=1000, ttl=86400)  # 24 hour TTL for sensor data
     async def _cached_sensor_lookup(self, rsid: str) -> dict[str, Any]:
-        """Cached RSID sensor lookup."""
+        """Look up RSID sensor data with caching."""
         return await self.client.sensor_lookup(rsid)
 
     @alru_cache(maxsize=200, ttl=3600)  # 1 hour TTL for gene variants
@@ -127,7 +127,7 @@ class VariantService:
         self,
         gene_name: str,
     ) -> list[dict[str, Any]]:
-        """Cached gene variants retrieval."""
+        """Retrieve gene variants with caching."""
         return await self.client.get_variants_by_gene(gene_name)
 
     async def search_variants(
@@ -168,7 +168,7 @@ class VariantService:
             start_time = time.time()
 
             # Check if result is cached
-            if not hasattr(self, '_search_cache'):
+            if not hasattr(self, "_search_cache"):
                 initial_hits = 0
                 cached = False
             else:
@@ -179,7 +179,7 @@ class VariantService:
             variant_data = await self._cached_search_variants(query, limit)
 
             # Check if cache was hit
-            if hasattr(self, '_search_cache'):
+            if hasattr(self, "_search_cache"):
                 new_cache_info = self._search_cache.cache_info()
                 cached = new_cache_info.hits > initial_hits
             else:
@@ -487,14 +487,22 @@ class VariantService:
             pathogenic_count = 0
             benign_count = 0
             uncertain_count = 0
-            
+
             for variant in variants:
                 # Check if variant has clinical significance data
-                if hasattr(variant, 'data_clinical_significance') and variant.data_clinical_significance:
+                if (
+                    hasattr(variant, "data_clinical_significance")
+                    and variant.data_clinical_significance
+                ):
                     clinical_sigs = variant.data_clinical_significance
-                    if any(sig in ["pathogenic", "likely pathogenic"] for sig in clinical_sigs):
+                    if any(
+                        sig in ["pathogenic", "likely pathogenic"]
+                        for sig in clinical_sigs
+                    ):
                         pathogenic_count += 1
-                    elif any(sig in ["benign", "likely benign"] for sig in clinical_sigs):
+                    elif any(
+                        sig in ["benign", "likely benign"] for sig in clinical_sigs
+                    ):
                         benign_count += 1
                     else:
                         uncertain_count += 1

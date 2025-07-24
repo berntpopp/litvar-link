@@ -7,7 +7,7 @@ import sys
 
 
 def main() -> None:
-    """Setup environment and launch MCP server."""
+    """Set up environment and launch MCP server."""
     # Set environment variables for clean STDIO operation
     env = os.environ.copy()
     env.update(

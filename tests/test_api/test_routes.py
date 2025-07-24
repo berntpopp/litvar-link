@@ -1,7 +1,7 @@
 """Comprehensive tests for FastAPI routes."""
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from fastapi.testclient import TestClient
 import pytest
@@ -505,15 +505,20 @@ class TestHealthRoutes:
     def test_health_check_success(self, client: TestClient) -> None:
         """Test health check endpoint."""
         mock_client = AsyncMock()
-        mock_client.health_check.return_value = {"status": "healthy", "response_time_ms": 100.0}
+        mock_client.health_check.return_value = {
+            "status": "healthy",
+            "response_time_ms": 100.0,
+        }
         # get_stats is synchronous, not async
-        mock_client.get_stats = MagicMock(return_value={
-            "total_requests": 100,
-            "success_rate": 99.5,
-            "avg_response_time": 123.45,
-            "current_rate": 2.1,
-        })
-        
+        mock_client.get_stats = MagicMock(
+            return_value={
+                "total_requests": 100,
+                "success_rate": 99.5,
+                "avg_response_time": 123.45,
+                "current_rate": 2.1,
+            }
+        )
+
         mock_service = AsyncMock()
         mock_service.cache_stats = {
             "hits": 50,
@@ -523,7 +528,10 @@ class TestHealthRoutes:
         }
 
         # Override dependencies
-        from litvar_link.api.routes.dependencies import get_litvar_client, get_variant_service
+        from litvar_link.api.routes.dependencies import (
+            get_litvar_client,
+            get_variant_service,
+        )
 
         app = create_app()
         app.dependency_overrides[get_litvar_client] = lambda: mock_client
