@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 import time
 
 from fastapi import APIRouter
 
-from ...models import CacheStatsResponse, HealthResponse
+from litvar_link.models import CacheStatsResponse, HealthResponse
+
 from .dependencies import ClientDep, LoggerDep, ServiceDep
 
 router = APIRouter(prefix="/api/health", tags=["Health"])
@@ -55,6 +57,9 @@ async def health_check(
         cache_status=cache_status,
     )
 
+    # Get API client statistics
+    api_stats = client.get_stats()
+
     return HealthResponse(
         status=overall_status,
         version="0.1.0",
@@ -62,6 +67,8 @@ async def health_check(
         litvar_api_status=litvar_status,
         cache_status=cache_status,
         average_response_time_ms=litvar_health.get("response_time_ms"),
+        timestamp=datetime.now().isoformat(),
+        api_stats=api_stats,
     )
 
 
@@ -90,8 +97,9 @@ async def get_cache_stats(
 
     return CacheStatsResponse(
         total_size=0,  # Not available with async-lru
-        hit_count=stats["hits"],
-        miss_count=stats["misses"],
-        hit_rate=stats["hit_rate"],
+        hits=stats["hits"],
+        misses=stats["misses"],
+        hit_rate=stats["hit_rate"],  # Already percentage from service
+        total_requests=stats["total_requests"],
         expired_count=0,  # Not tracked by async-lru
     )

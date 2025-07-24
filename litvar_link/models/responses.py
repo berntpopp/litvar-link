@@ -112,25 +112,39 @@ class SensorResponse(BaseResponse):
     # Additional metadata if available
     gene: Optional[list[str]] = Field(None, description="Associated genes")
     variant_name: Optional[str] = Field(None, description="Variant name if available")
+    search_time_ms: Optional[float] = Field(
+        None, description="Search execution time in milliseconds"
+    )
+    cached: bool = Field(
+        default=False,
+        description="Whether results were served from cache",
+    )
 
 
 class GeneVariantsResponse(BaseResponse):
     """Response model for gene variants search."""
 
-    gene_name: str = Field(description="Queried gene name")
+    gene: str = Field(description="Queried gene name")
     variants: list[GeneVariantItem] = Field(description="List of variants for the gene")
     total_count: int = Field(description="Total number of variants found")
 
     # Gene-specific statistics
-    pathogenic_count: int = Field(description="Number of pathogenic variants")
-    benign_count: int = Field(description="Number of benign variants")
+    pathogenic_count: int = Field(
+        default=0, description="Number of pathogenic variants"
+    )
+    benign_count: int = Field(default=0, description="Number of benign variants")
     uncertain_count: int = Field(
+        default=0,
         description="Number of variants with uncertain significance",
+    )
+    total_publications: int = Field(
+        default=0, description="Total number of publications"
     )
 
     # Response metadata
-    sort_by: str = Field(description="Sort field used")
-    sort_order: str = Field(description="Sort order used")
+    search_time_ms: Optional[float] = Field(
+        None, description="Search execution time in milliseconds"
+    )
     cached: bool = Field(
         default=False,
         description="Whether results were served from cache",
@@ -141,7 +155,7 @@ class GeneVariantsResponse(BaseResponse):
         """Get count of variants by type."""
         type_counts: dict[str, int] = {}
 
-        for variant in self.variants:
+        for _variant in self.variants:
             # GeneVariantItem doesn't have clinical_significance field
             # All gene variants are considered "unknown" since we don't have clinical data  # noqa: E501
             type_counts["unknown"] = type_counts.get("unknown", 0) + 1
@@ -165,10 +179,13 @@ class BatchVariantResponse(BaseResponse):
 class CacheStatsResponse(BaseResponse):
     """Response model for cache statistics."""
 
+    model_config = {"populate_by_name": True}
+
     total_size: int = Field(description="Total number of cached items")
-    hit_count: int = Field(description="Number of cache hits")
-    miss_count: int = Field(description="Number of cache misses")
+    hit_count: int = Field(alias="hits", description="Number of cache hits")
+    miss_count: int = Field(alias="misses", description="Number of cache misses")
     hit_rate: float = Field(description="Cache hit rate (0.0-1.0)")
+    total_requests: int = Field(default=0, description="Total number of requests")
 
     # Memory usage
     memory_usage_mb: Optional[float] = Field(
@@ -198,6 +215,12 @@ class HealthResponse(BaseResponse):
     database_status: Optional[str] = Field(
         None,
         description="Database status if applicable",
+    )
+
+    # API statistics
+    api_stats: Optional[dict[str, Any]] = Field(
+        None,
+        description="API client statistics",
     )
 
     # Performance metrics

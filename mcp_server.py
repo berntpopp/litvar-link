@@ -15,10 +15,10 @@ def main() -> None:
     os.environ["FASTMCP_DISABLE_BANNER"] = "1"
     os.environ["FASTMCP_LOG_LEVEL"] = "WARNING"
     os.environ["NO_COLOR"] = "1"  # Disable ANSI colors
-    
+
     # Configure logging (will automatically use stderr for stdio mode)
     logger = configure_logging()
-    
+
     try:
         logger.info("Starting STDIO MCP server")
         manager = UnifiedServerManager(logger=logger)

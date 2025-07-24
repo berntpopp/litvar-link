@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from ...exceptions import LitVarAPIError, ValidationError
-from ...models import PublicationResponse
+from litvar_link.exceptions import LitVarAPIError, ValidationError
+from litvar_link.models import PublicationResponse
+
 from .dependencies import LoggerDep, ServiceDep
 
 router = APIRouter(prefix="/api/publications", tags=["Publications"])
@@ -46,7 +47,7 @@ async def get_variant_publications(
         logger.warning("Validation error in variant publications", error=str(e))
         raise HTTPException(status_code=400, detail=str(e))
     except LitVarAPIError as e:
-        logger.error("API error in variant publications", error=str(e))
+        logger.exception("API error in variant publications", error=str(e))
         raise HTTPException(status_code=502, detail="LitVar2 API error")
     except Exception as e:
         logger.error(

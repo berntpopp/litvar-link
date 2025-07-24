@@ -1,15 +1,107 @@
 """Pytest configuration and fixtures for LitVar-Link tests."""
 
+import asyncio
 import json
-from typing import Any, Dict
-from unittest.mock import AsyncMock, MagicMock
+from collections.abc import AsyncGenerator
+from typing import Any, Optional
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
-import pytest
 from httpx import AsyncClient
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from litvar_link.api.client import LitVar2Client
+from litvar_link.config import settings
+from litvar_link.server_manager import UnifiedServerManager
+from litvar_link.services.variant_service import VariantService
+
+
+@pytest.fixture(scope="session")
+def event_loop():
+    """Create an instance of the default event loop for the test session."""
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
 
 
 @pytest.fixture
-def sample_variant_data() -> Dict[str, Any]:
+def mock_logger():
+    """Mock logger for testing."""
+    logger = Mock()
+    logger.info = Mock()
+    logger.error = Mock()
+    logger.warning = Mock()
+    logger.debug = Mock()
+    return logger
+
+
+@pytest.fixture
+def mock_litvar_client():
+    """Mock LitVar2Client for testing."""
+    client = AsyncMock(spec=LitVar2Client)
+
+    # Configure default return values
+    client.search_variants = AsyncMock()
+    client.get_variant_details = AsyncMock()
+    client.get_variant_publications = AsyncMock()
+    client.sensor_lookup = AsyncMock()
+    client.get_variants_by_gene = AsyncMock()
+
+    return client
+
+
+@pytest.fixture
+def mock_variant_service(mock_litvar_client, mock_logger):
+    """Mock VariantService for testing."""
+    service = Mock(spec=VariantService)
+    service.client = mock_litvar_client
+    service.logger = mock_logger
+
+    # Configure async methods
+    service.search_variants = AsyncMock()
+    service.lookup_rsid = AsyncMock()
+    service.search_gene_variants = AsyncMock()
+    service.get_variant_literature = AsyncMock()
+    service.cache_stats = Mock(
+        return_value={
+            "hits": 0,
+            "misses": 0,
+            "hit_rate": 0.0,
+            "total_requests": 0,
+        }
+    )
+
+    return service
+
+
+@pytest.fixture
+def app():
+    """Create FastAPI application instance for testing."""
+    manager = UnifiedServerManager()
+    app = manager.create_app()
+    return app
+
+
+@pytest.fixture
+def test_client(app):
+    """Create TestClient for FastAPI application."""
+    return TestClient(app)
+
+
+@pytest.fixture
+async def async_client(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
+    """Create async HTTP client for testing."""
+    from httpx import ASGITransport
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        yield client
+
+
+@pytest.fixture
+def sample_variant_data() -> dict[str, Any]:
     """Sample variant data from LitVar2 API autocomplete response."""
     return {
         "_id": "litvar@rs1061170##",
@@ -27,7 +119,7 @@ def sample_variant_data() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def sample_gene_variants_data() -> list[Dict[str, Any]]:
+def sample_gene_variants_data() -> list[dict[str, Any]]:
     """Sample gene variants data from LitVar2 API."""
     return [
         {
@@ -55,7 +147,7 @@ def sample_gene_variants_data() -> list[Dict[str, Any]]:
 
 
 @pytest.fixture
-def sample_sensor_data() -> Dict[str, Any]:
+def sample_sensor_data() -> dict[str, Any]:
     """Sample sensor response data."""
     return {
         "rsid": "rs1061170",
@@ -74,8 +166,7 @@ def sample_publication_data() -> list[str]:
 @pytest.fixture
 def mock_httpx_client() -> AsyncMock:
     """Mock httpx AsyncClient for testing."""
-    client = AsyncMock(spec=AsyncClient)
-    return client
+    return AsyncMock(spec=AsyncClient)
 
 
 @pytest.fixture
@@ -98,7 +189,7 @@ def mock_litvar_client() -> MagicMock:
 
 
 @pytest.fixture
-def sample_invalid_data() -> Dict[str, Any]:
+def sample_invalid_data() -> dict[str, Any]:
     """Sample invalid data for testing validation."""
     return {
         "_id": "",  # Empty ID
@@ -131,7 +222,7 @@ def json_response_data() -> str:
                 "gene": ["TEST1"],
                 "name": "p.A123B",
                 "pmids_count": 5,
-            }
+            },
         ],
         "total_count": 1,
     }
@@ -145,7 +236,7 @@ class MockResponse:
         self,
         json_data: Any = None,
         status_code: int = 200,
-        headers: Dict[str, str] = None,
+        headers: Optional[dict[str, str]] = None,
     ):
         self.json_data = json_data
         self.status_code = status_code
@@ -163,10 +254,107 @@ class MockResponse:
 
             request = Request("GET", "http://test.com")
             response = Response(self.status_code)
-            raise HTTPStatusError("HTTP Error", request=request, response=response)
+            msg = "HTTP Error"
+            raise HTTPStatusError(msg, request=request, response=response)
 
 
 @pytest.fixture
 def mock_response() -> MockResponse:
     """Create a mock response fixture."""
     return MockResponse
+
+
+@pytest.fixture
+def mock_rate_limiter():
+    """Mock rate limiter for testing."""
+    with patch("litvar_link.api.client.AsyncLimiter") as mock_limiter:
+        limiter_instance = AsyncMock()
+        mock_limiter.return_value = limiter_instance
+        yield limiter_instance
+
+
+@pytest.fixture(autouse=True)
+def override_settings():
+    """Override settings for testing."""
+    original_values = {}
+    test_settings = {
+        "log_level": "DEBUG",
+        "cache_ttl": 60,  # Short TTL for testing
+        "rate_limit": 10,  # Higher rate limit for testing
+        "litvar_base_url": "https://test.litvar2.org",
+    }
+
+    # Store original values and set test values
+    for key, value in test_settings.items():
+        if hasattr(settings, key):
+            original_values[key] = getattr(settings, key)
+            setattr(settings, key, value)
+
+    yield
+
+    # Restore original values
+    for key, value in original_values.items():
+        setattr(settings, key, value)
+
+
+# Error fixtures for testing error handling
+@pytest.fixture
+def api_error():
+    """Sample API error for testing."""
+    return {
+        "error": "Invalid request",
+        "message": "The provided query parameters are not valid",
+        "status": 400,
+    }
+
+
+@pytest.fixture
+def rate_limit_error():
+    """Sample rate limit error for testing."""
+    return {
+        "error": "Rate limit exceeded",
+        "message": "Too many requests. Please wait before trying again.",
+        "status": 429,
+    }
+
+
+# Test data fixtures from fixtures/test_data.py
+@pytest.fixture
+def valid_rsids() -> list[str]:
+    """Return valid RSIDs for testing."""
+    from tests.fixtures.test_data import TestRSIDs
+
+    return TestRSIDs.VALID_MULTIPLE
+
+
+@pytest.fixture
+def valid_gene_symbols() -> list[str]:
+    """Return valid gene symbols for testing."""
+    from tests.fixtures.test_data import TestGeneSymbols
+
+    return TestGeneSymbols.VALID_MULTIPLE
+
+
+@pytest.fixture
+def valid_limits() -> list[int]:
+    """Return valid limit values for testing."""
+    from tests.fixtures.test_data import TestLimits
+
+    return TestLimits.VALID_LIMITS
+
+
+# Performance test fixtures
+@pytest.fixture
+def large_rsid_list() -> list[str]:
+    """Large list of RSIDs for performance testing."""
+    from tests.fixtures.test_data import TestPerformanceData
+
+    return TestPerformanceData.LARGE_DATASETS["rsids_100"]
+
+
+@pytest.fixture
+def concurrent_requests():
+    """Return configuration for concurrent request testing."""
+    from tests.fixtures.test_data import TestPerformanceData
+
+    return TestPerformanceData.LOAD_TEST_CONFIGS[0]

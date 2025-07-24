@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from ...exceptions import LitVarAPIError, ValidationError
-from ...models import SensorResponse
+from litvar_link.exceptions import LitVarAPIError, ValidationError
+from litvar_link.models import SensorResponse
+
 from .dependencies import LoggerDep, ServiceDep
 
 router = APIRouter(prefix="/api/sensor", tags=["Sensor"])
@@ -49,7 +50,7 @@ async def lookup_rsid(
         logger.warning("Validation error in RSID lookup", error=str(e))
         raise HTTPException(status_code=400, detail=str(e))
     except LitVarAPIError as e:
-        logger.error("API error in RSID lookup", error=str(e))
+        logger.exception("API error in RSID lookup", error=str(e))
         raise HTTPException(status_code=502, detail="LitVar2 API error")
     except Exception as e:
         logger.error("Unexpected error in RSID lookup", error=str(e), exc_info=True)

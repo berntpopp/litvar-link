@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from async_lru import alru_cache
-from structlog.typing import FilteringBoundLogger
 
-from ..api.client import LitVar2Client
-from ..config import CacheConfig
-from ..exceptions import ValidationError
-from ..logging_config import log_cache_operation, log_error_with_context
-from ..models import (
+from litvar_link.exceptions import ValidationError
+from litvar_link.logging_config import log_cache_operation, log_error_with_context
+from litvar_link.models import (
     GeneVariantsResponse,
     PublicationResponse,
     SensorResponse,
@@ -20,6 +17,12 @@ from ..models import (
     VariantDetailsResponse,
     VariantSearchResponse,
 )
+
+if TYPE_CHECKING:
+    from structlog.typing import FilteringBoundLogger
+
+    from litvar_link.api.client import LitVar2Client
+    from litvar_link.config import CacheConfig
 
 
 class VariantService:
@@ -43,6 +46,21 @@ class VariantService:
         self.logger = logger
         self._cache_stats = {"hits": 0, "misses": 0}
 
+    def _generate_cache_key(self, operation: str, **kwargs: Any) -> str:
+        """Generate cache key for operation.
+
+        Args:
+            operation: Operation name
+            **kwargs: Parameters for cache key
+
+        Returns:
+            Cache key string
+        """
+        parts = [operation]
+        for key, value in sorted(kwargs.items()):
+            parts.append(f"{key}:{value}")
+        return ":".join(parts)
+
     @property
     def cache_stats(self) -> dict[str, Any]:
         """Get cache statistics."""
@@ -54,7 +72,7 @@ class VariantService:
         return {
             "hits": self._cache_stats["hits"],
             "misses": self._cache_stats["misses"],
-            "hit_rate": hit_rate,
+            "hit_rate": hit_rate * 100.0,  # Convert to percentage
             "total_requests": total_requests,
         }
 
@@ -70,14 +88,24 @@ class VariantService:
         if self.logger:
             log_cache_operation(self.logger, "miss", key, hit=False)
 
-    @alru_cache(maxsize=1000, ttl=3600)  # 1 hour TTL
     async def _cached_search_variants(
         self,
         query: str,
         limit: int,
     ) -> list[dict[str, Any]]:
         """Cached variant search."""
-        return await self.client.search_variants(query, limit)
+        # Create cache with dynamic TTL if not exists
+        if not hasattr(self, '_search_cache'):
+            # Create a wrapper function to cache
+            async def _search_wrapper(q: str, lim: int) -> list[dict[str, Any]]:
+                return await self.client.search_variants(q, limit=lim)
+            
+            self._search_cache = alru_cache(
+                maxsize=self.cache_config.size, 
+                ttl=self.cache_config.ttl
+            )(_search_wrapper)
+        
+        return await self._search_cache(query, limit)
 
     @alru_cache(maxsize=500, ttl=7200)  # 2 hour TTL for variant details
     async def _cached_get_variant_details(self, variant_id: str) -> dict[str, Any]:
@@ -122,10 +150,16 @@ class VariantService:
         """
         # Input validation
         if not query or not query.strip():
-            raise ValidationError("Query cannot be empty", field="query")
+            msg = "Query cannot be empty"
+            raise ValidationError(msg, field="query")
+
+        if len(query) > 100:
+            msg = "Query too long (max 100 characters)"
+            raise ValidationError(msg, field="query")
 
         if limit < 1 or limit > 100:
-            raise ValidationError("Limit must be between 1 and 100", field="limit")
+            msg = "Limit must be between 1 and 100"
+            raise ValidationError(msg, field="limit")
 
         query = query.strip()
         cache_key = f"search:{query}:{limit}"
@@ -134,15 +168,22 @@ class VariantService:
             start_time = time.time()
 
             # Check if result is cached
-            cache_info = self._cached_search_variants.cache_info()
-            initial_hits = cache_info.hits
+            if not hasattr(self, '_search_cache'):
+                initial_hits = 0
+                cached = False
+            else:
+                cache_info = self._search_cache.cache_info()
+                initial_hits = cache_info.hits
 
             # Make cached call
             variant_data = await self._cached_search_variants(query, limit)
 
             # Check if cache was hit
-            new_cache_info = self._cached_search_variants.cache_info()
-            cached = new_cache_info.hits > initial_hits
+            if hasattr(self, '_search_cache'):
+                new_cache_info = self._search_cache.cache_info()
+                cached = new_cache_info.hits > initial_hits
+            else:
+                cached = False
 
             if cached:
                 self._log_cache_hit(cache_key)
@@ -150,7 +191,7 @@ class VariantService:
                 self._log_cache_miss(cache_key)
 
             # Parse variants using the endpoint-specific model
-            from ..models.endpoint_specific import AutocompleteVariantItem
+            from litvar_link.models.endpoint_specific import AutocompleteVariantItem
 
             variants = []
             for data in variant_data:
@@ -203,7 +244,8 @@ class VariantService:
             LitVarAPIError: For API-related errors
         """
         if not variant_id or not variant_id.strip():
-            raise ValidationError("Variant ID cannot be empty", field="variant_id")
+            msg = "Variant ID cannot be empty"
+            raise ValidationError(msg, field="variant_id")
 
         variant_id = variant_id.strip()
         cache_key = f"details:{variant_id}"
@@ -257,7 +299,8 @@ class VariantService:
             LitVarAPIError: For API-related errors
         """
         if not variant_id or not variant_id.strip():
-            raise ValidationError("Variant ID cannot be empty", field="variant_id")
+            msg = "Variant ID cannot be empty"
+            raise ValidationError(msg, field="variant_id")
 
         variant_id = variant_id.strip()
         cache_key = f"publications:{variant_id}"
@@ -280,7 +323,7 @@ class VariantService:
                 self._log_cache_miss(cache_key)
 
             # Create publication objects (simplified for now)
-            from ..models.variants import Publication
+            from litvar_link.models.variants import Publication
 
             publications = [Publication(pmid=pmid) for pmid in pmids if pmid]
 
@@ -318,13 +361,15 @@ class VariantService:
             LitVarAPIError: For API-related errors
         """
         if not rsid or not rsid.strip():
-            raise ValidationError("RSID cannot be empty", field="rsid")
+            msg = "RSID cannot be empty"
+            raise ValidationError(msg, field="rsid")
 
         rsid = rsid.strip().lower()
 
         # Validate RSID format
         if not rsid.startswith("rs") or not rsid[2:].isdigit():
-            raise ValidationError("Invalid RSID format", field="rsid")
+            msg = "Invalid RSID format"
+            raise ValidationError(msg, field="rsid")
 
         cache_key = f"sensor:{rsid}"
 
@@ -345,10 +390,22 @@ class VariantService:
             else:
                 self._log_cache_miss(cache_key)
 
-            # Parse sensor response
+            # Parse sensor response - handle None case
+            if sensor_data is None:
+                return SensorResponse(
+                    rsid=rsid,
+                    available=False,
+                    variant_id=None,
+                    litvar_url=None,
+                    pmids_count=None,
+                    gene=None,
+                    variant_name=None,
+                    cached=cached,
+                )
+
             return SensorResponse(
                 rsid=rsid,
-                available=bool(sensor_data),  # If we get data, it's available
+                available=True,
                 variant_id=sensor_data.get("variant_id"),
                 litvar_url=sensor_data.get("litvar_url"),
                 pmids_count=sensor_data.get("pmids_count"),
@@ -381,7 +438,12 @@ class VariantService:
             LitVarAPIError: For API-related errors
         """
         if not gene_name or not gene_name.strip():
-            raise ValidationError("Gene name cannot be empty", field="gene_name")
+            msg = "Gene name cannot be empty"
+            raise ValidationError(msg, field="gene_name")
+
+        if len(gene_name) > 50:
+            msg = "Gene name too long (max 50 characters)"
+            raise ValidationError(msg, field="gene_name")
 
         gene_name = gene_name.strip().upper()
         cache_key = f"gene_variants:{gene_name}"
@@ -404,7 +466,7 @@ class VariantService:
                 self._log_cache_miss(cache_key)
 
             # Parse variants using the endpoint-specific model
-            from ..models.endpoint_specific import GeneVariantItem
+            from litvar_link.models.endpoint_specific import GeneVariantItem
 
             variants = []
             for data in variant_data:
@@ -421,22 +483,38 @@ class VariantService:
                         )
                     continue
 
-            # Gene variants endpoint doesn't include clinical significance data
-            # So we can't calculate pathogenic/benign statistics accurately
-            # All variants are considered uncertain since we don't have the clinical data  # noqa: E501
+            # Calculate clinical significance statistics from variant data
             pathogenic_count = 0
             benign_count = 0
-            uncertain_count = len(variants)
+            uncertain_count = 0
+            
+            for variant in variants:
+                # Check if variant has clinical significance data
+                if hasattr(variant, 'data_clinical_significance') and variant.data_clinical_significance:
+                    clinical_sigs = variant.data_clinical_significance
+                    if any(sig in ["pathogenic", "likely pathogenic"] for sig in clinical_sigs):
+                        pathogenic_count += 1
+                    elif any(sig in ["benign", "likely benign"] for sig in clinical_sigs):
+                        benign_count += 1
+                    else:
+                        uncertain_count += 1
+                else:
+                    # No clinical significance data available
+                    uncertain_count += 1
+
+            # Calculate total publications (sum of pmids_count)
+            total_publications = sum(
+                getattr(variant, "pmids_count", 0) or 0 for variant in variants
+            )
 
             return GeneVariantsResponse(
-                gene_name=gene_name,
+                gene=gene_name,
                 variants=variants,
                 total_count=len(variants),
                 pathogenic_count=pathogenic_count,
                 benign_count=benign_count,
                 uncertain_count=uncertain_count,
-                sort_by="pmids_count",
-                sort_order="desc",
+                total_publications=total_publications,
                 cached=cached,
             )
 

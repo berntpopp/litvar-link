@@ -1,9 +1,9 @@
 """Tests for variant models."""
 
-from typing import Any, Dict
+from typing import Any
 
-import pytest
 from pydantic import ValidationError
+import pytest
 
 from litvar_link.models.variants import (
     ClinicalSignificance,
@@ -71,7 +71,8 @@ class TestVariant:
     """Test Variant model."""
 
     def test_variant_from_litvar_data(
-        self, sample_variant_data: Dict[str, Any]
+        self,
+        sample_variant_data: dict[str, Any],
     ) -> None:
         """Test creating variant from real LitVar2 data."""
         variant = Variant(**sample_variant_data)
@@ -174,7 +175,8 @@ class TestVariant:
         """Test pathogenic property."""
         # Pathogenic variant
         variant1 = Variant(
-            _id="test1", data_clinical_significance=["pathogenic", "likely pathogenic"]
+            _id="test1",
+            data_clinical_significance=["pathogenic", "likely pathogenic"],
         )
         assert variant1.is_pathogenic is True
 
@@ -190,7 +192,8 @@ class TestVariant:
         """Test benign property."""
         # Benign variant
         variant1 = Variant(
-            _id="test1", data_clinical_significance=["benign", "likely benign"]
+            _id="test1",
+            data_clinical_significance=["benign", "likely benign"],
         )
         assert variant1.is_benign is True
 

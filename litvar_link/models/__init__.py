@@ -27,30 +27,30 @@ from .responses import (
 from .variants import ClinicalSignificance, Publication, Variant, VariantDetails
 
 __all__ = [
-    # Core models
-    "Variant",
-    "VariantDetails",
-    "Publication",
-    "ClinicalSignificance",
     # Endpoint-specific models
     "AutocompleteVariantItem",
-    "GeneVariantItem",
-    "PublicationsItem",
-    "SensorItem",
-    "VariantDetailsItem",
-    # Request models
-    "VariantSearchRequest",
-    "VariantDetailsRequest",
-    "PublicationRequest",
-    "SensorRequest",
-    "GeneVariantsRequest",
     # Response models
     "BaseResponse",
     "CacheStatsResponse",
+    "ClinicalSignificance",
+    "GeneVariantItem",
+    "GeneVariantsRequest",
     "GeneVariantsResponse",
     "HealthResponse",
+    "Publication",
+    "PublicationRequest",
     "PublicationResponse",
+    "PublicationsItem",
+    "SensorItem",
+    "SensorRequest",
     "SensorResponse",
+    # Core models
+    "Variant",
+    "VariantDetails",
+    "VariantDetailsItem",
+    "VariantDetailsRequest",
     "VariantDetailsResponse",
+    # Request models
+    "VariantSearchRequest",
     "VariantSearchResponse",
 ]

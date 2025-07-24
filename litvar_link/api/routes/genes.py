@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from ...exceptions import LitVarAPIError, ValidationError
-from ...models import GeneVariantsResponse
+from litvar_link.exceptions import LitVarAPIError, ValidationError
+from litvar_link.models import GeneVariantsResponse
+
 from .dependencies import LoggerDep, ServiceDep
 
 router = APIRouter(prefix="/api/genes", tags=["Genes"])
@@ -54,7 +55,7 @@ async def get_gene_variants(
         logger.warning("Validation error in gene variants", error=str(e))
         raise HTTPException(status_code=400, detail=str(e))
     except LitVarAPIError as e:
-        logger.error("API error in gene variants", error=str(e))
+        logger.exception("API error in gene variants", error=str(e))
         raise HTTPException(status_code=502, detail="LitVar2 API error")
     except Exception as e:
         logger.error("Unexpected error in gene variants", error=str(e), exc_info=True)

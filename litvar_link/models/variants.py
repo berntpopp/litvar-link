@@ -39,9 +39,11 @@ class Publication(BaseModel):
     def validate_pmid(cls, v: str) -> str:
         """Validate PMID format."""
         if not v.isdigit():
-            raise ValueError("PMID must contain only digits")
+            msg = "PMID must contain only digits"
+            raise ValueError(msg)
         if len(v) < 7 or len(v) > 8:
-            raise ValueError("PMID must be 7-8 digits long")
+            msg = "PMID must be 7-8 digits long"
+            raise ValueError(msg)
         return v
 
     @field_validator("pmcid")
@@ -51,9 +53,11 @@ class Publication(BaseModel):
         if v is None:
             return v
         if not v.startswith("PMC"):
-            raise ValueError("PMCID must start with 'PMC'")
+            msg = "PMCID must start with 'PMC'"
+            raise ValueError(msg)
         if not v[3:].isdigit():
-            raise ValueError("PMCID must have digits after 'PMC'")
+            msg = "PMCID must have digits after 'PMC'"
+            raise ValueError(msg)
         return v
 
 
@@ -107,9 +111,11 @@ class Variant(BaseModel):
         if v is None:
             return v
         if not v.startswith("rs"):
-            raise ValueError("RSID must start with 'rs'")
+            msg = "RSID must start with 'rs'"
+            raise ValueError(msg)
         if not v[2:].isdigit():
-            raise ValueError("RSID must have digits after 'rs'")
+            msg = "RSID must have digits after 'rs'"
+            raise ValueError(msg)
         return v
 
     @field_validator("gene")
@@ -134,7 +140,8 @@ class Variant(BaseModel):
     def validate_pmids_count(cls, v: Optional[int]) -> Optional[int]:
         """Validate publication count is non-negative."""
         if v is not None and v < 0:
-            raise ValueError("Publication count cannot be negative")
+            msg = "Publication count cannot be negative"
+            raise ValueError(msg)
         return v
 
     @field_validator("clinical_significance")
@@ -237,7 +244,8 @@ class VariantDetails(Variant):
     def validate_position(cls, v: Optional[int]) -> Optional[int]:
         """Validate genomic position is positive."""
         if v is not None and v <= 0:
-            raise ValueError("Genomic position must be positive")
+            msg = "Genomic position must be positive"
+            raise ValueError(msg)
         return v
 
     @field_validator("allele_frequency", "minor_allele_frequency")
@@ -245,7 +253,8 @@ class VariantDetails(Variant):
     def validate_frequency(cls, v: Optional[float]) -> Optional[float]:
         """Validate allele frequency is between 0 and 1."""
         if v is not None and (v < 0.0 or v > 1.0):
-            raise ValueError("Allele frequency must be between 0.0 and 1.0")
+            msg = "Allele frequency must be between 0.0 and 1.0"
+            raise ValueError(msg)
         return v
 
     @field_validator("chromosome")
@@ -262,10 +271,7 @@ class VariantDetails(Variant):
         valid_chroms = {str(i) for i in range(1, 23)} | {"X", "Y", "MT", "M"}
 
         # Handle different prefixes
-        if v.startswith("CHR"):
-            chrom = v[3:]
-        else:
-            chrom = v
+        chrom = v.removeprefix("CHR")
 
         if chrom in valid_chroms:
             return chrom

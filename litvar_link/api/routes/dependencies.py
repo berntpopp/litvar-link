@@ -7,10 +7,10 @@ from typing import Annotated
 from fastapi import Depends
 from structlog.typing import FilteringBoundLogger
 
-from ...api.client import LitVar2Client
-from ...config import get_api_config, get_cache_config
-from ...logging_config import configure_logging
-from ...services.variant_service import VariantService
+from litvar_link.api.client import LitVar2Client
+from litvar_link.config import get_api_config, get_cache_config
+from litvar_link.logging_config import configure_logging
+from litvar_link.services.variant_service import VariantService
 
 
 def get_logger() -> FilteringBoundLogger:
@@ -19,7 +19,7 @@ def get_logger() -> FilteringBoundLogger:
 
 
 async def get_litvar_client(
-    logger: LoggerDep,
+    logger: Annotated[FilteringBoundLogger, Depends(get_logger)],
 ) -> LitVar2Client:
     """Get LitVar2 API client instance."""
     config = get_api_config()
@@ -32,8 +32,8 @@ async def get_litvar_client(
 
 
 def get_variant_service(
-    client: ClientDep,
-    logger: LoggerDep,
+    client: Annotated[LitVar2Client, Depends(get_litvar_client)],
+    logger: Annotated[FilteringBoundLogger, Depends(get_logger)],
 ) -> VariantService:
     """Get variant service instance."""
     cache_config = get_cache_config()

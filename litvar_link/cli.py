@@ -233,7 +233,7 @@ async def serve_http(
     except KeyboardInterrupt:
         logger.info("Server stopped by user")
     except Exception as e:
-        logger.error("Server error", error=str(e))
+        logger.exception("Server error", error=str(e))
         sys.exit(1)
 
 
@@ -252,7 +252,7 @@ async def serve_unified(
     except KeyboardInterrupt:
         logger.info("Server stopped by user")
     except Exception as e:
-        logger.error("Server error", error=str(e))
+        logger.exception("Server error", error=str(e))
         sys.exit(1)
 
 
@@ -267,7 +267,7 @@ async def serve_mcp_only() -> None:
     except KeyboardInterrupt:
         logger.info("MCP server stopped by user")
     except Exception as e:
-        logger.error("MCP server error", error=str(e))
+        logger.exception("MCP server error", error=str(e))
         sys.exit(1)
 
 

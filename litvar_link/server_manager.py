@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
-from structlog.typing import FilteringBoundLogger
+from typing import TYPE_CHECKING
+
 import uvicorn
 
 from .app import app, mcp_app
 from .config import settings
 from .logging_config import log_server_startup
+
+if TYPE_CHECKING:
+    from structlog.typing import FilteringBoundLogger
 
 
 class UnifiedServerManager:
@@ -88,6 +91,7 @@ class UnifiedServerManager:
 
         # Create FastAPI app (for MCP introspection)
         from .app import create_app, create_mcp_app, lifespan
+
         app = create_app()
 
         # Use lifespan context manager for consistency with HTTP mode

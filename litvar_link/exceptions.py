@@ -44,6 +44,10 @@ class ValidationError(LitVarAPIError):
         super().__init__(message)
         self.field = field
 
+    def __str__(self) -> str:
+        """Return string representation of validation error."""
+        return self.message
+
 
 class RateLimitError(LitVarAPIError):
     """Exception raised when rate limit is exceeded."""

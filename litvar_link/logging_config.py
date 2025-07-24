@@ -4,34 +4,37 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
-from structlog.typing import FilteringBoundLogger
 
 from .config import settings
+
+if TYPE_CHECKING:
+    from structlog.typing import FilteringBoundLogger
 
 
 def configure_logging() -> FilteringBoundLogger:
     """Configure structured logging with structlog."""
     # Determine if we're in STDIO mode by checking environment variable or config
     import os
+
     is_stdio_mode = (
-        os.environ.get('TRANSPORT') == 'stdio' or 
-        getattr(settings, 'transport_mode', None) == 'stdio'
+        os.environ.get("TRANSPORT") == "stdio"
+        or getattr(settings, "transport_mode", None) == "stdio"
     )
-    
+
     # For MCP/STDIO mode, use stderr to avoid interfering with the JSON protocol
     # For HTTP mode, use stdout for normal logging
     log_stream = sys.stderr if is_stdio_mode else sys.stdout
-    
+
     # Configure standard library logging
     logging.basicConfig(
         format="%(message)s",
         stream=log_stream,
         level=getattr(logging, settings.log_level),
     )
-    
+
     # Reduce noise from HTTP libraries in STDIO mode
     if is_stdio_mode:
         logging.getLogger("uvicorn").setLevel(logging.WARNING)
@@ -57,7 +60,8 @@ def configure_logging() -> FilteringBoundLogger:
 
     if settings.log_format == "json":
         # JSON logging for production
-        processors = shared_processors + [
+        processors = [
+            *shared_processors,
             structlog.processors.dict_tracebacks,
             structlog.processors.JSONRenderer(serializer=orjson_serializer),
         ]
@@ -65,7 +69,8 @@ def configure_logging() -> FilteringBoundLogger:
         # Console logging for development
         # Disable colors in STDIO mode to prevent ANSI escape codes
         use_colors = not is_stdio_mode
-        processors = shared_processors + [
+        processors = [
+            *shared_processors,
             structlog.processors.dict_tracebacks,
             structlog.dev.ConsoleRenderer(colors=use_colors),
         ]

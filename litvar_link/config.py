@@ -62,7 +62,7 @@ class ServerSettings(BaseSettings):
         description="Log format",
     )
     log_show_caller: bool = Field(default=False, description="Show caller info in logs")
-    
+
     # Transport mode
     transport: Literal["unified", "http", "stdio"] = Field(
         default="unified",

@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +13,9 @@ from fastmcp.server.openapi import MCPType, RouteMap
 from .api.routes import genes, health, publications, sensor, variants
 from .config import settings
 from .logging_config import configure_logging, log_server_startup
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 
 @asynccontextmanager
@@ -96,14 +98,12 @@ def create_mcp_app() -> FastMCP:
     ]
 
     # Create FastMCP instance
-    mcp = FastMCP.from_fastapi(
+    return FastMCP.from_fastapi(
         app=app,
         name="LitVar-Link Server",
         mcp_names=mcp_custom_names,
         route_maps=mcp_route_maps,
     )
-
-    return mcp
 
 
 # Create application instances

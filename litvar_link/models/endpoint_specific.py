@@ -12,6 +12,8 @@ class GeneVariantItem(BaseModel):
     Some variants have RSIDs, others have protein notations.
     """
 
+    model_config = {"populate_by_name": True}
+
     id: str = Field(alias="_id", description="Unique variant identifier")
     pmids_count: int = Field(description="Number of associated publications")
 
@@ -21,21 +23,32 @@ class GeneVariantItem(BaseModel):
         None,
         description="ClinGen identifier if available",
     )
+    data_clinical_significance: Optional[list[str]] = Field(
+        None,
+        description="Clinical significance annotations if available",
+    )
 
 
 class AutocompleteVariantItem(BaseModel):
     """Model for individual items from variant autocomplete endpoint."""
 
+    model_config = {"populate_by_name": True}
+
     id: str = Field(alias="_id", description="Unique variant identifier")
     gene: list[str] = Field(description="Associated gene symbols")
     name: str = Field(description="Variant name (e.g., p.V600E)")
-    hgvs: str = Field(description="HGVS notation")
+    hgvs: str = Field(default="", description="HGVS notation")
     pmids_count: int = Field(description="Number of associated publications")
-    flag_gene_variant: bool = Field(description="True if this is a gene-level variant")
+    flag_gene_variant: bool = Field(
+        default=False, description="True if this is a gene-level variant"
+    )
     flag_clingen_variant: bool = Field(
+        default=False,
         description="True if this variant is in ClinGen database",
     )
-    flag_rsid_variant: bool = Field(description="True if this variant has an RSID")
+    flag_rsid_variant: bool = Field(
+        default=False, description="True if this variant has an RSID"
+    )
 
     # Optional fields that sometimes appear
     rsid: Optional[str] = Field(None, description="Reference SNP ID if available")
@@ -51,6 +64,8 @@ class AutocompleteVariantItem(BaseModel):
 
 class VariantDetailsItem(BaseModel):
     """Model for variant details endpoint response."""
+
+    model_config = {"populate_by_name": True}
 
     id: str = Field(alias="_id", description="Unique variant identifier")
     concept: str = Field(description="Type of entity (usually 'variant')")

@@ -5,15 +5,23 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin
 
 import httpx
-from structlog.typing import FilteringBoundLogger
+from typing_extensions import Self
 
-from ..config import APIConfig
-from ..exceptions import LitVarAPIError, RateLimitError, ServiceUnavailableError
-from ..logging_config import log_api_request, log_error_with_context
+from litvar_link.exceptions import (
+    LitVarAPIError,
+    RateLimitError,
+    ServiceUnavailableError,
+)
+from litvar_link.logging_config import log_api_request, log_error_with_context
+
+if TYPE_CHECKING:
+    from structlog.typing import FilteringBoundLogger
+
+    from litvar_link.config import APIConfig
 
 
 class TokenBucketRateLimiter:
@@ -31,6 +39,7 @@ class TokenBucketRateLimiter:
         self.tokens = float(burst)
         self.last_update = time.time()
         self._lock = asyncio.Lock()
+        self.request_times: list[float] = []
 
     async def acquire(self) -> float:
         """Acquire a token, waiting if necessary.
@@ -47,17 +56,40 @@ class TokenBucketRateLimiter:
 
             if self.tokens >= 1:
                 self.tokens -= 1
+                # Track request time for rate calculation
+                self.request_times.append(now)
+                # Keep only recent requests (last 10 seconds)
+                self.request_times = [t for t in self.request_times if now - t <= 10.0]
                 return 0.0
             # Calculate wait time for next token
-            wait_time = (1 - self.tokens) / self.rate
-            return wait_time
+            return (1 - self.tokens) / self.rate
 
     @property
     def current_tokens(self) -> float:
-        """Get current number of available tokens."""
+        """Get current number of available tokens without updating state."""
         now = time.time()
         elapsed = now - self.last_update
         return min(self.burst, self.tokens + elapsed * self.rate)
+
+    def current_rate(self) -> float:
+        """Get current rate based on recent request times.
+
+        Returns:
+            Current estimated rate in requests per second
+        """
+        now = time.time()
+        # Clean up old request times
+        recent_requests = [t for t in self.request_times if now - t <= 10.0]
+
+        if len(recent_requests) < 2:
+            return 0.0
+
+        # Calculate rate based on requests over time window
+        time_window = now - recent_requests[0]
+        if time_window <= 0:
+            return 0.0
+
+        return len(recent_requests) / time_window
 
 
 class LitVar2Client:
@@ -76,6 +108,11 @@ class LitVar2Client:
         """
         self.config = config
         self.logger = logger
+
+        # Initialize statistics tracking
+        self.total_requests = 0
+        self.successful_requests = 0
+        self.response_times: list[float] = []
 
         # Initialize rate limiter
         self.rate_limiter = TokenBucketRateLimiter(
@@ -97,7 +134,7 @@ class LitVar2Client:
         """Close HTTP client."""
         await self.client.aclose()
 
-    async def __aenter__(self) -> LitVar2Client:
+    async def __aenter__(self) -> Self:
         """Async context manager entry."""
         return self
 
@@ -202,24 +239,35 @@ class LitVar2Client:
                 # Handle different status codes
                 if response.status_code == 429:
                     retry_after = float(response.headers.get("Retry-After", 60))
+                    msg = f"Rate limit exceeded for {url}"
                     raise RateLimitError(
-                        f"Rate limit exceeded for {url}",
+                        msg,
                         retry_after=retry_after,
                     )
                 if response.status_code >= 500:
+                    msg = f"LitVar2 service error: HTTP {response.status_code}"
                     raise ServiceUnavailableError(
-                        f"LitVar2 service error: HTTP {response.status_code}",
+                        msg,
                     )
                 if response.status_code >= 400:
                     error_text = (
                         response.text[:200] if response.text else "Unknown error"
                     )
+                    msg = f"HTTP {response.status_code}: {error_text}"
                     raise LitVarAPIError(
-                        f"HTTP {response.status_code}: {error_text}",
+                        msg,
                         status_code=response.status_code,
                     )
 
                 response.raise_for_status()
+
+                # Track successful request statistics
+                self.total_requests += 1
+                self.successful_requests += 1
+                self.response_times.append(response_time)
+                # Keep only recent response times (last 100 requests)
+                if len(self.response_times) > 100:
+                    self.response_times = self.response_times[-100:]
 
                 # Parse response
                 content_type = response.headers.get("content-type", "").lower()
@@ -278,6 +326,14 @@ class LitVar2Client:
 
         # All retries exhausted
         response_time = time.time() - start_time
+
+        # Track failed request statistics
+        self.total_requests += 1
+        self.response_times.append(response_time)
+        # Keep only recent response times (last 100 requests)
+        if len(self.response_times) > 100:
+            self.response_times = self.response_times[-100:]
+
         if self.logger:
             log_api_request(
                 self.logger,
@@ -303,9 +359,20 @@ class LitVar2Client:
 
         Returns:
             List of variant dictionaries
+
+        Raises:
+            ValueError: If query is empty or too long, or limit is out of range
         """
+        # Validate inputs
+        if not query or not query.strip():
+            raise ValueError("Query cannot be empty")
+        if len(query) > 100:
+            raise ValueError("Query too long (max 100 characters)")
+        if not 1 <= limit <= 100:
+            raise ValueError("Limit must be between 1 and 100")
+
         endpoint = self.config.endpoints["autocomplete"]
-        params = {"query": query, "limit": limit}
+        params = {"query": query.strip(), "limit": limit}
 
         response = await self._make_request("GET", endpoint, params=params)
 
@@ -359,7 +426,16 @@ class LitVar2Client:
 
         Returns:
             Sensor response dictionary
+
+        Raises:
+            ValueError: If RSID format is invalid
         """
+        # Validate RSID format (should start with 'rs' followed by digits)
+        if not rsid or not rsid.startswith("rs") or len(rsid) < 3:
+            raise ValueError("Invalid RSID format (should be 'rs' followed by digits)")
+        if not rsid[2:].isdigit():
+            raise ValueError("Invalid RSID format (should be 'rs' followed by digits)")
+
         endpoint = self.config.endpoints["sensor"].format(rsid=rsid)
         return await self._make_request("GET", endpoint)
 
@@ -371,8 +447,19 @@ class LitVar2Client:
 
         Returns:
             List of variant dictionaries
+
+        Raises:
+            ValueError: If gene name is empty or too long
         """
-        endpoint = self.config.endpoints["gene_variants"].format(gene_name=gene_name)
+        # Validate gene name
+        if not gene_name or not gene_name.strip():
+            raise ValueError("Gene name cannot be empty")
+        if len(gene_name) > 50:
+            raise ValueError("Gene name too long (max 50 characters)")
+
+        endpoint = self.config.endpoints["gene_variants"].format(
+            gene_name=gene_name.strip()
+        )
         response = await self._make_request("GET", endpoint)
 
         # Handle different response formats
@@ -405,3 +492,38 @@ class LitVar2Client:
                 "error": str(e),
                 "error_type": type(e).__name__,
             }
+
+    def get_stats(self) -> dict[str, Any]:
+        """Get client statistics.
+
+        Returns:
+            Dictionary containing request statistics
+        """
+        avg_response_time = 0.0
+        if self.response_times:
+            avg_response_time = sum(self.response_times) / len(self.response_times)
+
+        success_rate = 0.0
+        if self.total_requests > 0:
+            success_rate = (self.successful_requests / self.total_requests) * 100.0
+
+        return {
+            "total_requests": self.total_requests,
+            "successful_requests": self.successful_requests,
+            "success_rate": success_rate,
+            "avg_response_time": avg_response_time,
+            "current_rate": self.rate_limiter.current_rate(),
+        }
+
+    def _build_url(self, endpoint: str, **kwargs: Any) -> str:
+        """Build full URL from endpoint template.
+
+        Args:
+            endpoint: Endpoint template with placeholders
+            **kwargs: Values to substitute in template
+
+        Returns:
+            Full URL
+        """
+        formatted_endpoint = endpoint.format(**kwargs)
+        return urljoin(self.config.base_url, formatted_endpoint)

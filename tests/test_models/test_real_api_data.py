@@ -1,7 +1,5 @@
 """Tests with real LitVar2 API data to validate models."""
 
-import pytest
-
 from litvar_link.models.variants import Variant
 
 
