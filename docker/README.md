@@ -251,4 +251,288 @@ docker exec litvar-link curl -f http://localhost:8000/api/health/
 - Resource limits and health checks
 - Production-grade process management
 
-This setup provides a robust foundation for deploying LitVar-Link from development to production environments.
+## 🖥️ VPS Production Deployment Guide
+
+Complete guide for deploying LitVar-Link on a Virtual Private Server with Nginx Proxy Manager.
+
+### Prerequisites
+
+1. **VPS Requirements**:
+   - Ubuntu 20.04+ or similar Linux distribution
+   - 2GB+ RAM, 1+ CPU cores
+   - 20GB+ storage space
+   - Root or sudo access
+
+2. **Domain Setup**:
+   - Domain name pointing to your VPS IP
+   - DNS A record configured (e.g., `litvar.yourdomain.com` → `your.vps.ip`)
+
+3. **NPM Installation**:
+   - Nginx Proxy Manager running on the same VPS
+   - NPM accessible via web interface (typically port 81)
+
+### Step-by-Step Deployment
+
+#### 1. Server Preparation
+
+```bash
+# Update system packages
+sudo apt update && sudo apt upgrade -y
+
+# Install Docker and Docker Compose
+sudo apt install -y docker.io docker-compose git
+
+# Start and enable Docker
+sudo systemctl start docker
+sudo systemctl enable docker
+
+# Add user to docker group (logout/login required)
+sudo usermod -aG docker $USER
+```
+
+#### 2. Project Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/your-org/litvar-link.git
+cd litvar-link
+
+# Create production environment file
+cp .env.npm.example .env.npm
+
+# Edit environment with your domain settings
+nano .env.npm
+```
+
+#### 3. Environment Configuration
+
+Edit `.env.npm` with your specific settings:
+
+```env
+# Critical settings to customize:
+NPM_SHARED_NETWORK_NAME=npm_default
+LITVAR_LINK_PUBLIC_DOMAIN=litvar.yourdomain.com  
+LITVAR_LINK_PUBLIC_URL=https://litvar.yourdomain.com
+LITVAR_LINK_CORS_ORIGINS=["https://litvar.yourdomain.com"]
+
+# Production optimizations:
+GUNICORN_WORKERS=4
+GUNICORN_LOG_LEVEL=warning
+LITVAR_LINK_LOG_LEVEL=INFO
+```
+
+#### 4. Network Verification
+
+```bash
+# Verify NPM network exists
+docker network ls | grep npm
+
+# If NPM network doesn't exist, check NPM container
+docker ps | grep nginx-proxy-manager
+
+# Get actual network name if different
+docker inspect <npm_container_id> | grep NetworkMode
+```
+
+#### 5. Deploy LitVar-Link
+
+```bash
+# Build and deploy with NPM configuration
+cd docker
+docker-compose -f docker-compose.yml -f docker-compose.npm.yml up -d --build
+
+# Verify deployment
+docker-compose logs -f litvar-link
+```
+
+#### 6. NPM Proxy Configuration
+
+1. **Access NPM Web Interface**:
+   - Open `http://your-vps-ip:81`
+   - Login with your NPM credentials
+
+2. **Create Proxy Host**:
+   - **Domain Names**: `litvar.yourdomain.com`
+   - **Scheme**: `http` (internal)
+   - **Forward Hostname/IP**: `litvar-link`
+   - **Forward Port**: `8000`
+   - **Cache Assets**: Enable
+   - **Block Common Exploits**: Enable
+
+3. **Configure SSL**:
+   - Go to SSL tab
+   - Select "Request a new SSL Certificate"
+   - Enable "Force SSL" and "HTTP/2 Support"
+   - Add email for Let's Encrypt
+
+#### 7. Verification and Testing
+
+```bash
+# Check container health
+docker exec litvar-link curl -f http://localhost:8000/api/health/
+
+# Test external access
+curl https://litvar.yourdomain.com/api/health/
+
+# Check logs
+docker-compose -f docker-compose.yml -f docker-compose.npm.yml logs litvar-link
+```
+
+### Production Monitoring
+
+#### Log Management
+
+```bash
+# View real-time logs
+docker-compose -f docker-compose.yml -f docker-compose.npm.yml logs -f litvar-link
+
+# View specific time range
+docker-compose logs --since=1h litvar-link
+
+# Check log file sizes (automatic rotation configured)
+docker exec litvar-link ls -la /var/log/
+```
+
+#### Health Monitoring
+
+```bash
+# Create health check script
+cat > /opt/litvar-health-check.sh << 'EOF'
+#!/bin/bash
+HEALTH_URL="https://litvar.yourdomain.com/api/health/"
+if curl -f -s "$HEALTH_URL" > /dev/null; then
+    echo "$(date): LitVar-Link is healthy"
+else
+    echo "$(date): LitVar-Link health check failed" >&2
+    # Optional: restart container
+    # docker-compose -f /path/to/docker-compose.yml restart litvar-link
+fi
+EOF
+
+chmod +x /opt/litvar-health-check.sh
+
+# Add to crontab for periodic checking
+(crontab -l ; echo "*/5 * * * * /opt/litvar-health-check.sh >> /var/log/litvar-health.log") | crontab -
+```
+
+#### Resource Monitoring
+
+```bash
+# Monitor container resources
+docker stats litvar-link
+
+# Check disk usage
+docker system df
+
+# Monitor logs size
+docker-compose config | grep max-size
+```
+
+### Maintenance and Updates
+
+#### Update Deployment
+
+```bash
+# Pull latest changes
+git pull origin main
+
+# Rebuild and redeploy
+docker-compose -f docker-compose.yml -f docker-compose.npm.yml down
+docker-compose -f docker-compose.yml -f docker-compose.npm.yml up -d --build
+
+# Verify health
+curl https://litvar.yourdomain.com/api/health/
+```
+
+#### Backup Configuration
+
+```bash
+# Backup environment and configs
+tar -czf litvar-backup-$(date +%Y%m%d).tar.gz .env.npm docker/
+
+# Backup to remote location (optional)
+scp litvar-backup-*.tar.gz user@backup-server:/backups/
+```
+
+### Troubleshooting VPS Deployment
+
+#### Common Issues
+
+**Container won't start:**
+```bash
+# Check Docker daemon
+sudo systemctl status docker
+
+# Check container logs
+docker-compose logs litvar-link
+
+# Verify environment file
+cat .env.npm | grep -v "^#" | grep -v "^$"
+```
+
+**NPM connectivity issues:**
+```bash
+# Verify network connectivity
+docker exec litvar-link ping npm-container-name
+
+# Check network attachments
+docker inspect litvar-link | grep -A 10 Networks
+
+# Test internal health endpoint
+docker exec litvar-link curl localhost:8000/api/health/
+```
+
+**SSL certificate issues:**
+```bash
+# Check NPM logs
+docker logs nginx-proxy-manager
+
+# Verify domain DNS
+nslookup litvar.yourdomain.com
+
+# Test port 80/443 accessibility
+curl -I http://litvar.yourdomain.com
+```
+
+**Performance issues:**
+```bash
+# Monitor resource usage
+htop
+docker stats
+
+# Check LitVar2 API rate limits
+docker-compose logs litvar-link | grep -i rate
+
+# Adjust worker count in .env.npm
+# GUNICORN_WORKERS=2  # For lower-spec VPS
+```
+
+### Security Hardening
+
+#### Firewall Configuration
+
+```bash
+# Configure UFW firewall
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow ssh
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw allow 81/tcp  # NPM admin (consider restricting by IP)
+sudo ufw enable
+```
+
+#### Regular Updates
+
+```bash
+# System updates
+sudo apt update && sudo apt upgrade -y
+
+# Docker updates
+sudo apt update docker.io docker-compose
+
+# Container updates (schedule monthly)
+docker-compose pull && docker-compose up -d
+```
+
+This comprehensive VPS deployment guide provides everything needed to run LitVar-Link in production with NPM on a virtual private server.
