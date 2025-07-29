@@ -249,7 +249,6 @@ litvar-link/
 │   └── cli.py                  # Command-line interface
 ├── server.py                   # Main server entry point
 ├── mcp_server.py              # MCP STDIO server entry point
-├── mcp_server_wrapper.py      # MCP wrapper for production
 └── pyproject.toml             # Modern Python project configuration
 ```
 
