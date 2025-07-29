@@ -1,0 +1,110 @@
+# Docker build context optimization
+# Exclude unnecessary files to reduce build context size and improve security
+
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# Docker files (prevent recursive copying)
+.dockerignore
+Dockerfile*
+docker-compose*.yml
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+htmlcov/
+.tox/
+.nox/
+
+# Documentation
+docs/
+*.md
+!README.md
+CHANGELOG*
+LICENSE*
+
+# Logs and temporary files
+*.log
+logs/
+tmp/
+temp/
+
+# Development tools configuration
+.pre-commit-config.yaml
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Environment files (may contain secrets)
+.env*
+!.env.example
+
+# CI/CD files
+.github/
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+
+# Package manager files that aren't needed in container
+poetry.lock
+requirements*.txt
+Pipfile*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
