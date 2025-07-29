@@ -346,20 +346,45 @@ The caching system uses async LRU caching with configurable size and TTL:
 
 ## 🚀 Production Deployment
 
-### Docker
+### Docker Deployment
 
-```dockerfile
-FROM python:3.11-slim
+LitVar-Link includes a comprehensive Docker setup with multi-stage builds, production optimizations, and support for various deployment scenarios.
 
-WORKDIR /app
-COPY . .
+#### Quick Start
 
-RUN pip install -e .
+```bash
+# Copy environment template
+cp .env.example .env
 
-EXPOSE 8000
+# Local development
+cd docker
+docker-compose up --build
 
-CMD ["python", "server.py", "--host", "0.0.0.0"]
+# Production deployment
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+# Nginx Proxy Manager deployment
+cp .env.npm.example .env.npm
+# Edit .env.npm with your domain settings
+docker-compose -f docker-compose.yml -f docker-compose.npm.yml up -d
 ```
+
+#### Deployment Options
+
+- **Local Development**: Direct port access with hot-reloading support
+- **Production**: Gunicorn + Uvicorn workers with resource limits
+- **NPM Integration**: Nginx Proxy Manager with SSL and custom domains
+
+#### Features
+
+- ✅ Multi-stage Docker builds for optimized image size
+- ✅ Production-ready Gunicorn configuration
+- ✅ Health checks and graceful shutdown
+- ✅ Non-root container security
+- ✅ Comprehensive logging and monitoring
+- ✅ Environment-based configuration
+
+**📁 See [`docker/README.md`](docker/README.md) for complete deployment documentation.**
 
 ### Health Monitoring
 

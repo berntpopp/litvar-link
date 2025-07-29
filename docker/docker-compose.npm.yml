@@ -1,0 +1,65 @@
+# NPM Production deployment - extends base docker-compose.yml
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.npm.yml up -d
+
+services:
+  litvar-link:
+    # Remove port mapping - NPM handles routing
+    ports: []
+    
+    # Use NPM environment file
+    env_file:
+      - ../.env.npm
+    
+    # Add NPM network connectivity
+    networks:
+      - litvar_internal_net
+      - npm_proxy_network
+    
+    # Production environment overrides
+    environment:
+      LITVAR_LINK_LOG_FORMAT: json
+      LITVAR_LINK_LOG_LEVEL: INFO
+      LITVAR_LINK_HOST: 0.0.0.0
+      LITVAR_LINK_RELOAD: "false"
+      GUNICORN_WORKERS: 4
+      GUNICORN_LOG_LEVEL: warning
+    
+    # Enhanced health check for NPM routing
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # Production resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+      
+      # Production restart policy
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+    
+    # Production logging with rotation
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        labels: "service=litvar-link,environment=production,deployment=npm"
+
+networks:
+  litvar_internal_net:
+    driver: bridge
+  npm_proxy_network:
+    external: true
+    name: ${NPM_SHARED_NETWORK_NAME}
