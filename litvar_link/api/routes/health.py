@@ -8,7 +8,6 @@ import time
 from fastapi import APIRouter
 
 from litvar_link.models import CacheStatsResponse, HealthResponse
-
 from .dependencies import ClientDep, LoggerDep, ServiceDep
 
 router = APIRouter(prefix="/api/health", tags=["Health"])
@@ -16,9 +15,9 @@ router = APIRouter(prefix="/api/health", tags=["Health"])
 
 @router.get("/", response_model=HealthResponse)
 async def health_check(
-    client: ClientDep = None,
-    service: ServiceDep = None,
-    logger: LoggerDep = None,
+    client: ClientDep = ...,
+    service: ServiceDep = ...,
+    logger: LoggerDep = ...,
 ) -> HealthResponse:
     """Comprehensive health check for the LitVar-Link service.
 
@@ -74,8 +73,8 @@ async def health_check(
 
 @router.get("/cache", response_model=CacheStatsResponse)
 async def get_cache_stats(
-    service: ServiceDep = None,
-    logger: LoggerDep = None,
+    service: ServiceDep = ...,
+    logger: LoggerDep = ...,
 ) -> CacheStatsResponse:
     """Get detailed cache statistics.
 

@@ -79,8 +79,7 @@ def mock_variant_service(mock_litvar_client, mock_logger):
 def app():
     """Create FastAPI application instance for testing."""
     manager = UnifiedServerManager()
-    app = manager.create_app()
-    return app
+    return manager.create_app()
 
 
 @pytest.fixture

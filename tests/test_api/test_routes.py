@@ -324,7 +324,7 @@ class TestPublicationRoutes:
         assert response.status_code == 502
 
     @pytest.mark.parametrize(
-        "exception, expected_status",
+        ("exception", "expected_status"),
         [
             (ValidationError("Invalid variant ID format"), 400),
             (LitVarAPIError("Publications service down"), 502),
@@ -332,7 +332,7 @@ class TestPublicationRoutes:
         ],
     )
     def test_get_variant_publications_comprehensive_error_handling(
-        self, client: TestClient, exception: Exception, expected_status: int
+        self, client: TestClient, exception: Exception, expected_status: int,
     ) -> None:
         """Test comprehensive error handling for variant publications endpoint."""
         mock_service = AsyncMock()
@@ -428,7 +428,7 @@ class TestGeneRoutes:
         mock_service.search_gene_variants.assert_called_once_with("cfh")
 
     @pytest.mark.parametrize(
-        "exception, expected_status",
+        ("exception", "expected_status"),
         [
             (ValidationError("Invalid gene name"), 400),
             (LitVarAPIError("Upstream API error"), 502),
@@ -436,7 +436,7 @@ class TestGeneRoutes:
         ],
     )
     def test_get_gene_variants_error_handling(
-        self, client: TestClient, exception: Exception, expected_status: int
+        self, client: TestClient, exception: Exception, expected_status: int,
     ) -> None:
         """Test error handling for the get_gene_variants endpoint."""
         mock_service = AsyncMock()
@@ -555,7 +555,7 @@ class TestSensorRoutes:
             assert "Invalid RSID format" in data["detail"]
 
     @pytest.mark.parametrize(
-        "exception, expected_status",
+        ("exception", "expected_status"),
         [
             (ValidationError("Invalid RSID format"), 400),
             (LitVarAPIError("API service unavailable"), 502),
@@ -563,7 +563,7 @@ class TestSensorRoutes:
         ],
     )
     def test_lookup_rsid_comprehensive_error_handling(
-        self, client: TestClient, exception: Exception, expected_status: int
+        self, client: TestClient, exception: Exception, expected_status: int,
     ) -> None:
         """Test comprehensive error handling for RSID lookup endpoint."""
         mock_service = AsyncMock()

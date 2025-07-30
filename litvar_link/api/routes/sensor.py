@@ -6,7 +6,6 @@ from fastapi import APIRouter, HTTPException, Path
 
 from litvar_link.exceptions import LitVarAPIError, ValidationError
 from litvar_link.models import SensorResponse
-
 from .dependencies import LoggerDep, ServiceDep
 
 router = APIRouter(prefix="/api/sensor", tags=["Sensor"])
@@ -48,8 +47,8 @@ router = APIRouter(prefix="/api/sensor", tags=["Sensor"])
                                 "response_time_ms": 45,
                             },
                         },
-                    }
-                }
+                    },
+                },
             },
         },
         400: {
@@ -57,15 +56,15 @@ router = APIRouter(prefix="/api/sensor", tags=["Sensor"])
             "content": {
                 "application/json": {
                     "example": {
-                        "detail": "Invalid RSID format. Must start with 'rs' followed by digits (e.g., rs1061170)"
-                    }
-                }
+                        "detail": "Invalid RSID format. Must start with 'rs' followed by digits (e.g., rs1061170)",
+                    },
+                },
             },
         },
         502: {
             "description": "LitVar2 API communication error",
             "content": {
-                "application/json": {"example": {"detail": "LitVar2 API error"}}
+                "application/json": {"example": {"detail": "LitVar2 API error"}},
             },
         },
     },
@@ -103,8 +102,8 @@ async def lookup_rsid(
             },
         },
     ),
-    service: ServiceDep = None,
-    logger: LoggerDep = None,
+    service: ServiceDep = ...,
+    logger: LoggerDep = ...,
 ) -> SensorResponse:
     """Check Reference SNP ID (RSID) availability in LitVar2 database.
 

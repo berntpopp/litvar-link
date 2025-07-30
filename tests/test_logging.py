@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import io
 import json
 import logging
-import os
 import sys
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
-import structlog
 
 from litvar_link import logging_config
 from litvar_link.config import settings
@@ -31,7 +28,8 @@ class TestConfigureLogging:
 
             assert logger is not None
             # Should return a structured logger (BoundLoggerLazyProxy is the actual type)
-            assert hasattr(logger, "info") and hasattr(logger, "error")
+            assert hasattr(logger, "info")
+            assert hasattr(logger, "error")
             assert str(type(logger).__name__) in ["BoundLogger", "BoundLoggerLazyProxy"]
 
             # Should call basicConfig with stdout
@@ -325,11 +323,11 @@ class TestLogCacheOperation:
         mock_logger = Mock()
 
         logging_config.log_cache_operation(
-            logger=mock_logger, operation="get", key="test_key"
+            logger=mock_logger, operation="get", key="test_key",
         )
 
         mock_logger.debug.assert_called_once_with(
-            "Cache operation", operation="get", key="test_key"
+            "Cache operation", operation="get", key="test_key",
         )
 
     def test_log_cache_operation_with_hit(self):
@@ -337,11 +335,11 @@ class TestLogCacheOperation:
         mock_logger = Mock()
 
         logging_config.log_cache_operation(
-            logger=mock_logger, operation="get", key="test_key", hit=True
+            logger=mock_logger, operation="get", key="test_key", hit=True,
         )
 
         mock_logger.debug.assert_called_once_with(
-            "Cache operation", operation="get", key="test_key", cache_hit=True
+            "Cache operation", operation="get", key="test_key", cache_hit=True,
         )
 
     def test_log_cache_operation_with_size(self):
@@ -349,11 +347,11 @@ class TestLogCacheOperation:
         mock_logger = Mock()
 
         logging_config.log_cache_operation(
-            logger=mock_logger, operation="set", key="test_key", size=1024
+            logger=mock_logger, operation="set", key="test_key", size=1024,
         )
 
         mock_logger.debug.assert_called_once_with(
-            "Cache operation", operation="set", key="test_key", cache_size=1024
+            "Cache operation", operation="set", key="test_key", cache_size=1024,
         )
 
     def test_log_cache_operation_with_all_params(self):
@@ -361,7 +359,7 @@ class TestLogCacheOperation:
         mock_logger = Mock()
 
         logging_config.log_cache_operation(
-            logger=mock_logger, operation="set", key="test_key", hit=False, size=512
+            logger=mock_logger, operation="set", key="test_key", hit=False, size=512,
         )
 
         mock_logger.debug.assert_called_once_with(
@@ -453,11 +451,11 @@ class TestLogServerStartup:
         mock_logger = Mock()
 
         logging_config.log_server_startup(
-            logger=mock_logger, mode="http", host="127.0.0.1", port=8000
+            logger=mock_logger, mode="http", host="127.0.0.1", port=8000,
         )
 
         mock_logger.info.assert_called_once_with(
-            "Server starting", mode="http", host="127.0.0.1", port=8000
+            "Server starting", mode="http", host="127.0.0.1", port=8000,
         )
 
     def test_log_server_startup_with_partial_network_info(self):
@@ -466,7 +464,7 @@ class TestLogServerStartup:
 
         # Only host provided
         logging_config.log_server_startup(
-            logger=mock_logger, mode="http", host="127.0.0.1", port=None
+            logger=mock_logger, mode="http", host="127.0.0.1", port=None,
         )
 
         # Should not include host/port in log data
@@ -482,7 +480,7 @@ class TestLogErrorWithContext:
         error = ValueError("Test error")
 
         logging_config.log_error_with_context(
-            logger=mock_logger, error=error, operation="test_operation"
+            logger=mock_logger, error=error, operation="test_operation",
         )
 
         mock_logger.error.assert_called_once_with(
@@ -500,7 +498,7 @@ class TestLogErrorWithContext:
         context = {"url": "https://api.example.com", "retry_count": 3}
 
         logging_config.log_error_with_context(
-            logger=mock_logger, error=error, operation="api_request", context=context
+            logger=mock_logger, error=error, operation="api_request", context=context,
         )
 
         mock_logger.error.assert_called_once_with(
@@ -518,7 +516,7 @@ class TestLogErrorWithContext:
         error = RuntimeError("Runtime error")
 
         logging_config.log_error_with_context(
-            logger=mock_logger, error=error, operation="runtime_operation", context=None
+            logger=mock_logger, error=error, operation="runtime_operation", context=None,
         )
 
         # Should not include context key when context is None
@@ -530,5 +528,5 @@ class TestLogErrorWithContext:
         }
 
         mock_logger.error.assert_called_once_with(
-            "Operation failed", **expected_call_kwargs
+            "Operation failed", **expected_call_kwargs,
         )

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-import types
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin
 
@@ -20,6 +19,8 @@ from litvar_link.exceptions import (
 from litvar_link.logging_config import log_api_request, log_error_with_context
 
 if TYPE_CHECKING:
+    import types
+
     from structlog.typing import FilteringBoundLogger
 
     from litvar_link.config import APIConfig
@@ -386,11 +387,14 @@ class LitVar2Client:
         """
         # Validate inputs
         if not query or not query.strip():
-            raise ValueError("Query cannot be empty")
+            msg = "Query cannot be empty"
+            raise ValueError(msg)
         if len(query) > 100:
-            raise ValueError("Query too long (max 100 characters)")
+            msg = "Query too long (max 100 characters)"
+            raise ValueError(msg)
         if not 1 <= limit <= 100:
-            raise ValueError("Limit must be between 1 and 100")
+            msg = "Limit must be between 1 and 100"
+            raise ValueError(msg)
 
         endpoint = self.config.endpoints["autocomplete"]
         params = {"query": query.strip(), "limit": limit}
@@ -453,9 +457,11 @@ class LitVar2Client:
         """
         # Validate RSID format (should start with 'rs' followed by digits)
         if not rsid or not rsid.startswith("rs") or len(rsid) < 3:
-            raise ValueError("Invalid RSID format (should be 'rs' followed by digits)")
+            msg = "Invalid RSID format (should be 'rs' followed by digits)"
+            raise ValueError(msg)
         if not rsid[2:].isdigit():
-            raise ValueError("Invalid RSID format (should be 'rs' followed by digits)")
+            msg = "Invalid RSID format (should be 'rs' followed by digits)"
+            raise ValueError(msg)
 
         endpoint = self.config.endpoints["sensor"].format(rsid=rsid)
         return await self._make_request("GET", endpoint)
@@ -474,9 +480,11 @@ class LitVar2Client:
         """
         # Validate gene name
         if not gene_name or not gene_name.strip():
-            raise ValueError("Gene name cannot be empty")
+            msg = "Gene name cannot be empty"
+            raise ValueError(msg)
         if len(gene_name) > 50:
-            raise ValueError("Gene name too long (max 50 characters)")
+            msg = "Gene name too long (max 50 characters)"
+            raise ValueError(msg)
 
         endpoint = self.config.endpoints["gene_variants"].format(
             gene_name=gene_name.strip(),

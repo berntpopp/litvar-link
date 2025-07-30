@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
 from pydantic import ValidationError
+import pytest
 
 from litvar_link.models.requests import (
     BatchVariantRequest,
@@ -78,7 +78,7 @@ class TestVariantSearchRequest:
             VariantSearchRequest(query=query)
 
         assert f"Query contains invalid character: {dangerous_char}" in str(
-            exc_info.value
+            exc_info.value,
         )
 
     def test_query_allowed_special_characters(self):
@@ -164,7 +164,7 @@ class TestPublicationRequest:
     def test_valid_request_all_fields(self):
         """Test creating a valid publication request with all fields."""
         request = PublicationRequest(
-            variant_id="rs1061170", format="detailed", limit=50
+            variant_id="rs1061170", format="detailed", limit=50,
         )
 
         assert request.variant_id == "rs1061170"
@@ -301,7 +301,7 @@ class TestGeneVariantsRequest:
     def test_valid_request_all_fields(self):
         """Test creating a valid gene variants request with all fields."""
         request = GeneVariantsRequest(
-            gene_name="BRCA1", limit=50, sort_by="name", sort_order="asc"
+            gene_name="BRCA1", limit=50, sort_by="name", sort_order="asc",
         )
 
         assert request.gene_name == "BRCA1"
@@ -418,7 +418,7 @@ class TestBatchVariantRequest:
     def test_valid_request_all_fields(self):
         """Test creating a valid batch request with all fields."""
         request = BatchVariantRequest(
-            variant_ids=["rs1", "rs2"], include_publications=True, format="csv"
+            variant_ids=["rs1", "rs2"], include_publications=True, format="csv",
         )
 
         assert request.variant_ids == ["rs1", "rs2"]
@@ -524,7 +524,7 @@ class TestCacheRequest:
     def test_keys_whitespace_handling(self):
         """Test that keys whitespace is handled correctly."""
         request = CacheRequest(
-            operation="clear", keys=["  key1  ", "key2", "", "  key3  ", "   "]
+            operation="clear", keys=["  key1  ", "key2", "", "  key3  ", "   "],
         )
 
         assert request.keys == ["key1", "key2", "key3"]

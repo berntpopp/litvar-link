@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any
 
 from litvar_link.exceptions import ValidationError
 from litvar_link.logging_config import log_error_with_context
-from litvar_link.utils.caching import create_service_cache_decorator
 from litvar_link.models import (
     GeneVariantsResponse,
     PublicationResponse,
@@ -16,6 +15,7 @@ from litvar_link.models import (
     VariantDetailsResponse,
     VariantSearchResponse,
 )
+from litvar_link.utils.caching import create_service_cache_decorator
 
 if TYPE_CHECKING:
     from structlog.typing import FilteringBoundLogger
@@ -81,23 +81,23 @@ class VariantService:
         )
 
         self._cached_search_variants = self.cache.cached(
-            maxsize=search_maxsize, ttl=search_ttl, key_pattern="search_variants"
+            maxsize=search_maxsize, ttl=search_ttl, key_pattern="search_variants",
         )(self._search_variants_impl)
 
         self._cached_get_variant_details = self.cache.cached(
-            maxsize=500, ttl=7200, key_pattern="variant_details"
+            maxsize=500, ttl=7200, key_pattern="variant_details",
         )(self._get_variant_details_impl)
 
         self._cached_get_variant_publications = self.cache.cached(
-            maxsize=500, ttl=3600, key_pattern="variant_publications"
+            maxsize=500, ttl=3600, key_pattern="variant_publications",
         )(self._get_variant_publications_impl)
 
         self._cached_sensor_lookup = self.cache.cached(
-            maxsize=1000, ttl=86400, key_pattern="sensor_lookup"
+            maxsize=1000, ttl=86400, key_pattern="sensor_lookup",
         )(self._sensor_lookup_impl)
 
         self._cached_get_variants_by_gene = self.cache.cached(
-            maxsize=200, ttl=3600, key_pattern="gene_variants"
+            maxsize=200, ttl=3600, key_pattern="gene_variants",
         )(self._get_variants_by_gene_impl)
 
     async def _search_variants_impl(

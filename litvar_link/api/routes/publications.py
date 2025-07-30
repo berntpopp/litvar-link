@@ -6,7 +6,6 @@ from fastapi import APIRouter, HTTPException, Path
 
 from litvar_link.exceptions import LitVarAPIError, ValidationError
 from litvar_link.models import PublicationResponse
-
 from .dependencies import LoggerDep, ServiceDep
 
 router = APIRouter(prefix="/api/publications", tags=["Publications"])
@@ -50,8 +49,8 @@ router = APIRouter(prefix="/api/publications", tags=["Publications"])
                         },
                         "cached": False,
                         "search_time_ms": 341,
-                    }
-                }
+                    },
+                },
             },
         },
         404: {
@@ -63,8 +62,8 @@ router = APIRouter(prefix="/api/publications", tags=["Publications"])
                         "total_count": 0,
                         "publications": [],
                         "message": "No publications found for variant rs999999999",
-                    }
-                }
+                    },
+                },
             },
         },
         400: {
@@ -72,15 +71,15 @@ router = APIRouter(prefix="/api/publications", tags=["Publications"])
             "content": {
                 "application/json": {
                     "example": {
-                        "detail": "Invalid variant ID format. Expected RSID, gene symbol, or HGVS notation"
-                    }
-                }
+                        "detail": "Invalid variant ID format. Expected RSID, gene symbol, or HGVS notation",
+                    },
+                },
             },
         },
         502: {
             "description": "LitVar2 API communication error",
             "content": {
-                "application/json": {"example": {"detail": "LitVar2 API error"}}
+                "application/json": {"example": {"detail": "LitVar2 API error"}},
             },
         },
     },
@@ -117,8 +116,8 @@ async def get_variant_publications(
             },
         },
     ),
-    service: ServiceDep = None,
-    logger: LoggerDep = None,
+    service: ServiceDep = ...,
+    logger: LoggerDep = ...,
 ) -> PublicationResponse:
     """Retrieve comprehensive literature for genetic variant research.
 

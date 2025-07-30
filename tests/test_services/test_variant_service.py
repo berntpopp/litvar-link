@@ -493,7 +493,7 @@ class TestVariantService:
         """Test exception handling in get_variant_literature."""
         # Mock client to raise exception
         mock_client.get_variant_publications.side_effect = Exception(
-            "Publications API error"
+            "Publications API error",
         )
 
         with pytest.raises(Exception, match="Publications API error"):
@@ -661,7 +661,7 @@ class TestVariantService:
         """Test cache TTL expiration."""
         # Create service with very short TTL
         cache_config = CacheConfig(
-            size=100, ttl=60, stats_enabled=True
+            size=100, ttl=60, stats_enabled=True,
         )  # 60 second TTL (minimum)
         service = VariantService(mock_client, cache_config, mock_logger)
 
@@ -759,27 +759,6 @@ class TestVariantService:
         assert len(result.pmids) == 0
         assert result.total_count == 0
 
-    def test_cache_key_generation(
-        self,
-        service: VariantService,
-        mock_client: AsyncMock,  # noqa: ARG002
-        mock_logger: MagicMock,  # noqa: ARG002
-    ) -> None:
-        """Test cache key generation for different methods."""
-        # Access private method for testing
-        key1 = service._generate_cache_key("search", query="CFH", limit=10)
-        key2 = service._generate_cache_key("search", query="CFH", limit=5)
-        key3 = service._generate_cache_key("search", query="BRCA1", limit=10)
-        key4 = service._generate_cache_key("gene", gene_name="CFH")
-
-        # Keys should be different for different parameters
-        assert key1 != key2  # Different limit
-        assert key1 != key3  # Different query
-        assert key1 != key4  # Different method
-
-        # Same parameters should generate same key
-        key1_repeat = service._generate_cache_key("search", query="CFH", limit=10)
-        assert key1 == key1_repeat
 
     @pytest.mark.asyncio
     async def test_service_cleanup(

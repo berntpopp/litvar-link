@@ -3,24 +3,16 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
-import sys
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from rich.console import Console
 
 from litvar_link import cli
-from litvar_link.models.responses import (
-    GeneVariantsResponse,
-    SensorResponse,
-    VariantSearchResponse,
-)
 
 
 def render_rich_object(rich_obj) -> str:
     """Helper function to render Rich objects to string for testing."""
-    from rich.console import Console
     from io import StringIO
 
     console_output = StringIO()
@@ -122,7 +114,7 @@ class TestSearchVariants:
                     await cli.search_variants("BRCA1", limit=5)
 
                     mock_service.search_variants.assert_called_once_with(
-                        query="BRCA1", limit=5
+                        query="BRCA1", limit=5,
                     )
                     # Should print table and summary
                     assert mock_print.call_count >= 2
@@ -370,7 +362,7 @@ class TestServerCommands:
             await cli.serve_http("0.0.0.0", 8080, True)
 
             mock_manager.start_http_only_server.assert_called_once_with(
-                host="0.0.0.0", port=8080, reload=True
+                host="0.0.0.0", port=8080, reload=True,
             )
 
     @pytest.mark.asyncio
@@ -403,7 +395,7 @@ class TestServerCommands:
             await cli.serve_unified("127.0.0.1", 9000, False)
 
             mock_manager.start_unified_server.assert_called_once_with(
-                host="127.0.0.1", port=9000, reload=False
+                host="127.0.0.1", port=9000, reload=False,
             )
 
     @pytest.mark.asyncio
@@ -468,7 +460,7 @@ class TestMainFunction:
             # Create a mock that closes the coroutine to prevent RuntimeWarning
             def mock_run_func(coro):
                 coro.close()
-                return None
+                return
 
             with patch("asyncio.run", side_effect=mock_run_func) as mock_run:
                 cli.main()
@@ -481,14 +473,14 @@ class TestMainFunction:
             # Create a mock that closes the coroutine to prevent RuntimeWarning
             def mock_run_func(coro):
                 coro.close()
-                return None
+                return
 
             with patch("asyncio.run", side_effect=mock_run_func) as mock_run:
-                with patch("litvar_link.cli.search_variants") as mock_search:
+                with patch("litvar_link.cli.search_variants"):
                     cli.main()
                     mock_run.assert_called_once()
                     # Verify search_variants was called with correct args
-                    call_args = mock_run.call_args[0][0]
+                    mock_run.call_args[0][0]
                     # The call_args should be the result of search_variants("BRCA1", 5)
 
     def test_main_search_command_default_limit(self):
@@ -497,7 +489,7 @@ class TestMainFunction:
             # Create a mock that closes the coroutine to prevent RuntimeWarning
             def mock_run_func(coro):
                 coro.close()
-                return None
+                return
 
             with patch("asyncio.run", side_effect=mock_run_func) as mock_run:
                 cli.main()
@@ -509,7 +501,7 @@ class TestMainFunction:
             # Create a mock that closes the coroutine to prevent RuntimeWarning
             def mock_run_func(coro):
                 coro.close()
-                return None
+                return
 
             with patch("asyncio.run", side_effect=mock_run_func) as mock_run:
                 cli.main()
@@ -521,7 +513,7 @@ class TestMainFunction:
             # Create a mock that closes the coroutine to prevent RuntimeWarning
             def mock_run_func(coro):
                 coro.close()
-                return None
+                return
 
             with patch("asyncio.run", side_effect=mock_run_func) as mock_run:
                 cli.main()
@@ -533,7 +525,7 @@ class TestMainFunction:
             # Create a mock that closes the coroutine to prevent RuntimeWarning
             def mock_run_func(coro):
                 coro.close()
-                return None
+                return
 
             with patch("asyncio.run", side_effect=mock_run_func) as mock_run:
                 cli.main()
@@ -557,7 +549,7 @@ class TestMainFunction:
             # Create a mock that closes the coroutine to prevent RuntimeWarning
             def mock_run_func(coro):
                 coro.close()
-                return None
+                return
 
             with patch("asyncio.run", side_effect=mock_run_func) as mock_run:
                 cli.main()
@@ -569,7 +561,7 @@ class TestMainFunction:
             # Create a mock that closes the coroutine to prevent RuntimeWarning
             def mock_run_func(coro):
                 coro.close()
-                return None
+                return
 
             with patch("asyncio.run", side_effect=mock_run_func) as mock_run:
                 cli.main()
@@ -581,7 +573,7 @@ class TestMainFunction:
             # Create a mock that closes the coroutine to prevent RuntimeWarning
             def mock_run_func(coro):
                 coro.close()
-                return None
+                return
 
             with patch("asyncio.run", side_effect=mock_run_func) as mock_run:
                 cli.main()
@@ -593,7 +585,7 @@ class TestMainFunction:
             # Create a mock that closes the coroutine to prevent RuntimeWarning
             def mock_run_func(coro):
                 coro.close()
-                return None
+                return
 
             with patch("asyncio.run", side_effect=mock_run_func) as mock_run:
                 cli.main()
@@ -603,7 +595,7 @@ class TestMainFunction:
         """Test main function with serve but no subcommand."""
         with patch("sys.argv", ["litvar-link", "serve"]):
             # This actually prints help and doesn't exit, which is the current behavior
-            with patch("argparse.ArgumentParser.print_help") as mock_help:
+            with patch("argparse.ArgumentParser.print_help"):
                 cli.main()
                 # The subparser should print help when no subcommand is provided
                 # This may not call print_help directly but shows usage
@@ -666,7 +658,7 @@ class TestArgumentParsing:
         http_parser.add_argument("--reload", action="store_true")
 
         args = parser.parse_args(
-            ["serve", "http", "--host", "0.0.0.0", "--port", "8080", "--reload"]
+            ["serve", "http", "--host", "0.0.0.0", "--port", "8080", "--reload"],
         )
         assert args.command == "serve"
         assert args.serve_mode == "http"

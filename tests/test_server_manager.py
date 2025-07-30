@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 import uvicorn
@@ -38,12 +38,12 @@ class TestUnifiedServerManager:
 
             with patch("litvar_link.server_manager.log_server_startup") as mock_log:
                 with patch("litvar_link.server_manager.app") as mock_app:
-                    with patch("litvar_link.server_manager.mcp_app") as mock_mcp_app:
+                    with patch("litvar_link.server_manager.mcp_app"):
                         await manager.start_unified_server()
 
                         # Check logging
                         mock_log.assert_called_once_with(
-                            mock_logger, "unified", "127.0.0.1", 8000
+                            mock_logger, "unified", "127.0.0.1", 8000,
                         )
 
                         # Check MCP mount
@@ -75,12 +75,12 @@ class TestUnifiedServerManager:
                 with patch("litvar_link.server_manager.app"):
                     with patch("litvar_link.server_manager.mcp_app"):
                         await manager.start_unified_server(
-                            host="0.0.0.0", port=9000, reload=True
+                            host="0.0.0.0", port=9000, reload=True,
                         )
 
                         # Check logging with custom params
                         mock_log.assert_called_once_with(
-                            mock_logger, "unified", "0.0.0.0", 9000
+                            mock_logger, "unified", "0.0.0.0", 9000,
                         )
 
                         # Check server config
@@ -122,7 +122,7 @@ class TestUnifiedServerManager:
 
                     # Check logging
                     mock_log.assert_called_once_with(
-                        mock_logger, "http", "127.0.0.1", 8000
+                        mock_logger, "http", "127.0.0.1", 8000,
                     )
 
                     # Should NOT mount MCP
@@ -151,12 +151,12 @@ class TestUnifiedServerManager:
             with patch("litvar_link.server_manager.log_server_startup") as mock_log:
                 with patch("litvar_link.server_manager.app"):
                     await manager.start_http_only_server(
-                        host="192.168.1.100", port=8080, reload=True
+                        host="192.168.1.100", port=8080, reload=True,
                     )
 
                     # Check logging with custom params
                     mock_log.assert_called_once_with(
-                        mock_logger, "http", "192.168.1.100", 8080
+                        mock_logger, "http", "192.168.1.100", 8080,
                     )
 
                     # Check server config
@@ -257,7 +257,7 @@ class TestUnifiedServerManager:
                         await manager.start_stdio_server()
 
                         # Check that info messages were logged
-                        info_calls = [call for call in mock_logger.info.call_args_list]
+                        info_calls = list(mock_logger.info.call_args_list)
                         assert len(info_calls) >= 2
 
                         # Check specific log messages
@@ -278,7 +278,7 @@ class TestUnifiedServerManager:
 
             with patch("litvar_link.server_manager.app") as mock_app:
                 await manager.start_http_only_server(
-                    host="test.local", port=3000, reload=True
+                    host="test.local", port=3000, reload=True,
                 )
 
                 # Extract the config that was passed to uvicorn.Server
@@ -310,5 +310,5 @@ class TestUnifiedServerManager:
 
                         # Verify MCP app was mounted at the correct path
                         mock_app.mount.assert_called_once_with(
-                            "/mcp", mock_mcp_app.mcp_router
+                            "/mcp", mock_mcp_app.mcp_router,
                         )

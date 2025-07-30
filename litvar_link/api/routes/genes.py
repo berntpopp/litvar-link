@@ -6,7 +6,6 @@ from fastapi import APIRouter, HTTPException, Path
 
 from litvar_link.exceptions import LitVarAPIError, ValidationError
 from litvar_link.models import GeneVariantsResponse
-
 from .dependencies import LoggerDep, ServiceDep
 
 router = APIRouter(prefix="/api/genes", tags=["Genes"])
@@ -47,8 +46,8 @@ router = APIRouter(prefix="/api/genes", tags=["Genes"])
                         ],
                         "cached": False,
                         "search_time_ms": 567,
-                    }
-                }
+                    },
+                },
             },
         },
         400: {
@@ -56,9 +55,9 @@ router = APIRouter(prefix="/api/genes", tags=["Genes"])
             "content": {
                 "application/json": {
                     "example": {
-                        "detail": "Invalid gene symbol. Must be a valid HUGO gene symbol"
-                    }
-                }
+                        "detail": "Invalid gene symbol. Must be a valid HUGO gene symbol",
+                    },
+                },
             },
         },
         404: {
@@ -70,14 +69,14 @@ router = APIRouter(prefix="/api/genes", tags=["Genes"])
                         "total_count": 0,
                         "variants": [],
                         "message": "No variants found for gene NONEXISTENT",
-                    }
-                }
+                    },
+                },
             },
         },
         502: {
             "description": "LitVar2 API communication error",
             "content": {
-                "application/json": {"example": {"detail": "LitVar2 API error"}}
+                "application/json": {"example": {"detail": "LitVar2 API error"}},
             },
         },
     },
@@ -114,8 +113,8 @@ async def get_gene_variants(
             },
         },
     ),
-    service: ServiceDep = None,
-    logger: LoggerDep = None,
+    service: ServiceDep = ...,
+    logger: LoggerDep = ...,
 ) -> GeneVariantsResponse:
     """Retrieve comprehensive variant information for a specific gene.
 

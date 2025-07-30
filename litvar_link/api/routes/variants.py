@@ -11,7 +11,6 @@ from litvar_link.models import (
     VariantSearchRequest,
     VariantSearchResponse,
 )
-
 from .dependencies import LoggerDep, ServiceDep
 
 router = APIRouter(prefix="/api/variants", tags=["Variants"])
@@ -38,34 +37,34 @@ router = APIRouter(prefix="/api/variants", tags=["Variants"])
                                 "hgvs_protein": "p.Y402H",
                                 "clinical_significance": "pathogenic",
                                 "publication_count": 127,
-                            }
+                            },
                         ],
                         "cached": False,
                         "search_time_ms": 245,
-                    }
-                }
+                    },
+                },
             },
         },
         400: {
             "description": "Invalid query parameters or format",
             "content": {
                 "application/json": {
-                    "example": {"detail": "Query must be between 1 and 100 characters"}
-                }
+                    "example": {"detail": "Query must be between 1 and 100 characters"},
+                },
             },
         },
         422: {
             "description": "Query validation error",
             "content": {
                 "application/json": {
-                    "example": {"detail": "Invalid HGVS notation format"}
-                }
+                    "example": {"detail": "Invalid HGVS notation format"},
+                },
             },
         },
         502: {
             "description": "LitVar2 API communication error",
             "content": {
-                "application/json": {"example": {"detail": "LitVar2 API error"}}
+                "application/json": {"example": {"detail": "LitVar2 API error"}},
             },
         },
     },
@@ -132,8 +131,8 @@ async def search_variants(
             },
         },
     ),
-    service: ServiceDep = None,
-    logger: LoggerDep = None,
+    service: ServiceDep = ...,
+    logger: LoggerDep = ...,
 ) -> VariantSearchResponse:
     """Search for genetic variants using multiple query formats.
 
@@ -250,8 +249,8 @@ async def search_variants(
                         },
                         "cached": False,
                         "search_time_ms": 189,
-                    }
-                }
+                    },
+                },
             },
         },
         404: {
@@ -264,8 +263,8 @@ async def search_variants(
                         "variant": None,
                         "cached": True,
                         "search_time_ms": 45,
-                    }
-                }
+                    },
+                },
             },
         },
         400: {
@@ -273,9 +272,9 @@ async def search_variants(
             "content": {
                 "application/json": {
                     "example": {
-                        "detail": "Invalid variant ID format. Expected RSID, gene symbol, or HGVS notation"
-                    }
-                }
+                        "detail": "Invalid variant ID format. Expected RSID, gene symbol, or HGVS notation",
+                    },
+                },
             },
         },
     },
@@ -307,8 +306,8 @@ async def get_variant_details(
             },
         },
     ),
-    service: ServiceDep = None,
-    logger: LoggerDep = None,
+    service: ServiceDep = ...,
+    logger: LoggerDep = ...,
 ) -> dict[str, Any]:
     """Retrieve comprehensive information about a specific genetic variant.
 

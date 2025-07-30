@@ -1,7 +1,10 @@
 """Gunicorn configuration for LitVar-Link production deployment."""
 
+from __future__ import annotations
+
 import multiprocessing
 import os
+from typing import Any
 
 # Server socket configuration
 bind = f"0.0.0.0:{os.environ.get('PORT', '8000')}"
@@ -43,36 +46,36 @@ reuse_port = True
 
 
 # Graceful handling
-def on_starting(server):
+def on_starting(server: Any) -> None:
     """Called just before the master process is initialized."""
     server.log.info("Starting LitVar-Link server")
 
 
-def on_reload(server):
+def on_reload(server: Any) -> None:
     """Called to recycle workers during a reload via SIGHUP."""
     server.log.info("Reloading LitVar-Link server")
 
 
-def worker_int(worker):
+def worker_int(worker: Any) -> None:
     """Called just after a worker exited on SIGINT or SIGQUIT."""
     worker.log.info("Worker received INT or QUIT signal")
 
 
-def pre_fork(server, worker):
+def pre_fork(server: Any, worker: Any) -> None:
     """Called just before a worker is forked."""
     server.log.info("Worker spawned (pid: %s)", worker.pid)
 
 
-def post_fork(server, worker):
+def post_fork(server: Any, worker: Any) -> None:
     """Called just after a worker has been forked."""
     server.log.info("Worker spawned (pid: %s)", worker.pid)
 
 
-def post_worker_init(worker):
+def post_worker_init(worker: Any) -> None:
     """Called just after a worker has initialized the application."""
     worker.log.info("Worker initialized (pid: %s)", worker.pid)
 
 
-def worker_abort(worker):
+def worker_abort(worker: Any) -> None:
     """Called when a worker received the SIGABRT signal."""
     worker.log.info("Worker aborted (pid: %s)", worker.pid)

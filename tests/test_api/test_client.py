@@ -624,13 +624,13 @@ class TestLitVar2Client:
 
             async with LitVar2Client(config=api_config, logger=mock_logger) as client:
                 with pytest.raises(
-                    Exception
+                    Exception,
                 ) as exc_info:  # RateLimitError should be raised
                     await client.search_variants("test")
 
                 # Check that the error message contains rate limit info
                 assert "Rate limit exceeded" in str(exc_info.value) or "429" in str(
-                    exc_info.value
+                    exc_info.value,
                 )
 
     @pytest.mark.asyncio
@@ -653,13 +653,13 @@ class TestLitVar2Client:
 
             async with LitVar2Client(config=api_config, logger=mock_logger) as client:
                 with pytest.raises(
-                    Exception
+                    Exception,
                 ) as exc_info:  # RateLimitError should be raised
                     await client.search_variants("test")
 
                 # Should use default retry time when Retry-After header is missing
                 assert "Rate limit exceeded" in str(exc_info.value) or "429" in str(
-                    exc_info.value
+                    exc_info.value,
                 )
 
     @pytest.mark.asyncio
@@ -764,7 +764,7 @@ another invalid line without json"""
                 mock_request.side_effect = http_error
 
                 async with LitVar2Client(
-                    config=api_config, logger=mock_logger
+                    config=api_config, logger=mock_logger,
                 ) as client:
                     with pytest.raises(expected_exception):
                         await client.search_variants("test")
@@ -820,7 +820,7 @@ another invalid line without json"""
             mock_client_instance = AsyncMock()
             mock_client_class.return_value = mock_client_instance
 
-            client = LitVar2Client(config=api_config, logger=mock_logger)
+            LitVar2Client(config=api_config, logger=mock_logger)
 
             # Check that httpx.AsyncClient was initialized with headers
             mock_client_class.assert_called_once()

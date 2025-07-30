@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import functools
 import time
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
 from async_lru import alru_cache
 
 from litvar_link.logging_config import log_cache_operation
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
+
     from structlog.typing import FilteringBoundLogger
 
 # Type variables for generic function signatures
@@ -162,7 +164,7 @@ class CacheManager:
 
         for cached_func in self._cached_functions:
             if hasattr(cached_func, "cache_info") and hasattr(
-                cached_func, "cache_clear"
+                cached_func, "cache_clear",
             ):
                 info_before = cached_func.cache_info()
                 cached_func.cache_clear()
