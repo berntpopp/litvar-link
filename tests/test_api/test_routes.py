@@ -323,6 +323,34 @@ class TestPublicationRoutes:
 
         assert response.status_code == 502
 
+    @pytest.mark.parametrize(
+        "exception, expected_status",
+        [
+            (ValidationError("Invalid variant ID format"), 400),
+            (LitVarAPIError("Publications service down"), 502),
+            (Exception("Network timeout"), 500),
+        ],
+    )
+    def test_get_variant_publications_comprehensive_error_handling(
+        self, client: TestClient, exception: Exception, expected_status: int
+    ) -> None:
+        """Test comprehensive error handling for variant publications endpoint."""
+        mock_service = AsyncMock()
+        mock_service.get_variant_literature.side_effect = exception
+
+        # Override the dependency to return our mock
+        from litvar_link.api.routes.dependencies import get_variant_service
+
+        app = create_app()
+        app.dependency_overrides[get_variant_service] = lambda: mock_service
+        test_client = TestClient(app)
+
+        response = test_client.get("/api/publications/variant/test_variant_id")
+
+        assert response.status_code == expected_status
+        data = response.json()
+        assert "detail" in data
+
 
 class TestGeneRoutes:
     """Test gene-related routes."""
@@ -398,6 +426,34 @@ class TestGeneRoutes:
         assert response.status_code == 200
         # Service should have been called with normalized gene name
         mock_service.search_gene_variants.assert_called_once_with("cfh")
+
+    @pytest.mark.parametrize(
+        "exception, expected_status",
+        [
+            (ValidationError("Invalid gene name"), 400),
+            (LitVarAPIError("Upstream API error"), 502),
+            (Exception("Unexpected error"), 500),
+        ],
+    )
+    def test_get_gene_variants_error_handling(
+        self, client: TestClient, exception: Exception, expected_status: int
+    ) -> None:
+        """Test error handling for the get_gene_variants endpoint."""
+        mock_service = AsyncMock()
+        mock_service.search_gene_variants.side_effect = exception
+
+        # Override the dependency to return our mock
+        from litvar_link.api.routes.dependencies import get_variant_service
+
+        app = create_app()
+        app.dependency_overrides[get_variant_service] = lambda: mock_service
+        test_client = TestClient(app)
+
+        response = test_client.get("/api/genes/CFH/variants")
+
+        assert response.status_code == expected_status
+        data = response.json()
+        assert "detail" in data
 
 
 class TestSensorRoutes:
@@ -497,6 +553,34 @@ class TestSensorRoutes:
             assert any("should match pattern" in str(error) for error in data["detail"])
         else:
             assert "Invalid RSID format" in data["detail"]
+
+    @pytest.mark.parametrize(
+        "exception, expected_status",
+        [
+            (ValidationError("Invalid RSID format"), 400),
+            (LitVarAPIError("API service unavailable"), 502),
+            (Exception("Database connection error"), 500),
+        ],
+    )
+    def test_lookup_rsid_comprehensive_error_handling(
+        self, client: TestClient, exception: Exception, expected_status: int
+    ) -> None:
+        """Test comprehensive error handling for RSID lookup endpoint."""
+        mock_service = AsyncMock()
+        mock_service.lookup_rsid.side_effect = exception
+
+        # Override the dependency to return our mock
+        from litvar_link.api.routes.dependencies import get_variant_service
+
+        app = create_app()
+        app.dependency_overrides[get_variant_service] = lambda: mock_service
+        test_client = TestClient(app)
+
+        response = test_client.get("/api/sensor/rs1234567")
+
+        assert response.status_code == expected_status
+        data = response.json()
+        assert "detail" in data
 
 
 class TestHealthRoutes:

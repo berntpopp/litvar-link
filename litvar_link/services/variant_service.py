@@ -164,14 +164,22 @@ class VariantService:
             start_time = time.time()
 
             # Check cache info before call
-            cache_info_before = self._cached_search_variants.cache_info() if hasattr(self._cached_search_variants, 'cache_info') else None
+            cache_info_before = (
+                self._cached_search_variants.cache_info()
+                if hasattr(self._cached_search_variants, "cache_info")
+                else None
+            )
             initial_hits = cache_info_before.hits if cache_info_before else 0
-            
+
             # Make cached call (caching logic handled by decorator)
             variant_data = await self._cached_search_variants(query, limit)
-            
+
             # Check if cache was hit
-            cache_info_after = self._cached_search_variants.cache_info() if hasattr(self._cached_search_variants, 'cache_info') else None
+            cache_info_after = (
+                self._cached_search_variants.cache_info()
+                if hasattr(self._cached_search_variants, "cache_info")
+                else None
+            )
             cached = cache_info_after.hits > initial_hits if cache_info_after else False
 
             # Parse variants using the endpoint-specific model
@@ -234,14 +242,22 @@ class VariantService:
         variant_id = variant_id.strip()
         try:
             # Check cache info before call
-            cache_info_before = self._cached_get_variant_details.cache_info() if hasattr(self._cached_get_variant_details, 'cache_info') else None
+            cache_info_before = (
+                self._cached_get_variant_details.cache_info()
+                if hasattr(self._cached_get_variant_details, "cache_info")
+                else None
+            )
             initial_hits = cache_info_before.hits if cache_info_before else 0
-            
+
             # Make cached call (caching logic handled by decorator)
             variant_data = await self._cached_get_variant_details(variant_id)
-            
+
             # Check if cache was hit
-            cache_info_after = self._cached_get_variant_details.cache_info() if hasattr(self._cached_get_variant_details, 'cache_info') else None
+            cache_info_after = (
+                self._cached_get_variant_details.cache_info()
+                if hasattr(self._cached_get_variant_details, "cache_info")
+                else None
+            )
             cached = cache_info_after.hits > initial_hits if cache_info_after else False
 
             # Parse variant details
@@ -282,14 +298,22 @@ class VariantService:
         variant_id = variant_id.strip()
         try:
             # Check cache info before call
-            cache_info_before = self._cached_get_variant_publications.cache_info() if hasattr(self._cached_get_variant_publications, 'cache_info') else None
+            cache_info_before = (
+                self._cached_get_variant_publications.cache_info()
+                if hasattr(self._cached_get_variant_publications, "cache_info")
+                else None
+            )
             initial_hits = cache_info_before.hits if cache_info_before else 0
-            
+
             # Make cached call (caching logic handled by decorator)
             pmids = await self._cached_get_variant_publications(variant_id)
-            
+
             # Check if cache was hit
-            cache_info_after = self._cached_get_variant_publications.cache_info() if hasattr(self._cached_get_variant_publications, 'cache_info') else None
+            cache_info_after = (
+                self._cached_get_variant_publications.cache_info()
+                if hasattr(self._cached_get_variant_publications, "cache_info")
+                else None
+            )
             cached = cache_info_after.hits > initial_hits if cache_info_after else False
 
             # Create publication objects (simplified for now)
@@ -343,14 +367,22 @@ class VariantService:
 
         try:
             # Check cache info before call
-            cache_info_before = self._cached_sensor_lookup.cache_info() if hasattr(self._cached_sensor_lookup, 'cache_info') else None
+            cache_info_before = (
+                self._cached_sensor_lookup.cache_info()
+                if hasattr(self._cached_sensor_lookup, "cache_info")
+                else None
+            )
             initial_hits = cache_info_before.hits if cache_info_before else 0
-            
+
             # Make cached call (caching logic handled by decorator)
             sensor_data = await self._cached_sensor_lookup(rsid)
-            
+
             # Check if cache was hit
-            cache_info_after = self._cached_sensor_lookup.cache_info() if hasattr(self._cached_sensor_lookup, 'cache_info') else None
+            cache_info_after = (
+                self._cached_sensor_lookup.cache_info()
+                if hasattr(self._cached_sensor_lookup, "cache_info")
+                else None
+            )
             cached = cache_info_after.hits > initial_hits if cache_info_after else False
 
             # Parse sensor response - handle None case
@@ -411,14 +443,22 @@ class VariantService:
         gene_name = gene_name.strip().upper()
         try:
             # Check cache info before call
-            cache_info_before = self._cached_get_variants_by_gene.cache_info() if hasattr(self._cached_get_variants_by_gene, 'cache_info') else None
+            cache_info_before = (
+                self._cached_get_variants_by_gene.cache_info()
+                if hasattr(self._cached_get_variants_by_gene, "cache_info")
+                else None
+            )
             initial_hits = cache_info_before.hits if cache_info_before else 0
-            
+
             # Make cached call (caching logic handled by decorator)
             variant_data = await self._cached_get_variants_by_gene(gene_name)
-            
+
             # Check if cache was hit
-            cache_info_after = self._cached_get_variants_by_gene.cache_info() if hasattr(self._cached_get_variants_by_gene, 'cache_info') else None
+            cache_info_after = (
+                self._cached_get_variants_by_gene.cache_info()
+                if hasattr(self._cached_get_variants_by_gene, "cache_info")
+                else None
+            )
             cached = cache_info_after.hits > initial_hits if cache_info_after else False
 
             # Parse variants using the endpoint-specific model
