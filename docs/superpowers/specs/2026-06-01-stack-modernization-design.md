@@ -176,8 +176,8 @@ Each phase is independently reviewable and leaves the repo green.
 - **Done when:** docs accurately describe the P0 tooling, the target layout is marked as target (not present-tense), and `@AGENTS.md` import resolves.
 
 ### P2 — CI/CD
-- `ci`, `docker`, `release`, `security`, `container-security` workflows + `dependabot.yml`.
-- **Done when:** workflows are valid (actionlint clean) and `ci.yml` mirrors `make ci-local` + `make test-cov`.
+- Modernize `docker/Dockerfile` to a uv-based multi-stage build on `python:3.13-slim` (§4.9), then add the `ci`, `docker`, `release`, `security`, `container-security` workflows + `dependabot.yml`.
+- **Done when:** the Dockerfile builds on 3.13; workflows are valid (actionlint clean) and `ci.yml` mirrors `make ci-local` + `make test-cov`.
 
 ### P3 — Code modernization (the refactor)
 Ordered sub-steps (each its own atomic commit, suite green after each):
