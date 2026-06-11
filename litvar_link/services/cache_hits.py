@@ -14,7 +14,7 @@ def hits_before(cached_fn: Any) -> int:
     cache_info = getattr(cached_fn, "cache_info", None)
     if cache_info is None:
         return 0
-    return cache_info().hits
+    return int(cache_info().hits)
 
 
 def was_cache_hit(cached_fn: Any, *, before: int) -> bool:
@@ -22,4 +22,4 @@ def was_cache_hit(cached_fn: Any, *, before: int) -> bool:
     cache_info = getattr(cached_fn, "cache_info", None)
     if cache_info is None:
         return False
-    return cache_info().hits > before
+    return bool(cache_info().hits > before)

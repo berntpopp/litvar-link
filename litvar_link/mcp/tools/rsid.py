@@ -30,6 +30,7 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
             except ValidationError as exc:
                 raise ToolValidationError(str(exc)) from exc
             resp = await service_factory().lookup_rsid(clean)
-            return resp.model_dump()
+            data: dict[str, Any] = resp.model_dump()
+            return data
 
         return await run_tool("lookup_rsid_availability", body)
