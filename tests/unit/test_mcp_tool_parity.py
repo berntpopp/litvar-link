@@ -21,7 +21,6 @@ EXPECTED_TOOL_NAMES = {
 
 # fastmcp 3.4.2 exposes `list_tools()` (returns list[FunctionTool]); there is no
 # `get_tools()`. Derive names from the tool objects' `.name` attribute.
-pytestmark = pytest.mark.xfail(reason="facade not built until 3.5.5", strict=False)
 
 
 async def _facade_tool_names() -> set[str]:
