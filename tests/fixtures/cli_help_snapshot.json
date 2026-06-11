@@ -1,0 +1,36 @@
+{
+  "_provenance": {
+    "note": "Golden snapshot of the litvar-link CLI scripting contract captured against the ORIGINAL argparse implementation (P3<3.6) BEFORE the typer migration. It pins the STABLE contract (command names, per-command flags, serve sub-commands, exit codes) and intentionally NOT byte-for-byte --help text, which differs between the argparse and typer help renderers. The typer migration (3.6.2) must reproduce this contract.",
+    "source": "argparse main() in litvar_link/cli.py prior to typer rewrite"
+  },
+  "commands": [
+    "test",
+    "search",
+    "rsid",
+    "gene",
+    "serve"
+  ],
+  "search_flags": [
+    "--limit"
+  ],
+  "gene_flags": [
+    "--limit"
+  ],
+  "serve_subcommands": [
+    "http",
+    "unified",
+    "mcp"
+  ],
+  "serve_http_flags": [
+    "--host",
+    "--port",
+    "--reload"
+  ],
+  "exit_codes": {
+    "root_help": 0,
+    "search_help": 0,
+    "serve_help": 0,
+    "serve_http_help": 0,
+    "unknown_command_nonzero": true
+  }
+}
