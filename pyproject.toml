@@ -92,8 +92,18 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-extend-select = ["E", "W", "F", "I", "N", "UP", "B", "C4", "S", "T20", "SIM", "RUF"]
+extend-select = [
+    "E", "W", "F", "I", "N", "UP", "B", "C4", "S", "T20", "SIM", "RUF",
+    "C901",     # mccabe cyclomatic complexity (function-budget guard)
+    "PLR0915",  # too-many-statements (function-budget guard)
+]
 ignore = ["S101", "E501"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-statements = 50
 
 [tool.ruff.format]
 quote-style = "double"
@@ -101,7 +111,7 @@ indent-style = "space"
 line-ending = "lf"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*" = ["S101", "T20"]
+"tests/**/*" = ["S101", "T20", "C901", "PLR0915"]
 
 [tool.mypy]
 python_version = "3.12"
