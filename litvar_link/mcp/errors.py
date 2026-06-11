@@ -2,9 +2,16 @@
 
 - ``ToolValidationError`` is a *user-recoverable* error (empty query, bad limit,
   malformed RSID/gene). It is surfaced verbatim so the agent can self-correct.
-- Any other exception is an *internal* error. Its detail is masked
-  (``mask_error_details=True`` on the FastMCP server) and re-raised as a generic
-  ``ToolInternalError`` carrying only the tool name + a correlation id.
+- Any other exception is an *internal* error. The ``run_tool`` boundary
+  sanitizes it into a ``ToolInternalError`` carrying only the tool name + a
+  correlation id (no upstream detail). FastMCP's ``mask_error_details=True``
+  remains the backstop for any raw exception that escapes ``run_tool``.
+
+Both classes subclass ``fastmcp.exceptions.ToolError`` deliberately: FastMCP
+re-raises ``ToolError`` subclasses unchanged (bypassing ``mask_error_details``),
+so the recoverable message and the safe correlation-id message both reach the
+agent. A plain ``ValueError``/``RuntimeError`` would be caught by FastMCP's
+masking catch-all and rewritten to a generic ``Error calling tool '<name>'``.
 """
 
 from __future__ import annotations
@@ -13,15 +20,17 @@ import logging
 import uuid
 from collections.abc import Awaitable, Callable
 
+from fastmcp.exceptions import ToolError
+
 logger = logging.getLogger(__name__)
 
 
-class ToolValidationError(ValueError):
+class ToolValidationError(ToolError):
     """Visible, user-recoverable validation failure (safe to show the agent)."""
 
 
-class ToolInternalError(RuntimeError):
-    """Masked internal failure; carries no upstream detail."""
+class ToolInternalError(ToolError):
+    """Sanitized internal failure: only the tool name + correlation id, no detail."""
 
 
 async def run_tool[T](tool_name: str, body: Callable[[], Awaitable[T]]) -> T:

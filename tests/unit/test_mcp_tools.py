@@ -257,3 +257,40 @@ async def test_internal_error_is_masked() -> None:
     with pytest.raises(Exception) as exc:
         await tool.run({"query": "CFH", "limit": 10, "response_mode": "compact"})
     assert "secret" not in str(exc.value)
+
+
+# --- Real protocol path: mcp.call_tool() with mask_error_details=True --------
+# tool.run() bypasses FastMCP's masking boundary; agents reach tools via the
+# MCP `tools/call` method, which routes through call_tool(). These tests pin the
+# two-class error contract on that real path: recoverable validation errors stay
+# visible, internal errors are sanitized to a correlation id with no detail leak.
+
+
+@pytest.mark.asyncio
+async def test_call_tool_surfaces_validation_message() -> None:
+    svc = _service()
+    mcp = FastMCP(name="t", mask_error_details=True)
+    register_all(mcp, service_factory=lambda: svc)
+    with pytest.raises(Exception) as exc:
+        await mcp.call_tool(
+            "search_genetic_variants",
+            {"query": "", "limit": 10, "response_mode": "compact"},
+        )
+    # The actionable message reaches the agent (NOT masked to a generic string).
+    assert "empty" in str(exc.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_call_tool_masks_internal_detail_but_keeps_correlation_id() -> None:
+    svc = _service()
+    svc.search_variants = AsyncMock(side_effect=RuntimeError("secret /etc/passwd leaked"))
+    mcp = FastMCP(name="t", mask_error_details=True)
+    register_all(mcp, service_factory=lambda: svc)
+    with pytest.raises(Exception) as exc:
+        await mcp.call_tool(
+            "search_genetic_variants",
+            {"query": "CFH", "limit": 10, "response_mode": "compact"},
+        )
+    message = str(exc.value)
+    assert "secret" not in message  # no upstream detail leaks
+    assert "correlation_id=" in message  # but the support handle reaches the agent
