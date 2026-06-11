@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "litvar-link"
-version = "0.1.0"
+version = "1.0.0"
 description = "High-performance MCP/API server for NCBI's LitVar2 genetic variant database"
 readme = "README.md"
 license = {text = "MIT"}
@@ -19,22 +19,20 @@ keywords = [
     "litvar2", "ncbi", "genomics", "publications", "research"
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
     "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 dependencies = [
     # Web framework and API
     "fastapi>=0.110.0",
@@ -110,16 +108,9 @@ Changelog = "https://github.com/litvar-link/litvar-link/blob/main/CHANGELOG.md"
 litvar-link = "litvar_link.cli:main"
 litvar-mcp = "mcp_server:main"
 
-[tool.setuptools]
-package-dir = {"" = "."}
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["litvar_link*"]
-exclude = ["tests*", "docs*"]
-
-[tool.setuptools.package-data]
-litvar_link = ["py.typed"]
+[tool.hatch.build.targets.wheel]
+packages = ["litvar_link"]
+include = ["server.py", "mcp_server.py"]
 
 # Ruff configuration (linting and formatting)
 [tool.ruff]
