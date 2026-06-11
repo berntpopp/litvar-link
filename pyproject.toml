@@ -80,7 +80,7 @@ Repository = "https://github.com/litvar-link/litvar-link"
 Changelog = "https://github.com/litvar-link/litvar-link/blob/main/CHANGELOG.md"
 
 [project.scripts]
-litvar-link = "litvar_link.cli:main"
+litvar-link = "litvar_link.cli:app"
 litvar-link-mcp = "mcp_server:main"
 
 [tool.hatch.build.targets.wheel]

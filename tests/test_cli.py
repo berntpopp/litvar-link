@@ -1,14 +1,24 @@
-"""Test CLI functionality."""
+"""Test CLI command behaviour (typer app + cli_commands helpers).
+
+The async command bodies live in ``litvar_link.cli_commands.{data,serve}`` after
+the argparse -> typer migration. These tests exercise those verbatim helper
+bodies directly (behavioural contract) plus the typer dispatch wiring in
+``litvar_link.cli`` (each command resolves to the right helper with the right
+args). The command/flag surface itself is pinned by ``tests/unit/test_cli.py``.
+"""
 
 from __future__ import annotations
 
-import argparse
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from rich.console import Console
+from typer.testing import CliRunner
 
 from litvar_link import cli
+from litvar_link.cli_commands import data, serve
+
+runner = CliRunner()
 
 
 def render_rich_object(rich_obj) -> str:
@@ -30,10 +40,10 @@ class TestTestConnection:
         mock_client = AsyncMock()
         mock_client.search_variants.return_value = [{"id": "test"}]
 
-        with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
+        with patch("litvar_link.cli_commands.data.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
-            with patch("litvar_link.cli.console.print") as mock_print:
-                result = await cli.test_connection()
+            with patch("litvar_link.cli_commands.data.console.print") as mock_print:
+                result = await data.test_connection()
 
                 assert result is True
                 mock_client.search_variants.assert_called_once_with("rs", limit=1)
@@ -49,10 +59,10 @@ class TestTestConnection:
         mock_client = AsyncMock()
         mock_client.search_variants.return_value = []
 
-        with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
+        with patch("litvar_link.cli_commands.data.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
-            with patch("litvar_link.cli.console.print") as mock_print:
-                result = await cli.test_connection()
+            with patch("litvar_link.cli_commands.data.console.print") as mock_print:
+                result = await data.test_connection()
 
                 assert result is True
                 mock_client.search_variants.assert_called_once_with("rs", limit=1)
@@ -68,10 +78,10 @@ class TestTestConnection:
         mock_client = AsyncMock()
         mock_client.search_variants.side_effect = Exception("API Error")
 
-        with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
+        with patch("litvar_link.cli_commands.data.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
-            with patch("litvar_link.cli.console.print") as mock_print:
-                result = await cli.test_connection()
+            with patch("litvar_link.cli_commands.data.console.print") as mock_print:
+                result = await data.test_connection()
 
                 assert result is False
                 mock_print.assert_called_once()
@@ -107,13 +117,13 @@ class TestSearchVariants:
 
         mock_client = AsyncMock()
 
-        with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
+        with patch("litvar_link.cli_commands.data.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
             with (
-                patch("litvar_link.cli.VariantService", return_value=mock_service),
-                patch("litvar_link.cli.console.print") as mock_print,
+                patch("litvar_link.cli_commands.data.VariantService", return_value=mock_service),
+                patch("litvar_link.cli_commands.data.console.print") as mock_print,
             ):
-                await cli.search_variants("BRCA1", limit=5)
+                await data.search_variants("BRCA1", limit=5)
 
                 mock_service.search_variants.assert_called_once_with(
                     query="BRCA1",
@@ -144,13 +154,13 @@ class TestSearchVariants:
 
         mock_client = AsyncMock()
 
-        with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
+        with patch("litvar_link.cli_commands.data.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
             with (
-                patch("litvar_link.cli.VariantService", return_value=mock_service),
-                patch("litvar_link.cli.console.print") as mock_print,
+                patch("litvar_link.cli_commands.data.VariantService", return_value=mock_service),
+                patch("litvar_link.cli_commands.data.console.print") as mock_print,
             ):
-                await cli.search_variants("test")
+                await data.search_variants("test")
 
                 # Should print cached message
                 calls = [str(call) for call in mock_print.call_args_list]
@@ -164,14 +174,14 @@ class TestSearchVariants:
 
         mock_client = AsyncMock()
 
-        with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
+        with patch("litvar_link.cli_commands.data.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
             with (
-                patch("litvar_link.cli.VariantService", return_value=mock_service),
-                patch("litvar_link.cli.console.print") as mock_print,
+                patch("litvar_link.cli_commands.data.VariantService", return_value=mock_service),
+                patch("litvar_link.cli_commands.data.console.print") as mock_print,
                 patch("sys.exit") as mock_exit,
             ):
-                await cli.search_variants("test")
+                await data.search_variants("test")
 
                 mock_exit.assert_called_once_with(1)
                 # Should print error message
@@ -197,13 +207,13 @@ class TestLookupRSID:
 
         mock_client = AsyncMock()
 
-        with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
+        with patch("litvar_link.cli_commands.data.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
             with (
-                patch("litvar_link.cli.VariantService", return_value=mock_service),
-                patch("litvar_link.cli.console.print") as mock_print,
+                patch("litvar_link.cli_commands.data.VariantService", return_value=mock_service),
+                patch("litvar_link.cli_commands.data.console.print") as mock_print,
             ):
-                await cli.lookup_rsid("rs1061170")
+                await data.lookup_rsid("rs1061170")
 
                 mock_service.lookup_rsid.assert_called_once_with("rs1061170")
                 # Should print success message
@@ -222,13 +232,13 @@ class TestLookupRSID:
 
         mock_client = AsyncMock()
 
-        with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
+        with patch("litvar_link.cli_commands.data.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
             with (
-                patch("litvar_link.cli.VariantService", return_value=mock_service),
-                patch("litvar_link.cli.console.print") as mock_print,
+                patch("litvar_link.cli_commands.data.VariantService", return_value=mock_service),
+                patch("litvar_link.cli_commands.data.console.print") as mock_print,
             ):
-                await cli.lookup_rsid("rs999999")
+                await data.lookup_rsid("rs999999")
 
                 # Should print not found message
                 call_args = mock_print.call_args[0][0]
@@ -249,13 +259,13 @@ class TestLookupRSID:
 
         mock_client = AsyncMock()
 
-        with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
+        with patch("litvar_link.cli_commands.data.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
             with (
-                patch("litvar_link.cli.VariantService", return_value=mock_service),
-                patch("litvar_link.cli.console.print") as mock_print,
+                patch("litvar_link.cli_commands.data.VariantService", return_value=mock_service),
+                patch("litvar_link.cli_commands.data.console.print") as mock_print,
             ):
-                await cli.lookup_rsid("rs123")
+                await data.lookup_rsid("rs123")
 
                 # Should handle None values gracefully
                 call_args = mock_print.call_args[0][0]
@@ -270,14 +280,14 @@ class TestLookupRSID:
 
         mock_client = AsyncMock()
 
-        with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
+        with patch("litvar_link.cli_commands.data.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
             with (
-                patch("litvar_link.cli.VariantService", return_value=mock_service),
-                patch("litvar_link.cli.console.print") as mock_print,
+                patch("litvar_link.cli_commands.data.VariantService", return_value=mock_service),
+                patch("litvar_link.cli_commands.data.console.print") as mock_print,
                 patch("sys.exit") as mock_exit,
             ):
-                await cli.lookup_rsid("rs123")
+                await data.lookup_rsid("rs123")
 
                 mock_exit.assert_called_once_with(1)
                 # Should print error message
@@ -308,13 +318,13 @@ class TestSearchGeneVariants:
 
         mock_client = AsyncMock()
 
-        with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
+        with patch("litvar_link.cli_commands.data.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
             with (
-                patch("litvar_link.cli.VariantService", return_value=mock_service),
-                patch("litvar_link.cli.console.print") as mock_print,
+                patch("litvar_link.cli_commands.data.VariantService", return_value=mock_service),
+                patch("litvar_link.cli_commands.data.console.print") as mock_print,
             ):
-                await cli.search_gene_variants("CFH", limit=10)
+                await data.search_gene_variants("CFH", limit=10)
 
                 mock_service.search_gene_variants.assert_called_once_with("CFH")
                 # Should print table and statistics
@@ -339,13 +349,13 @@ class TestSearchGeneVariants:
 
         mock_client = AsyncMock()
 
-        with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
+        with patch("litvar_link.cli_commands.data.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
             with (
-                patch("litvar_link.cli.VariantService", return_value=mock_service),
-                patch("litvar_link.cli.console.print"),
+                patch("litvar_link.cli_commands.data.VariantService", return_value=mock_service),
+                patch("litvar_link.cli_commands.data.console.print"),
             ):
-                await cli.search_gene_variants("TEST")
+                await data.search_gene_variants("TEST")
 
     @pytest.mark.asyncio
     async def test_gene_variants_failure(self):
@@ -355,14 +365,14 @@ class TestSearchGeneVariants:
 
         mock_client = AsyncMock()
 
-        with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
+        with patch("litvar_link.cli_commands.data.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
             with (
-                patch("litvar_link.cli.VariantService", return_value=mock_service),
-                patch("litvar_link.cli.console.print") as mock_print,
+                patch("litvar_link.cli_commands.data.VariantService", return_value=mock_service),
+                patch("litvar_link.cli_commands.data.console.print") as mock_print,
                 patch("sys.exit") as mock_exit,
             ):
-                await cli.search_gene_variants("INVALID")
+                await data.search_gene_variants("INVALID")
 
                 mock_exit.assert_called_once_with(1)
                 # Should print error message
@@ -379,8 +389,11 @@ class TestServerCommands:
         """Test HTTP server startup."""
         mock_manager = AsyncMock()
 
-        with patch("litvar_link.cli.UnifiedServerManager", return_value=mock_manager):
-            await cli.serve_http("0.0.0.0", 8080, True)  # noqa: S104
+        with patch(
+            "litvar_link.cli_commands.serve.UnifiedServerManager",
+            return_value=mock_manager,
+        ):
+            await serve.serve_http("0.0.0.0", 8080, True)  # noqa: S104
 
             mock_manager.start_http_only_server.assert_called_once_with(
                 host="0.0.0.0",  # noqa: S104
@@ -394,9 +407,12 @@ class TestServerCommands:
         mock_manager = AsyncMock()
         mock_manager.start_http_only_server.side_effect = KeyboardInterrupt()
 
-        with patch("litvar_link.cli.UnifiedServerManager", return_value=mock_manager):
+        with patch(
+            "litvar_link.cli_commands.serve.UnifiedServerManager",
+            return_value=mock_manager,
+        ):
             # Should not raise exception
-            await cli.serve_http()
+            await serve.serve_http()
 
     @pytest.mark.asyncio
     async def test_serve_http_error(self):
@@ -405,10 +421,13 @@ class TestServerCommands:
         mock_manager.start_http_only_server.side_effect = Exception("Server error")
 
         with (
-            patch("litvar_link.cli.UnifiedServerManager", return_value=mock_manager),
+            patch(
+                "litvar_link.cli_commands.serve.UnifiedServerManager",
+                return_value=mock_manager,
+            ),
             patch("sys.exit") as mock_exit,
         ):
-            await cli.serve_http()
+            await serve.serve_http()
             mock_exit.assert_called_once_with(1)
 
     @pytest.mark.asyncio
@@ -416,8 +435,11 @@ class TestServerCommands:
         """Test unified server startup."""
         mock_manager = AsyncMock()
 
-        with patch("litvar_link.cli.UnifiedServerManager", return_value=mock_manager):
-            await cli.serve_unified("127.0.0.1", 9000, False)
+        with patch(
+            "litvar_link.cli_commands.serve.UnifiedServerManager",
+            return_value=mock_manager,
+        ):
+            await serve.serve_unified("127.0.0.1", 9000, False)
 
             mock_manager.start_unified_server.assert_called_once_with(
                 host="127.0.0.1",
@@ -431,9 +453,12 @@ class TestServerCommands:
         mock_manager = AsyncMock()
         mock_manager.start_unified_server.side_effect = KeyboardInterrupt()
 
-        with patch("litvar_link.cli.UnifiedServerManager", return_value=mock_manager):
+        with patch(
+            "litvar_link.cli_commands.serve.UnifiedServerManager",
+            return_value=mock_manager,
+        ):
             # Should not raise exception
-            await cli.serve_unified()
+            await serve.serve_unified()
 
     @pytest.mark.asyncio
     async def test_serve_unified_error(self):
@@ -442,10 +467,13 @@ class TestServerCommands:
         mock_manager.start_unified_server.side_effect = Exception("Unified error")
 
         with (
-            patch("litvar_link.cli.UnifiedServerManager", return_value=mock_manager),
+            patch(
+                "litvar_link.cli_commands.serve.UnifiedServerManager",
+                return_value=mock_manager,
+            ),
             patch("sys.exit") as mock_exit,
         ):
-            await cli.serve_unified()
+            await serve.serve_unified()
             mock_exit.assert_called_once_with(1)
 
     @pytest.mark.asyncio
@@ -453,8 +481,11 @@ class TestServerCommands:
         """Test MCP server startup."""
         mock_manager = AsyncMock()
 
-        with patch("litvar_link.cli.UnifiedServerManager", return_value=mock_manager):
-            await cli.serve_mcp_only()
+        with patch(
+            "litvar_link.cli_commands.serve.UnifiedServerManager",
+            return_value=mock_manager,
+        ):
+            await serve.serve_mcp_only()
 
             mock_manager.start_stdio_server.assert_called_once()
 
@@ -464,9 +495,12 @@ class TestServerCommands:
         mock_manager = AsyncMock()
         mock_manager.start_stdio_server.side_effect = KeyboardInterrupt()
 
-        with patch("litvar_link.cli.UnifiedServerManager", return_value=mock_manager):
+        with patch(
+            "litvar_link.cli_commands.serve.UnifiedServerManager",
+            return_value=mock_manager,
+        ):
             # Should not raise exception
-            await cli.serve_mcp_only()
+            await serve.serve_mcp_only()
 
     @pytest.mark.asyncio
     async def test_serve_mcp_error(self):
@@ -475,228 +509,150 @@ class TestServerCommands:
         mock_manager.start_stdio_server.side_effect = Exception("MCP error")
 
         with (
-            patch("litvar_link.cli.UnifiedServerManager", return_value=mock_manager),
+            patch(
+                "litvar_link.cli_commands.serve.UnifiedServerManager",
+                return_value=mock_manager,
+            ),
             patch("sys.exit") as mock_exit,
         ):
-            await cli.serve_mcp_only()
+            await serve.serve_mcp_only()
             mock_exit.assert_called_once_with(1)
 
 
-class TestMainFunction:
-    """Test the main CLI parser and command dispatch."""
+class TestTyperDispatch:
+    """Test the typer app dispatches each command to the right helper.
 
-    def test_main_test_command(self):
-        """Test main function with test command."""
-        with patch("sys.argv", ["litvar-link", "test"]):
-            # Create a mock that closes the coroutine to prevent RuntimeWarning
-            def mock_run_func(coro):
-                coro.close()
-                return
+    Replaces the old argparse ``TestMainFunction``/``TestArgumentParsing``
+    classes: same dispatch contract (command -> coroutine), expressed through
+    the typer ``CliRunner`` instead of ``sys.argv`` + ``argparse``.
+    """
 
-            with patch("asyncio.run", side_effect=mock_run_func) as mock_run:
-                cli.main()
-                # asyncio.run should be called once with the test_connection coroutine
-                mock_run.assert_called_once()
+    def _swallow(self, coro) -> None:
+        """Close a coroutine without awaiting to avoid RuntimeWarning."""
+        coro.close()
 
-    def test_main_search_command(self):
-        """Test main function with search command."""
-        with patch("sys.argv", ["litvar-link", "search", "BRCA1", "--limit", "5"]):
-            # Create a mock that closes the coroutine to prevent RuntimeWarning
-            def mock_run_func(coro):
-                coro.close()
-                return
-
-            with (
-                patch("asyncio.run", side_effect=mock_run_func) as mock_run,
-                patch("litvar_link.cli.search_variants"),
-            ):
-                cli.main()
-                mock_run.assert_called_once()
-                # Verify search_variants was called with correct args
-                mock_run.call_args[0][0]
-                # The call_args should be the result of search_variants("BRCA1", 5)
-
-    def test_main_search_command_default_limit(self):
-        """Test main function with search command using default limit."""
-        with patch("sys.argv", ["litvar-link", "search", "CFH"]):
-            # Create a mock that closes the coroutine to prevent RuntimeWarning
-            def mock_run_func(coro):
-                coro.close()
-                return
-
-            with patch("asyncio.run", side_effect=mock_run_func) as mock_run:
-                cli.main()
-                mock_run.assert_called_once()
-
-    def test_main_rsid_command(self):
-        """Test main function with rsid command."""
-        with patch("sys.argv", ["litvar-link", "rsid", "rs1061170"]):
-            # Create a mock that closes the coroutine to prevent RuntimeWarning
-            def mock_run_func(coro):
-                coro.close()
-                return
-
-            with patch("asyncio.run", side_effect=mock_run_func) as mock_run:
-                cli.main()
-                mock_run.assert_called_once()
-
-    def test_main_gene_command(self):
-        """Test main function with gene command."""
-        with patch("sys.argv", ["litvar-link", "gene", "CFH", "--limit", "15"]):
-            # Create a mock that closes the coroutine to prevent RuntimeWarning
-            def mock_run_func(coro):
-                coro.close()
-                return
-
-            with patch("asyncio.run", side_effect=mock_run_func) as mock_run:
-                cli.main()
-                mock_run.assert_called_once()
-
-    def test_main_gene_command_default_limit(self):
-        """Test main function with gene command using default limit."""
-        with patch("sys.argv", ["litvar-link", "gene", "BRCA1"]):
-            # Create a mock that closes the coroutine to prevent RuntimeWarning
-            def mock_run_func(coro):
-                coro.close()
-                return
-
-            with patch("asyncio.run", side_effect=mock_run_func) as mock_run:
-                cli.main()
-                mock_run.assert_called_once()
-
-    def test_main_serve_http_command(self):
-        """Test main function with serve http command."""
-        with patch(
-            "sys.argv",
-            [
-                "litvar-link",
-                "serve",
-                "http",
-                "--host",
-                "0.0.0.0",  # noqa: S104
-                "--port",
-                "8080",
-                "--reload",
-            ],
-        ):
-            # Create a mock that closes the coroutine to prevent RuntimeWarning
-            def mock_run_func(coro):
-                coro.close()
-                return
-
-            with patch("asyncio.run", side_effect=mock_run_func) as mock_run:
-                cli.main()
-                mock_run.assert_called_once()
-
-    def test_main_serve_http_defaults(self):
-        """Test main function with serve http command using defaults."""
-        with patch("sys.argv", ["litvar-link", "serve", "http"]):
-            # Create a mock that closes the coroutine to prevent RuntimeWarning
-            def mock_run_func(coro):
-                coro.close()
-                return
-
-            with patch("asyncio.run", side_effect=mock_run_func) as mock_run:
-                cli.main()
-                mock_run.assert_called_once()
-
-    def test_main_serve_unified_command(self):
-        """Test main function with serve unified command."""
-        with patch("sys.argv", ["litvar-link", "serve", "unified", "--port", "9000"]):
-            # Create a mock that closes the coroutine to prevent RuntimeWarning
-            def mock_run_func(coro):
-                coro.close()
-                return
-
-            with patch("asyncio.run", side_effect=mock_run_func) as mock_run:
-                cli.main()
-                mock_run.assert_called_once()
-
-    def test_main_serve_mcp_command(self):
-        """Test main function with serve mcp command."""
-        with patch("sys.argv", ["litvar-link", "serve", "mcp"]):
-            # Create a mock that closes the coroutine to prevent RuntimeWarning
-            def mock_run_func(coro):
-                coro.close()
-                return
-
-            with patch("asyncio.run", side_effect=mock_run_func) as mock_run:
-                cli.main()
-                mock_run.assert_called_once()
-
-    def test_main_serve_no_subcommand(self):
-        """Test main function with serve but no subcommand."""
+    def test_dispatch_test_command(self):
+        """`test` runs the connection-test helper."""
         with (
-            patch("sys.argv", ["litvar-link", "serve"]),
-            patch("argparse.ArgumentParser.print_help"),
+            patch("asyncio.run", side_effect=self._swallow) as mock_run,
+            patch.object(data, "test_connection") as mock_fn,
         ):
-            cli.main()
-            # The subparser should print help when no subcommand is provided
-            # This may not call print_help directly but shows usage
+            result = runner.invoke(cli.app, ["test"])
+            assert result.exit_code == 0
+            mock_run.assert_called_once()
+            mock_fn.assert_called_once_with()
 
-    def test_main_no_command(self):
-        """Test main function with no command."""
+    def test_dispatch_search_command(self):
+        """`search QUERY --limit N` calls search_variants(QUERY, N)."""
         with (
-            patch("sys.argv", ["litvar-link"]),
-            patch("argparse.ArgumentParser.print_help") as mock_help,
+            patch("asyncio.run", side_effect=self._swallow) as mock_run,
+            patch.object(data, "search_variants") as mock_fn,
         ):
+            result = runner.invoke(cli.app, ["search", "BRCA1", "--limit", "5"])
+            assert result.exit_code == 0
+            mock_run.assert_called_once()
+            mock_fn.assert_called_once_with("BRCA1", 5)
+
+    def test_dispatch_search_command_default_limit(self):
+        """`search QUERY` uses the default limit of 10."""
+        with (
+            patch("asyncio.run", side_effect=self._swallow),
+            patch.object(data, "search_variants") as mock_fn,
+        ):
+            result = runner.invoke(cli.app, ["search", "CFH"])
+            assert result.exit_code == 0
+            mock_fn.assert_called_once_with("CFH", 10)
+
+    def test_dispatch_rsid_command(self):
+        """`rsid RS` calls lookup_rsid(RS)."""
+        with (
+            patch("asyncio.run", side_effect=self._swallow),
+            patch.object(data, "lookup_rsid") as mock_fn,
+        ):
+            result = runner.invoke(cli.app, ["rsid", "rs1061170"])
+            assert result.exit_code == 0
+            mock_fn.assert_called_once_with("rs1061170")
+
+    def test_dispatch_gene_command(self):
+        """`gene GENE --limit N` calls search_gene_variants(GENE, N)."""
+        with (
+            patch("asyncio.run", side_effect=self._swallow),
+            patch.object(data, "search_gene_variants") as mock_fn,
+        ):
+            result = runner.invoke(cli.app, ["gene", "CFH", "--limit", "15"])
+            assert result.exit_code == 0
+            mock_fn.assert_called_once_with("CFH", 15)
+
+    def test_dispatch_gene_command_default_limit(self):
+        """`gene GENE` uses the default limit of 20."""
+        with (
+            patch("asyncio.run", side_effect=self._swallow),
+            patch.object(data, "search_gene_variants") as mock_fn,
+        ):
+            result = runner.invoke(cli.app, ["gene", "BRCA1"])
+            assert result.exit_code == 0
+            mock_fn.assert_called_once_with("BRCA1", 20)
+
+    def test_dispatch_serve_http_command(self):
+        """`serve http --host H --port P --reload` calls serve_http(H, P, True)."""
+        with (
+            patch("asyncio.run", side_effect=self._swallow),
+            patch.object(serve, "serve_http") as mock_fn,
+        ):
+            result = runner.invoke(
+                cli.app,
+                ["serve", "http", "--host", "0.0.0.0", "--port", "8080", "--reload"],  # noqa: S104
+            )
+            assert result.exit_code == 0
+            mock_fn.assert_called_once_with("0.0.0.0", 8080, True)  # noqa: S104
+
+    def test_dispatch_serve_http_defaults(self):
+        """`serve http` uses the documented defaults."""
+        with (
+            patch("asyncio.run", side_effect=self._swallow),
+            patch.object(serve, "serve_http") as mock_fn,
+        ):
+            result = runner.invoke(cli.app, ["serve", "http"])
+            assert result.exit_code == 0
+            mock_fn.assert_called_once_with("127.0.0.1", 8000, False)
+
+    def test_dispatch_serve_unified_command(self):
+        """`serve unified --port P` calls serve_unified with that port."""
+        with (
+            patch("asyncio.run", side_effect=self._swallow),
+            patch.object(serve, "serve_unified") as mock_fn,
+        ):
+            result = runner.invoke(cli.app, ["serve", "unified", "--port", "9000"])
+            assert result.exit_code == 0
+            mock_fn.assert_called_once_with("127.0.0.1", 9000, False)
+
+    def test_dispatch_serve_mcp_command(self):
+        """`serve mcp` calls serve_mcp_only with no args."""
+        with (
+            patch("asyncio.run", side_effect=self._swallow),
+            patch.object(serve, "serve_mcp_only") as mock_fn,
+        ):
+            result = runner.invoke(cli.app, ["serve", "mcp"])
+            assert result.exit_code == 0
+            mock_fn.assert_called_once_with()
+
+    def test_dispatch_no_command_shows_help(self):
+        """Invoking with no command shows help text (no_args_is_help).
+
+        typer's ``no_args_is_help`` shows the command list and exits non-zero
+        (2), whereas the old argparse ``main()`` printed help and exited 0. The
+        meaningful contract preserved here is "no command -> help is shown".
+        """
+        result = runner.invoke(cli.app, [])
+        assert "Commands" in result.stdout
+
+    def test_dispatch_invalid_command_exits_nonzero(self):
+        """An unknown command exits non-zero."""
+        result = runner.invoke(cli.app, ["invalid"])
+        assert result.exit_code != 0
+
+    def test_main_invokes_app(self):
+        """`main()` invokes the typer app (console-script / python -m path)."""
+        with patch.object(cli, "app") as mock_app:
             cli.main()
-            mock_help.assert_called_once()
-
-    def test_main_invalid_command(self):
-        """Test main function with invalid command."""
-        with patch("sys.argv", ["litvar-link", "invalid"]):
-            # Should exit with code 2 (argparse error) for invalid command
-            with pytest.raises(SystemExit) as exc_info:
-                cli.main()
-            assert exc_info.value.code == 2
-
-
-class TestArgumentParsing:
-    """Test CLI argument parsing logic."""
-
-    def test_parser_creation(self):
-        """Test that parser is created correctly."""
-        # This tests the parser setup without calling main()
-        parser = argparse.ArgumentParser(description="LitVar-Link CLI")
-        subparsers = parser.add_subparsers(dest="command", help="Available commands")
-
-        # Test command
-        subparsers.add_parser("test", help="Test connection to LitVar2 API")
-
-        args = parser.parse_args(["test"])
-        assert args.command == "test"
-
-    def test_search_parser_args(self):
-        """Test search command argument parsing."""
-        parser = argparse.ArgumentParser()
-        subparsers = parser.add_subparsers(dest="command")
-        search_parser = subparsers.add_parser("search")
-        search_parser.add_argument("query")
-        search_parser.add_argument("--limit", type=int, default=10)
-
-        args = parser.parse_args(["search", "BRCA1", "--limit", "5"])
-        assert args.command == "search"
-        assert args.query == "BRCA1"
-        assert args.limit == 5
-
-    def test_server_parser_args(self):
-        """Test server command argument parsing."""
-        parser = argparse.ArgumentParser()
-        subparsers = parser.add_subparsers(dest="command")
-        server_parser = subparsers.add_parser("serve")
-        server_subparsers = server_parser.add_subparsers(dest="serve_mode")
-
-        http_parser = server_subparsers.add_parser("http")
-        http_parser.add_argument("--host", default="127.0.0.1")
-        http_parser.add_argument("--port", type=int, default=8000)
-        http_parser.add_argument("--reload", action="store_true")
-
-        args = parser.parse_args(
-            ["serve", "http", "--host", "0.0.0.0", "--port", "8080", "--reload"],  # noqa: S104
-        )
-        assert args.command == "serve"
-        assert args.serve_mode == "http"
-        assert args.host == "0.0.0.0"  # noqa: S104
-        assert args.port == 8080
-        assert args.reload is True
+            mock_app.assert_called_once_with()
