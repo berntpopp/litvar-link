@@ -8,7 +8,8 @@ services:
     
     # Use NPM environment file
     env_file:
-      - ../.env.npm
+      - path: ../.env.npm
+        required: false
     
     # Add NPM network connectivity
     networks:
