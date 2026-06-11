@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from typing import TYPE_CHECKING, Any, Self, cast
 from urllib.parse import urljoin
 
 import httpx
 
+from litvar_link.api.parsing import extract_list, parse_ndjson, parse_response_body
 from litvar_link.api.rate_limiter import TokenBucketRateLimiter
 from litvar_link.exceptions import (
     LitVarAPIError,
@@ -93,40 +93,8 @@ class LitVar2Client:
         await self.close()
 
     def _parse_ndjson(self, text: str) -> list[dict[str, Any]]:
-        """Parse newline-delimited JSON (NDJSON) response.
-
-        The LitVar2 API returns Python-style dictionaries with single quotes,
-        which need to be converted to valid JSON format.
-
-        Args:
-            text: Raw NDJSON text with one JSON object per line
-
-        Returns:
-            List of parsed JSON objects
-        """
-        results = []
-        for raw_line in text.strip().split("\n"):
-            line = raw_line.strip()
-            if line:
-                try:
-                    # Try parsing as-is first
-                    results.append(json.loads(line))
-                except json.JSONDecodeError:
-                    try:
-                        # LitVar2 API returns Python-style dict syntax (single quotes)
-                        # Convert to valid JSON by replacing single quotes with double quotes
-                        # This is a bit hacky but works for the LitVar2 API format
-                        json_line = line.replace("'", '"')
-                        results.append(json.loads(json_line))
-                    except json.JSONDecodeError as e:
-                        if self.logger:
-                            self.logger.warning(
-                                "Failed to parse NDJSON line",
-                                line=line[:100],
-                                error=str(e),
-                            )
-                        continue
-        return results
+        """Deprecated shim; delegates to api.parsing.parse_ndjson."""
+        return parse_ndjson(text, self.logger)
 
     async def _make_request(
         self,
@@ -217,25 +185,13 @@ class LitVar2Client:
                 if len(self.response_times) > 100:
                     self.response_times = self.response_times[-100:]
 
-                # Parse response
-                content_type = response.headers.get("content-type", "").lower()
-                response_text = response.text.strip()
-
-                # Try to parse JSON response (handles both regular JSON and NDJSON)
-                if "application/json" in content_type or (
-                    response_text and response_text.startswith("{")
-                ):
-                    try:
-                        # Try to parse as single JSON object first
-                        return response.json()
-                    except (ValueError, json.JSONDecodeError):
-                        # If it fails, try to parse as NDJSON (newline-delimited JSON)
-                        if "\n" in response_text:
-                            return self._parse_ndjson(response_text)
-                        # If it's not NDJSON either, re-raise the original error
-                        raise
-
-                return {"content": response_text, "content_type": content_type}
+                # Parse response (single JSON, NDJSON, or raw text)
+                return parse_response_body(
+                    content_type=response.headers.get("content-type", "").lower(),
+                    response_text=response.text,
+                    json_loader=response.json,
+                    logger=self.logger,
+                )
 
             except httpx.TimeoutException as e:
                 last_error = ServiceUnavailableError(f"Request timeout: {url}")
@@ -318,13 +274,7 @@ class LitVar2Client:
         params = {"query": query, "limit": limit}
 
         response = await self._make_request("GET", endpoint, params=params)
-
-        # Handle different response formats
-        if isinstance(response, list):
-            return response
-        if isinstance(response, dict) and "results" in response:
-            return cast("list[dict[str, Any]]", response["results"])
-        return []
+        return cast("list[dict[str, Any]]", extract_list(response, key="results"))
 
     async def get_variant_details(self, variant_id: str) -> dict[str, Any]:
         """Get detailed information about a variant.
@@ -353,13 +303,7 @@ class LitVar2Client:
             variant_id=variant_id,
         )
         response = await self._make_request("GET", endpoint)
-
-        # Handle different response formats
-        if isinstance(response, list):
-            return response
-        if isinstance(response, dict):
-            return cast("list[str]", response.get("pmids", []))
-        return []
+        return cast("list[str]", extract_list(response, key="pmids"))
 
     async def sensor_lookup(self, rsid: str) -> dict[str, Any] | None:
         """Check if RSID is available in LitVar2.
@@ -394,13 +338,7 @@ class LitVar2Client:
             gene_name=gene_name,
         )
         response = await self._make_request("GET", endpoint)
-
-        # Handle different response formats
-        if isinstance(response, list):
-            return response
-        if isinstance(response, dict) and "variants" in response:
-            return cast("list[dict[str, Any]]", response["variants"])
-        return []
+        return cast("list[dict[str, Any]]", extract_list(response, key="variants"))
 
     async def health_check(self) -> dict[str, Any]:
         """Perform health check on LitVar2 API.
