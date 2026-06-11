@@ -182,6 +182,5 @@ cython_debug/
 
 # claude files
 .claude/
-CLAUDE.md
 PLAN.md
 TODO.md
