@@ -7,7 +7,30 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 import uvicorn
 
-from litvar_link.server_manager import UnifiedServerManager
+from litvar_link.server_manager import UnifiedServerManager, _make_service_factory
+
+
+class TestServiceFactory:
+    """The MCP service factory shares one client and closes it on shutdown."""
+
+    def test_factory_reuses_one_service(self):
+        factory, _ = _make_service_factory(logger=None)
+        first = factory()
+        second = factory()
+        assert first is second  # shared instance, not a fresh per-call client
+
+    @pytest.mark.asyncio
+    async def test_aclose_closes_shared_client(self):
+        factory, aclose = _make_service_factory(logger=None)
+        service = factory()
+        service.client.close = AsyncMock()
+        await aclose()
+        service.client.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_aclose_noop_when_unused(self):
+        _, aclose = _make_service_factory(logger=None)
+        await aclose()  # never built a service; must not raise
 
 
 class TestUnifiedServerManager:
