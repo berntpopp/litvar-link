@@ -105,6 +105,7 @@ class ServerSettings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
         env_prefix="LITVAR_LINK_",
+        env_nested_delimiter="__",
     )
 
     # Server settings

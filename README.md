@@ -367,8 +367,8 @@ docker-compose up --build
 docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 # Nginx Proxy Manager deployment
-cp .env.npm.example .env.npm
-# Edit .env.npm with your domain settings
+cp .env.docker.example .env.docker
+# Edit .env.docker with your domain settings
 docker-compose -f docker-compose.yml -f docker-compose.npm.yml up -d
 ```
 
