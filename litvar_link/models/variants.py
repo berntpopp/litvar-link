@@ -1,12 +1,11 @@
 """Core variant data models for LitVar-Link."""
 
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator
 
 
-class ClinicalSignificance(str, Enum):
+class ClinicalSignificance(StrEnum):
     """Clinical significance categories for variants."""
 
     BENIGN = "benign"
@@ -27,12 +26,12 @@ class Publication(BaseModel):
     """Publication reference model."""
 
     pmid: str = Field(description="PubMed ID")
-    pmcid: Optional[str] = Field(None, description="PMC ID if available")
-    title: Optional[str] = Field(None, description="Publication title")
-    authors: Optional[list[str]] = Field(None, description="List of authors")
-    journal: Optional[str] = Field(None, description="Journal name")
-    pub_date: Optional[str] = Field(None, description="Publication date")
-    doi: Optional[str] = Field(None, description="DOI")
+    pmcid: str | None = Field(default=None, description="PMC ID if available")
+    title: str | None = Field(default=None, description="Publication title")
+    authors: list[str] | None = Field(default=None, description="List of authors")
+    journal: str | None = Field(default=None, description="Journal name")
+    pub_date: str | None = Field(default=None, description="Publication date")
+    doi: str | None = Field(default=None, description="DOI")
 
     @field_validator("pmid")
     @classmethod
@@ -48,7 +47,7 @@ class Publication(BaseModel):
 
     @field_validator("pmcid")
     @classmethod
-    def validate_pmcid(cls, v: Optional[str]) -> Optional[str]:
+    def validate_pmcid(cls, v: str | None) -> str | None:
         """Validate PMCID format."""
         if v is None:
             return v
@@ -65,48 +64,48 @@ class Variant(BaseModel):
     """Core variant model based on LitVar2 API responses."""
 
     id: str = Field(alias="_id", description="Unique variant identifier")
-    rsid: Optional[str] = Field(None, description="Reference SNP ID (e.g., rs1061170)")
-    gene: Optional[list[str]] = Field(None, description="Associated gene symbols")
-    name: Optional[str] = Field(None, description="Variant name (e.g., p.Y402H)")
-    hgvs: Optional[str] = Field(None, description="HGVS notation")
-    pmids_count: Optional[int] = Field(
-        None,
+    rsid: str | None = Field(default=None, description="Reference SNP ID (e.g., rs1061170)")
+    gene: list[str] | None = Field(default=None, description="Associated gene symbols")
+    name: str | None = Field(default=None, description="Variant name (e.g., p.Y402H)")
+    hgvs: str | None = Field(default=None, description="HGVS notation")
+    pmids_count: int | None = Field(
+        default=None,
         description="Number of associated publications",
     )
 
     # Clinical annotations
-    clinical_significance: Optional[list[str]] = Field(
-        None,
+    clinical_significance: list[str] | None = Field(
+        default=None,
         alias="data_clinical_significance",
         description="Clinical significance categories",
     )
 
     # Variant classification flags
-    flag_gene_variant: Optional[bool] = Field(
-        None,
+    flag_gene_variant: bool | None = Field(
+        default=None,
         description="True if this is a gene-level variant",
     )
-    flag_clingen_variant: Optional[bool] = Field(
-        None,
+    flag_clingen_variant: bool | None = Field(
+        default=None,
         description="True if this variant is in ClinGen database",
     )
-    flag_rsid_variant: Optional[bool] = Field(
-        None,
+    flag_rsid_variant: bool | None = Field(
+        default=None,
         description="True if this variant has an RSID",
     )
 
     # Search-specific fields
-    match: Optional[str] = Field(
-        None,
+    match: str | None = Field(
+        default=None,
         description="Search match description with HTML highlighting",
     )
 
     # ClinGen specific
-    clingen_id: Optional[str] = Field(None, description="ClinGen identifier")
+    clingen_id: str | None = Field(default=None, description="ClinGen identifier")
 
     @field_validator("rsid")
     @classmethod
-    def validate_rsid(cls, v: Optional[str]) -> Optional[str]:
+    def validate_rsid(cls, v: str | None) -> str | None:
         """Validate RSID format."""
         if v is None:
             return v
@@ -120,7 +119,7 @@ class Variant(BaseModel):
 
     @field_validator("gene")
     @classmethod
-    def validate_gene_list(cls, v: Optional[list[str]]) -> Optional[list[str]]:
+    def validate_gene_list(cls, v: list[str] | None) -> list[str] | None:
         """Validate gene symbol list."""
         if v is None or not v:
             return None
@@ -137,7 +136,7 @@ class Variant(BaseModel):
 
     @field_validator("pmids_count")
     @classmethod
-    def validate_pmids_count(cls, v: Optional[int]) -> Optional[int]:
+    def validate_pmids_count(cls, v: int | None) -> int | None:
         """Validate publication count is non-negative."""
         if v is not None and v < 0:
             msg = "Publication count cannot be negative"
@@ -148,8 +147,8 @@ class Variant(BaseModel):
     @classmethod
     def validate_clinical_significance(
         cls,
-        v: Optional[list[str]],
-    ) -> Optional[list[str]]:
+        v: list[str] | None,
+    ) -> list[str] | None:
         """Validate clinical significance values."""
         if v is None or not v:
             return None
@@ -208,40 +207,40 @@ class VariantDetails(Variant):
     """Extended variant model with additional details."""
 
     # Genomic coordinates
-    chromosome: Optional[str] = Field(None, description="Chromosome")
-    position: Optional[int] = Field(None, description="Genomic position")
-    ref_allele: Optional[str] = Field(None, description="Reference allele")
-    alt_allele: Optional[str] = Field(None, description="Alternative allele")
+    chromosome: str | None = Field(default=None, description="Chromosome")
+    position: int | None = Field(default=None, description="Genomic position")
+    ref_allele: str | None = Field(default=None, description="Reference allele")
+    alt_allele: str | None = Field(default=None, description="Alternative allele")
 
     # Additional annotations
-    consequence: Optional[str] = Field(None, description="Variant consequence")
-    protein_change: Optional[str] = Field(None, description="Protein-level change")
-    transcript_id: Optional[str] = Field(None, description="Transcript identifier")
+    consequence: str | None = Field(default=None, description="Variant consequence")
+    protein_change: str | None = Field(default=None, description="Protein-level change")
+    transcript_id: str | None = Field(default=None, description="Transcript identifier")
 
     # Database cross-references
-    dbsnp_id: Optional[str] = Field(None, description="dbSNP identifier")
-    clinvar_id: Optional[str] = Field(None, description="ClinVar identifier")
-    cosmic_id: Optional[str] = Field(None, description="COSMIC identifier")
+    dbsnp_id: str | None = Field(default=None, description="dbSNP identifier")
+    clinvar_id: str | None = Field(default=None, description="ClinVar identifier")
+    cosmic_id: str | None = Field(default=None, description="COSMIC identifier")
 
     # Frequency data
-    allele_frequency: Optional[float] = Field(
-        None,
+    allele_frequency: float | None = Field(
+        default=None,
         description="Population allele frequency",
     )
-    minor_allele_frequency: Optional[float] = Field(
-        None,
+    minor_allele_frequency: float | None = Field(
+        default=None,
         description="Minor allele frequency",
     )
 
     # Associated publications
-    publications: Optional[list[Publication]] = Field(
-        None,
+    publications: list[Publication] | None = Field(
+        default=None,
         description="List of associated publications",
     )
 
     @field_validator("position")
     @classmethod
-    def validate_position(cls, v: Optional[int]) -> Optional[int]:
+    def validate_position(cls, v: int | None) -> int | None:
         """Validate genomic position is positive."""
         if v is not None and v <= 0:
             msg = "Genomic position must be positive"
@@ -250,7 +249,7 @@ class VariantDetails(Variant):
 
     @field_validator("allele_frequency", "minor_allele_frequency")
     @classmethod
-    def validate_frequency(cls, v: Optional[float]) -> Optional[float]:
+    def validate_frequency(cls, v: float | None) -> float | None:
         """Validate allele frequency is between 0 and 1."""
         if v is not None and (v < 0.0 or v > 1.0):
             msg = "Allele frequency must be between 0.0 and 1.0"
@@ -259,7 +258,7 @@ class VariantDetails(Variant):
 
     @field_validator("chromosome")
     @classmethod
-    def validate_chromosome(cls, v: Optional[str]) -> Optional[str]:
+    def validate_chromosome(cls, v: str | None) -> str | None:
         """Validate chromosome format."""
         if v is None:
             return v

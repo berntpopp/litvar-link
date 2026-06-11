@@ -3,20 +3,31 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Self, cast
 from urllib.parse import urljoin
 
 import httpx
-from typing_extensions import Self
 
+from litvar_link.api.parsing import extract_list, parse_ndjson, parse_response_body
+from litvar_link.api.rate_limiter import TokenBucketRateLimiter
+from litvar_link.api.retry import (
+    HTTP_TOO_MANY_REQUESTS,
+    backoff_delay,
+    raise_for_status_code,
+)
 from litvar_link.exceptions import (
     LitVarAPIError,
     RateLimitError,
     ServiceUnavailableError,
 )
 from litvar_link.logging_config import log_api_request, log_error_with_context
+from litvar_link.validation import (
+    validate_gene_name,
+    validate_limit,
+    validate_query,
+    validate_rsid,
+)
 
 if TYPE_CHECKING:
     import types
@@ -26,91 +37,11 @@ if TYPE_CHECKING:
     from litvar_link.config import APIConfig
 
 
-class TokenBucketRateLimiter:
-    """Token bucket rate limiter for API requests."""
-
-    # Constants for rate calculation
-    _RATE_WINDOW_SECONDS = 10.0
-    _MIN_REQUESTS_FOR_RATE = 2
-
-    def __init__(self, rate: float, burst: int = 1) -> None:
-        """Initialize rate limiter.
-
-        Args:
-            rate: Requests per second
-            burst: Maximum burst size
-        """
-        self.rate = rate
-        self.burst = float(burst)
-        self.tokens = float(burst)
-        self.last_update = time.time()
-        self._lock = asyncio.Lock()
-        self.request_times: list[float] = []
-
-    async def acquire(self) -> float:
-        """Acquire a token, waiting if necessary.
-
-        Returns:
-            Wait time in seconds (0 if no wait required)
-        """
-        async with self._lock:
-            now = time.time()
-            # Add tokens based on elapsed time
-            elapsed = now - self.last_update
-            self.tokens = min(self.burst, self.tokens + elapsed * self.rate)
-            self.last_update = now
-
-            if self.tokens >= 1:
-                self.tokens -= 1
-                # Track request time for rate calculation
-                self.request_times.append(now)
-                # Keep only recent requests
-                self.request_times = [
-                    t
-                    for t in self.request_times
-                    if now - t <= self._RATE_WINDOW_SECONDS
-                ]
-                return 0.0
-            # Calculate wait time for next token
-            return (1 - self.tokens) / self.rate
-
-    @property
-    def current_tokens(self) -> float:
-        """Get current number of available tokens without updating state."""
-        now = time.time()
-        elapsed = now - self.last_update
-        return min(self.burst, self.tokens + elapsed * self.rate)
-
-    def current_rate(self) -> float:
-        """Get current rate based on recent request times.
-
-        Returns:
-            Current estimated rate in requests per second
-        """
-        now = time.time()
-        # Clean up old request times
-        recent_requests = [
-            t for t in self.request_times if now - t <= self._RATE_WINDOW_SECONDS
-        ]
-
-        if len(recent_requests) < self._MIN_REQUESTS_FOR_RATE:
-            return 0.0
-
-        # Calculate rate based on requests over time window
-        time_window = now - recent_requests[0]
-        if time_window <= 0:
-            return 0.0
-
-        return len(recent_requests) / time_window
-
-
 class LitVar2Client:
     """HTTP client for LitVar2 API with rate limiting and error handling."""
 
-    # HTTP status code constants
-    _HTTP_TOO_MANY_REQUESTS = 429
-    _HTTP_SERVER_ERROR = 500
-    _HTTP_CLIENT_ERROR = 400
+    # Keep only the most recent response times for statistics.
+    _RESPONSE_TIME_WINDOW = 100
 
     def __init__(
         self,
@@ -165,40 +96,8 @@ class LitVar2Client:
         await self.close()
 
     def _parse_ndjson(self, text: str) -> list[dict[str, Any]]:
-        """Parse newline-delimited JSON (NDJSON) response.
-
-        The LitVar2 API returns Python-style dictionaries with single quotes,
-        which need to be converted to valid JSON format.
-
-        Args:
-            text: Raw NDJSON text with one JSON object per line
-
-        Returns:
-            List of parsed JSON objects
-        """
-        results = []
-        for raw_line in text.strip().split("\n"):
-            line = raw_line.strip()
-            if line:
-                try:
-                    # Try parsing as-is first
-                    results.append(json.loads(line))
-                except json.JSONDecodeError:
-                    try:
-                        # LitVar2 API returns Python-style dict syntax (single quotes)
-                        # Convert to valid JSON by replacing single quotes with double quotes  # noqa: E501
-                        # This is a bit hacky but works for the LitVar2 API format
-                        json_line = line.replace("'", '"')
-                        results.append(json.loads(json_line))
-                    except json.JSONDecodeError as e:
-                        if self.logger:
-                            self.logger.warning(
-                                "Failed to parse NDJSON line",
-                                line=line[:100],
-                                error=str(e),
-                            )
-                        continue
-        return results
+        """Deprecated shim; delegates to api.parsing.parse_ndjson."""
+        return parse_ndjson(text, self.logger)
 
     async def _make_request(
         self,
@@ -207,155 +106,105 @@ class LitVar2Client:
         params: dict[str, Any] | None = None,
         data: dict[str, Any] | None = None,
     ) -> Any:
-        """Make HTTP request with rate limiting and error handling.
-
-        Args:
-            method: HTTP method
-            endpoint: API endpoint
-            params: URL parameters
-            data: Request body data
-
-        Returns:
-            Response data
+        """Make an HTTP request with rate limiting, retries, and error handling.
 
         Raises:
-            RateLimitError: When rate limit is exceeded
-            ServiceUnavailableError: When service is unavailable
-            LitVarAPIError: For other API errors
+            RateLimitError, ServiceUnavailableError, LitVarAPIError.
         """
-        # Apply rate limiting
+        await self._apply_rate_limit()
+        url = urljoin(self.config.base_url, endpoint)
+        start_time = time.time()
+        last_error: Exception | None = None
+
+        for attempt in range(self.config.max_retries + 1):
+            try:
+                response = await self._send_request_once(method, url, params, data)
+                return self._handle_response(response, url, method, start_time)
+            except (LitVarAPIError, RateLimitError, ServiceUnavailableError):
+                raise
+            except httpx.TimeoutException as exc:
+                last_error = ServiceUnavailableError(f"Request timeout: {url}")
+                self._log_attempt_error(exc, url, attempt)
+            except httpx.NetworkError as exc:
+                last_error = ServiceUnavailableError(f"Network error: {exc!s}")
+                self._log_attempt_error(exc, url, attempt)
+            except Exception as exc:  # boundary, re-raised below
+                last_error = LitVarAPIError(f"Unexpected error: {exc!s}")
+                self._log_attempt_error(exc, url, attempt)
+            if attempt < self.config.max_retries:
+                await asyncio.sleep(
+                    backoff_delay(base=self.config.retry_delay, attempt=attempt),
+                )
+
+        self._record_failure(url, method, start_time, last_error)
+        raise last_error or LitVarAPIError("Request failed after all retries")
+
+    async def _apply_rate_limit(self) -> None:
+        """Acquire a rate-limit token and sleep if throttled."""
         wait_time = await self.rate_limiter.acquire()
         if wait_time > 0:
             if self.logger:
                 self.logger.debug("Rate limit applied", wait_time=wait_time)
             await asyncio.sleep(wait_time)
 
-        # Construct full URL
-        url = urljoin(self.config.base_url, endpoint)
+    async def _send_request_once(
+        self,
+        method: str,
+        url: str,
+        params: dict[str, Any] | None,
+        data: dict[str, Any] | None,
+    ) -> httpx.Response:
+        """Send a single HTTP attempt (no retry, no parsing)."""
+        return await self.client.request(method=method, url=url, params=params, json=data)
 
-        # Make request with retries
-        last_error: Exception | None = None
-        start_time = time.time()
-
-        for attempt in range(self.config.max_retries + 1):
-            try:
-                response = await self.client.request(
-                    method=method,
-                    url=url,
-                    params=params,
-                    json=data,
-                )
-
-                response_time = time.time() - start_time
-
-                # Log successful request
-                if self.logger:
-                    log_api_request(
-                        self.logger,
-                        method,
-                        url,
-                        response_time,
-                        response.status_code,
-                    )
-
-                # Handle different status codes
-                if response.status_code == self._HTTP_TOO_MANY_REQUESTS:
-                    retry_after = float(response.headers.get("Retry-After", 60))
-                    msg = f"Rate limit exceeded for {url}"
-                    raise RateLimitError(
-                        msg,
-                        retry_after=retry_after,
-                    )
-                if response.status_code >= self._HTTP_SERVER_ERROR:
-                    msg = f"LitVar2 service error: HTTP {response.status_code}"
-                    raise ServiceUnavailableError(
-                        msg,
-                    )
-                if response.status_code >= self._HTTP_CLIENT_ERROR:
-                    error_text = (
-                        response.text[:200] if response.text else "Unknown error"
-                    )
-                    msg = f"HTTP {response.status_code}: {error_text}"
-                    raise LitVarAPIError(
-                        msg,
-                        status_code=response.status_code,
-                    )
-
-                response.raise_for_status()
-
-                # Track successful request statistics
-                self.total_requests += 1
-                self.successful_requests += 1
-                self.response_times.append(response_time)
-                # Keep only recent response times (last 100 requests)
-                if len(self.response_times) > 100:
-                    self.response_times = self.response_times[-100:]
-
-                # Parse response
-                content_type = response.headers.get("content-type", "").lower()
-                response_text = response.text.strip()
-
-                # Try to parse JSON response (handles both regular JSON and NDJSON)
-                if "application/json" in content_type or (
-                    response_text and response_text.startswith("{")
-                ):
-                    try:
-                        # Try to parse as single JSON object first
-                        return response.json()
-                    except (ValueError, json.JSONDecodeError):
-                        # If it fails, try to parse as NDJSON (newline-delimited JSON)
-                        if "\n" in response_text:
-                            return self._parse_ndjson(response_text)
-                        # If it's not NDJSON either, re-raise the original error
-                        raise
-
-                return {"content": response_text, "content_type": content_type}
-
-            except httpx.TimeoutException as e:
-                last_error = ServiceUnavailableError(f"Request timeout: {url}")
-                if self.logger:
-                    log_error_with_context(
-                        self.logger,
-                        e,
-                        "http_request",
-                        {"url": url, "attempt": attempt + 1},
-                    )
-            except httpx.NetworkError as e:
-                last_error = ServiceUnavailableError(f"Network error: {e!s}")
-                if self.logger:
-                    log_error_with_context(
-                        self.logger,
-                        e,
-                        "http_request",
-                        {"url": url, "attempt": attempt + 1},
-                    )
-            except (LitVarAPIError, RateLimitError, ServiceUnavailableError):
-                # Don't retry these errors
-                raise
-            except Exception as e:
-                last_error = LitVarAPIError(f"Unexpected error: {e!s}")
-                if self.logger:
-                    log_error_with_context(
-                        self.logger,
-                        e,
-                        "http_request",
-                        {"url": url, "attempt": attempt + 1},
-                    )
-
-            # Wait before retry
-            if attempt < self.config.max_retries:
-                await asyncio.sleep(self.config.retry_delay * (2**attempt))
-
-        # All retries exhausted
+    def _handle_response(
+        self,
+        response: httpx.Response,
+        url: str,
+        method: str,
+        start_time: float,
+    ) -> Any:
+        """Classify status, record stats, and parse the body of one response."""
         response_time = time.time() - start_time
+        if self.logger:
+            log_api_request(self.logger, method, url, response_time, response.status_code)
+        retry_after = (
+            float(response.headers.get("Retry-After", 0)) or None
+            if response.status_code == HTTP_TOO_MANY_REQUESTS
+            else None
+        )
+        raise_for_status_code(
+            response.status_code,
+            url=url,
+            text=response.text,
+            retry_after=retry_after,
+        )
+        response.raise_for_status()
+        self._record_success(response_time)
+        return parse_response_body(
+            content_type=response.headers.get("content-type", "").lower(),
+            response_text=response.text,
+            json_loader=response.json,
+            logger=self.logger,
+        )
 
-        # Track failed request statistics
+    def _record_success(self, response_time: float) -> None:
+        """Update success counters and the bounded response-time window."""
         self.total_requests += 1
-        self.response_times.append(response_time)
-        # Keep only recent response times (last 100 requests)
-        if len(self.response_times) > 100:
-            self.response_times = self.response_times[-100:]
+        self.successful_requests += 1
+        self._append_response_time(response_time)
 
+    def _record_failure(
+        self,
+        url: str,
+        method: str,
+        start_time: float,
+        last_error: Exception | None,
+    ) -> None:
+        """Update failure counters and log the exhausted-retries event."""
+        response_time = time.time() - start_time
+        self.total_requests += 1
+        self._append_response_time(response_time)
         if self.logger:
             log_api_request(
                 self.logger,
@@ -366,7 +215,21 @@ class LitVar2Client:
                 error=str(last_error) if last_error else "Unknown error",
             )
 
-        raise last_error or LitVarAPIError("Request failed after all retries")
+    def _append_response_time(self, response_time: float) -> None:
+        """Append to the response-time window, keeping the last 100."""
+        self.response_times.append(response_time)
+        if len(self.response_times) > self._RESPONSE_TIME_WINDOW:
+            self.response_times = self.response_times[-self._RESPONSE_TIME_WINDOW :]
+
+    def _log_attempt_error(self, exc: Exception, url: str, attempt: int) -> None:
+        """Log a per-attempt error with context."""
+        if self.logger:
+            log_error_with_context(
+                self.logger,
+                exc,
+                "http_request",
+                {"url": url, "attempt": attempt + 1},
+            )
 
     async def search_variants(
         self,
@@ -385,28 +248,14 @@ class LitVar2Client:
         Raises:
             ValueError: If query is empty or too long, or limit is out of range
         """
-        # Validate inputs
-        if not query or not query.strip():
-            msg = "Query cannot be empty"
-            raise ValueError(msg)
-        if len(query) > 100:
-            msg = "Query too long (max 100 characters)"
-            raise ValueError(msg)
-        if not 1 <= limit <= 100:
-            msg = "Limit must be between 1 and 100"
-            raise ValueError(msg)
+        query = validate_query(query)
+        limit = validate_limit(limit)
 
         endpoint = self.config.endpoints["autocomplete"]
-        params = {"query": query.strip(), "limit": limit}
+        params = {"query": query, "limit": limit}
 
         response = await self._make_request("GET", endpoint, params=params)
-
-        # Handle different response formats
-        if isinstance(response, list):
-            return response
-        if isinstance(response, dict) and "results" in response:
-            return response["results"]
-        return []
+        return cast("list[dict[str, Any]]", extract_list(response, key="results"))
 
     async def get_variant_details(self, variant_id: str) -> dict[str, Any]:
         """Get detailed information about a variant.
@@ -420,7 +269,7 @@ class LitVar2Client:
         endpoint = self.config.endpoints["variant_details"].format(
             variant_id=variant_id,
         )
-        return await self._make_request("GET", endpoint)
+        return cast("dict[str, Any]", await self._make_request("GET", endpoint))
 
     async def get_variant_publications(self, variant_id: str) -> list[str]:
         """Get publications associated with a variant.
@@ -435,15 +284,9 @@ class LitVar2Client:
             variant_id=variant_id,
         )
         response = await self._make_request("GET", endpoint)
+        return cast("list[str]", extract_list(response, key="pmids"))
 
-        # Handle different response formats
-        if isinstance(response, list):
-            return response
-        if isinstance(response, dict):
-            return response.get("pmids", [])
-        return []
-
-    async def sensor_lookup(self, rsid: str) -> dict[str, Any]:
+    async def sensor_lookup(self, rsid: str) -> dict[str, Any] | None:
         """Check if RSID is available in LitVar2.
 
         Args:
@@ -455,16 +298,9 @@ class LitVar2Client:
         Raises:
             ValueError: If RSID format is invalid
         """
-        # Validate RSID format (should start with 'rs' followed by digits)
-        if not rsid or not rsid.startswith("rs") or len(rsid) < 3:
-            msg = "Invalid RSID format (should be 'rs' followed by digits)"
-            raise ValueError(msg)
-        if not rsid[2:].isdigit():
-            msg = "Invalid RSID format (should be 'rs' followed by digits)"
-            raise ValueError(msg)
-
+        rsid = validate_rsid(rsid)
         endpoint = self.config.endpoints["sensor"].format(rsid=rsid)
-        return await self._make_request("GET", endpoint)
+        return cast("dict[str, Any] | None", await self._make_request("GET", endpoint))
 
     async def get_variants_by_gene(self, gene_name: str) -> list[dict[str, Any]]:
         """Get all variants for a specific gene.
@@ -478,25 +314,12 @@ class LitVar2Client:
         Raises:
             ValueError: If gene name is empty or too long
         """
-        # Validate gene name
-        if not gene_name or not gene_name.strip():
-            msg = "Gene name cannot be empty"
-            raise ValueError(msg)
-        if len(gene_name) > 50:
-            msg = "Gene name too long (max 50 characters)"
-            raise ValueError(msg)
-
+        gene_name = validate_gene_name(gene_name)
         endpoint = self.config.endpoints["gene_variants"].format(
-            gene_name=gene_name.strip(),
+            gene_name=gene_name,
         )
         response = await self._make_request("GET", endpoint)
-
-        # Handle different response formats
-        if isinstance(response, list):
-            return response
-        if isinstance(response, dict) and "variants" in response:
-            return response["variants"]
-        return []
+        return cast("list[dict[str, Any]]", extract_list(response, key="variants"))
 
     async def health_check(self) -> dict[str, Any]:
         """Perform health check on LitVar2 API.

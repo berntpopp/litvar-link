@@ -1,4 +1,4 @@
-"""Main FastAPI application with FastMCP integration."""
+"""Main FastAPI application."""
 
 from __future__ import annotations
 
@@ -7,8 +7,6 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastmcp import FastMCP
-from fastmcp.server.openapi import MCPType, RouteMap
 
 from .api.routes import genes, health, publications, sensor, variants
 from .config import settings
@@ -57,6 +55,10 @@ def create_app() -> FastAPI:
     app.include_router(sensor.router)
     app.include_router(health.router)
 
+    from .api.error_handlers import register_exception_handlers
+
+    register_exception_handlers(app)
+
     # Root endpoint
     @app.get("/")
     async def root() -> dict[str, Any]:
@@ -64,7 +66,7 @@ def create_app() -> FastAPI:
         return {
             "name": "LitVar-Link",
             "version": "0.1.0",
-            "description": "High-performance MCP/API server for NCBI's LitVar2 genetic variant database",  # noqa: E501
+            "description": "High-performance MCP/API server for NCBI's LitVar2 genetic variant database",
             "docs": "/docs",
             "health": "/api/health",
             "mcp_endpoint": settings.mcp_path,
@@ -73,39 +75,5 @@ def create_app() -> FastAPI:
     return app
 
 
-def create_mcp_app() -> FastMCP:
-    """Create FastMCP server from FastAPI app."""
-    app = create_app()
-
-    # MCP tool name mappings (following pubtator-link pattern)
-    mcp_custom_names = {
-        "search_variants": "search_genetic_variants",
-        "get_variant_details": "get_variant_summary",
-        "get_variant_publications": "get_variant_literature",
-        "lookup_rsid": "lookup_rsid_availability",
-        "get_gene_variants": "search_gene_variants",
-    }
-
-    # Route mappings for MCP tools (exclude utility endpoints)
-    mcp_route_maps = [
-        # Exclude health and monitoring endpoints
-        RouteMap(pattern=r"^/api/health.*$", mcp_type=MCPType.EXCLUDE),
-        # Exclude root and docs endpoints
-        RouteMap(pattern=r"^/$", mcp_type=MCPType.EXCLUDE),
-        RouteMap(pattern=r"^/docs$", mcp_type=MCPType.EXCLUDE),
-        RouteMap(pattern=r"^/openapi.json$", mcp_type=MCPType.EXCLUDE),
-        RouteMap(pattern=r"^/redoc$", mcp_type=MCPType.EXCLUDE),
-    ]
-
-    # Create FastMCP instance
-    return FastMCP.from_fastapi(
-        app=app,
-        name="LitVar-Link Server",
-        mcp_names=mcp_custom_names,
-        route_maps=mcp_route_maps,
-    )
-
-
-# Create application instances
+# Create application instance
 app = create_app()
-mcp_app = create_mcp_app()

@@ -1,0 +1,20 @@
+{
+  "_provenance": {
+    "note": "from_fastapi (OLD, P3<3.5) produced BUGGY tool names due to the mcp_custom_names bug: 'check_rsid_availability' leaked and 'lookup_rsid_availability' was missing. The explicit facade replaces this with the correct target names. This snapshot records both for provenance; tool_names below is the CORRECT target the parity guard pins.",
+    "old_from_fastapi_names": [
+      "check_rsid_availability",
+      "get_variant_literature",
+      "get_variant_summary",
+      "search_gene_variants",
+      "search_genetic_variants"
+    ]
+  },
+  "tool_names": [
+    "get_server_capabilities",
+    "get_variant_literature",
+    "get_variant_summary",
+    "lookup_rsid_availability",
+    "search_gene_variants",
+    "search_genetic_variants"
+  ]
+}

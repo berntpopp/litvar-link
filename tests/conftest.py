@@ -1,15 +1,15 @@
 """Pytest configuration and fixtures for LitVar-Link tests."""
 
 import asyncio
-from collections.abc import AsyncGenerator
 import json
-from typing import Any, Optional
+from collections.abc import AsyncGenerator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
-import pytest
 
 from litvar_link.api.client import LitVar2Client
 from litvar_link.config import settings
@@ -236,7 +236,7 @@ class MockResponse:
         self,
         json_data: Any = None,
         status_code: int = 200,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ):
         """Initialize mock response."""
         self.json_data = json_data

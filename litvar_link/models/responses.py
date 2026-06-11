@@ -1,6 +1,6 @@
 """Response models for LitVar-Link API."""
 
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -19,11 +19,11 @@ class BaseResponse(BaseModel):
         default=True,
         description="Whether the request was successful",
     )
-    message: Optional[str] = Field(
+    message: str | None = Field(
         default=None,
         description="Optional message or error description",
     )
-    timestamp: Optional[str] = Field(
+    timestamp: str | None = Field(
         default=None,
         description="Response timestamp (ISO format)",
     )
@@ -41,8 +41,8 @@ class VariantSearchResponse(BaseResponse):
     has_more: bool = Field(description="Whether more results are available")
 
     # Search metadata
-    search_time_ms: Optional[float] = Field(
-        None,
+    search_time_ms: float | None = Field(
+        default=None,
         description="Search execution time in milliseconds",
     )
     cached: bool = Field(
@@ -59,8 +59,8 @@ class VariantDetailsResponse(BaseResponse):
         default=False,
         description="Whether results were served from cache",
     )
-    last_updated: Optional[str] = Field(
-        None,
+    last_updated: str | None = Field(
+        default=None,
         description="When variant data was last updated",
     )
 
@@ -99,21 +99,21 @@ class SensorResponse(BaseResponse):
 
     rsid: str = Field(description="Queried RSID")
     available: bool = Field(description="Whether RSID is available in LitVar2")
-    variant_id: Optional[str] = Field(
-        None,
+    variant_id: str | None = Field(
+        default=None,
         description="Associated variant ID if available",
     )
-    litvar_url: Optional[str] = Field(None, description="Direct URL to LitVar2 page")
-    pmids_count: Optional[int] = Field(
-        None,
+    litvar_url: str | None = Field(default=None, description="Direct URL to LitVar2 page")
+    pmids_count: int | None = Field(
+        default=None,
         description="Number of associated publications",
     )
 
     # Additional metadata if available
-    gene: Optional[list[str]] = Field(None, description="Associated genes")
-    variant_name: Optional[str] = Field(None, description="Variant name if available")
-    search_time_ms: Optional[float] = Field(
-        None,
+    gene: list[str] | None = Field(default=None, description="Associated genes")
+    variant_name: str | None = Field(default=None, description="Variant name if available")
+    search_time_ms: float | None = Field(
+        default=None,
         description="Search execution time in milliseconds",
     )
     cached: bool = Field(
@@ -145,8 +145,8 @@ class GeneVariantsResponse(BaseResponse):
     )
 
     # Response metadata
-    search_time_ms: Optional[float] = Field(
-        None,
+    search_time_ms: float | None = Field(
+        default=None,
         description="Search execution time in milliseconds",
     )
     cached: bool = Field(
@@ -161,7 +161,7 @@ class GeneVariantsResponse(BaseResponse):
 
         for _variant in self.variants:
             # GeneVariantItem doesn't have clinical_significance field
-            # All gene variants are considered "unknown" since we don't have clinical data  # noqa: E501
+            # All gene variants are considered "unknown" since we don't have clinical data
             type_counts["unknown"] = type_counts.get("unknown", 0) + 1
 
         return type_counts
@@ -192,15 +192,15 @@ class CacheStatsResponse(BaseResponse):
     total_requests: int = Field(default=0, description="Total number of requests")
 
     # Memory usage
-    memory_usage_mb: Optional[float] = Field(
-        None,
+    memory_usage_mb: float | None = Field(
+        default=None,
         description="Approximate memory usage in MB",
     )
-    max_size: Optional[int] = Field(None, description="Maximum cache size")
+    max_size: int | None = Field(default=None, description="Maximum cache size")
 
     # TTL information
-    average_ttl: Optional[float] = Field(
-        None,
+    average_ttl: float | None = Field(
+        default=None,
         description="Average TTL of cached items in seconds",
     )
     expired_count: int = Field(description="Number of expired items")
@@ -216,34 +216,34 @@ class HealthResponse(BaseResponse):
     # Component health
     litvar_api_status: str = Field(description="LitVar2 API connectivity status")
     cache_status: str = Field(description="Cache system status")
-    database_status: Optional[str] = Field(
-        None,
+    database_status: str | None = Field(
+        default=None,
         description="Database status if applicable",
     )
 
     # API statistics
-    api_stats: Optional[dict[str, Any]] = Field(
-        None,
+    api_stats: dict[str, Any] | None = Field(
+        default=None,
         description="API client statistics",
     )
 
     # Performance metrics
-    requests_per_minute: Optional[float] = Field(
-        None,
+    requests_per_minute: float | None = Field(
+        default=None,
         description="Recent request rate",
     )
-    average_response_time_ms: Optional[float] = Field(
-        None,
+    average_response_time_ms: float | None = Field(
+        default=None,
         description="Average response time",
     )
-    error_rate: Optional[float] = Field(None, description="Recent error rate")
+    error_rate: float | None = Field(default=None, description="Recent error rate")
 
     # System resources
-    memory_usage_percent: Optional[float] = Field(
-        None,
+    memory_usage_percent: float | None = Field(
+        default=None,
         description="Memory usage percentage",
     )
-    cpu_usage_percent: Optional[float] = Field(None, description="CPU usage percentage")
+    cpu_usage_percent: float | None = Field(default=None, description="CPU usage percentage")
 
 
 class ErrorResponse(BaseResponse):
@@ -252,22 +252,22 @@ class ErrorResponse(BaseResponse):
     success: bool = Field(default=False, description="Always false for error responses")
     error_code: str = Field(description="Machine-readable error code")
     error_type: str = Field(description="Error category")
-    details: Optional[dict[str, Any]] = Field(
-        None,
+    details: dict[str, Any] | None = Field(
+        default=None,
         description="Additional error details",
     )
 
     # Request context
-    request_id: Optional[str] = Field(None, description="Unique request identifier")
-    endpoint: Optional[str] = Field(None, description="API endpoint that failed")
+    request_id: str | None = Field(default=None, description="Unique request identifier")
+    endpoint: str | None = Field(default=None, description="API endpoint that failed")
 
     # Retry information
     retryable: bool = Field(
         default=False,
         description="Whether the request can be retried",
     )
-    retry_after_seconds: Optional[int] = Field(
-        None,
+    retry_after_seconds: int | None = Field(
+        default=None,
         description="Recommended retry delay",
     )
 
@@ -278,7 +278,7 @@ class ValidationErrorDetail(BaseModel):
     field: str = Field(description="Field that failed validation")
     message: str = Field(description="Validation error message")
     invalid_value: Any = Field(description="The invalid value provided")
-    expected_type: Optional[str] = Field(None, description="Expected data type")
+    expected_type: str | None = Field(default=None, description="Expected data type")
 
 
 class ValidationErrorResponse(ErrorResponse):

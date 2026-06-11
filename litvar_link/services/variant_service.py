@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from litvar_link.exceptions import ValidationError
 from litvar_link.logging_config import log_error_with_context
@@ -15,13 +15,46 @@ from litvar_link.models import (
     VariantDetailsResponse,
     VariantSearchResponse,
 )
+from litvar_link.services.cache_hits import hits_before, was_cache_hit
 from litvar_link.utils.caching import create_service_cache_decorator
+from litvar_link.validation import (
+    validate_gene_name,
+    validate_limit,
+    validate_query,
+    validate_rsid,
+)
 
 if TYPE_CHECKING:
     from structlog.typing import FilteringBoundLogger
 
     from litvar_link.api.client import LitVar2Client
     from litvar_link.config import CacheConfig
+
+_ModelT = TypeVar("_ModelT")
+
+_PATHOGENIC = ("pathogenic", "likely pathogenic")
+_BENIGN = ("benign", "likely benign")
+
+
+def _count_clinical_significance(variants: list[Any]) -> tuple[int, int, int]:
+    """Tally ``(pathogenic, benign, uncertain)`` counts across gene variants.
+
+    A variant with no ``data_clinical_significance`` (or empty) counts as
+    uncertain; otherwise the first matching pathogenic/benign bucket wins, else
+    uncertain.
+    """
+    pathogenic = benign = uncertain = 0
+    for variant in variants:
+        sigs = getattr(variant, "data_clinical_significance", None)
+        if not sigs:
+            uncertain += 1
+        elif any(sig in _PATHOGENIC for sig in sigs):
+            pathogenic += 1
+        elif any(sig in _BENIGN for sig in sigs):
+            benign += 1
+        else:
+            uncertain += 1
+    return pathogenic, benign, uncertain
 
 
 class VariantService:
@@ -73,31 +106,37 @@ class VariantService:
     def _setup_cached_methods(self) -> None:
         """Set up cached methods using the cache manager."""
         # Use config values or defaults for search variants
-        search_maxsize = (
-            self.cache_config.size if hasattr(self.cache_config, "size") else 256
-        )
-        search_ttl = (
-            self.cache_config.ttl if hasattr(self.cache_config, "ttl") else 3600
-        )
+        search_maxsize = self.cache_config.size if hasattr(self.cache_config, "size") else 256
+        search_ttl = self.cache_config.ttl if hasattr(self.cache_config, "ttl") else 3600
 
         self._cached_search_variants = self.cache.cached(
-            maxsize=search_maxsize, ttl=search_ttl, key_pattern="search_variants",
+            maxsize=search_maxsize,
+            ttl=search_ttl,
+            key_pattern="search_variants",
         )(self._search_variants_impl)
 
         self._cached_get_variant_details = self.cache.cached(
-            maxsize=500, ttl=7200, key_pattern="variant_details",
+            maxsize=500,
+            ttl=7200,
+            key_pattern="variant_details",
         )(self._get_variant_details_impl)
 
         self._cached_get_variant_publications = self.cache.cached(
-            maxsize=500, ttl=3600, key_pattern="variant_publications",
+            maxsize=500,
+            ttl=3600,
+            key_pattern="variant_publications",
         )(self._get_variant_publications_impl)
 
         self._cached_sensor_lookup = self.cache.cached(
-            maxsize=1000, ttl=86400, key_pattern="sensor_lookup",
+            maxsize=1000,
+            ttl=86400,
+            key_pattern="sensor_lookup",
         )(self._sensor_lookup_impl)
 
         self._cached_get_variants_by_gene = self.cache.cached(
-            maxsize=200, ttl=3600, key_pattern="gene_variants",
+            maxsize=200,
+            ttl=3600,
+            key_pattern="gene_variants",
         )(self._get_variants_by_gene_impl)
 
     async def _search_variants_impl(
@@ -116,7 +155,7 @@ class VariantService:
         """Get variant publications implementation."""
         return await self.client.get_variant_publications(variant_id)
 
-    async def _sensor_lookup_impl(self, rsid: str) -> dict[str, Any]:
+    async def _sensor_lookup_impl(self, rsid: str) -> dict[str, Any] | None:
         """RSID sensor lookup implementation."""
         return await self.client.sensor_lookup(rsid)
 
@@ -126,6 +165,31 @@ class VariantService:
     ) -> list[dict[str, Any]]:
         """Get variants by gene implementation."""
         return await self.client.get_variants_by_gene(gene_name)
+
+    def _parse_items(
+        self,
+        data_list: list[dict[str, Any]],
+        model_cls: type[_ModelT],
+    ) -> list[_ModelT]:
+        """Parse raw rows into ``model_cls`` instances, skipping bad rows.
+
+        Rows that fail validation are logged (with context) and dropped rather
+        than aborting the whole response. Shared by the autocomplete-search and
+        gene-search parse paths.
+        """
+        parsed: list[_ModelT] = []
+        for data in data_list:
+            try:
+                parsed.append(model_cls(**data))
+            except Exception as e:  # per-row resilience: skip bad rows
+                if self.logger:
+                    log_error_with_context(
+                        self.logger,
+                        e,
+                        "variant_parsing",
+                        {"variant_data": data},
+                    )
+        return parsed
 
     async def search_variants(
         self,
@@ -145,60 +209,20 @@ class VariantService:
             ValidationError: For invalid input parameters
             LitVarAPIError: For API-related errors
         """
-        # Input validation
-        if not query or not query.strip():
-            msg = "Query cannot be empty"
-            raise ValidationError(msg, field="query")
-
-        if len(query) > 100:
-            msg = "Query too long (max 100 characters)"
-            raise ValidationError(msg, field="query")
-
-        if limit < 1 or limit > 100:
-            msg = "Limit must be between 1 and 100"
-            raise ValidationError(msg, field="limit")
-
-        query = query.strip()
+        query = validate_query(query)
+        limit = validate_limit(limit)
 
         try:
             start_time = time.time()
 
-            # Check cache info before call
-            cache_info_before = (
-                self._cached_search_variants.cache_info()
-                if hasattr(self._cached_search_variants, "cache_info")
-                else None
-            )
-            initial_hits = cache_info_before.hits if cache_info_before else 0
-
-            # Make cached call (caching logic handled by decorator)
+            initial_hits = hits_before(self._cached_search_variants)
             variant_data = await self._cached_search_variants(query, limit)
-
-            # Check if cache was hit
-            cache_info_after = (
-                self._cached_search_variants.cache_info()
-                if hasattr(self._cached_search_variants, "cache_info")
-                else None
-            )
-            cached = cache_info_after.hits > initial_hits if cache_info_after else False
+            cached = was_cache_hit(self._cached_search_variants, before=initial_hits)
 
             # Parse variants using the endpoint-specific model
             from litvar_link.models.endpoint_specific import AutocompleteVariantItem
 
-            variants = []
-            for data in variant_data:
-                try:
-                    variant = AutocompleteVariantItem(**data)
-                    variants.append(variant)
-                except Exception as e:
-                    if self.logger:
-                        log_error_with_context(
-                            self.logger,
-                            e,
-                            "variant_parsing",
-                            {"variant_data": data},
-                        )
-                    continue
+            variants = self._parse_items(variant_data, AutocompleteVariantItem)
 
             search_time = (time.time() - start_time) * 1000
 
@@ -241,30 +265,16 @@ class VariantService:
 
         variant_id = variant_id.strip()
         try:
-            # Check cache info before call
-            cache_info_before = (
-                self._cached_get_variant_details.cache_info()
-                if hasattr(self._cached_get_variant_details, "cache_info")
-                else None
-            )
-            initial_hits = cache_info_before.hits if cache_info_before else 0
-
-            # Make cached call (caching logic handled by decorator)
+            initial_hits = hits_before(self._cached_get_variant_details)
             variant_data = await self._cached_get_variant_details(variant_id)
-
-            # Check if cache was hit
-            cache_info_after = (
-                self._cached_get_variant_details.cache_info()
-                if hasattr(self._cached_get_variant_details, "cache_info")
-                else None
-            )
-            cached = cache_info_after.hits > initial_hits if cache_info_after else False
+            cached = was_cache_hit(self._cached_get_variant_details, before=initial_hits)
 
             # Parse variant details
             variant = VariantDetails(**variant_data)
 
             return VariantDetailsResponse(
-                variant=variant,
+                # VariantDetails/VariantDetailsItem reconciliation is deferred to P3.
+                variant=cast("Any", variant),
                 cached=cached,
             )
 
@@ -297,24 +307,12 @@ class VariantService:
 
         variant_id = variant_id.strip()
         try:
-            # Check cache info before call
-            cache_info_before = (
-                self._cached_get_variant_publications.cache_info()
-                if hasattr(self._cached_get_variant_publications, "cache_info")
-                else None
-            )
-            initial_hits = cache_info_before.hits if cache_info_before else 0
-
-            # Make cached call (caching logic handled by decorator)
+            initial_hits = hits_before(self._cached_get_variant_publications)
             pmids = await self._cached_get_variant_publications(variant_id)
-
-            # Check if cache was hit
-            cache_info_after = (
-                self._cached_get_variant_publications.cache_info()
-                if hasattr(self._cached_get_variant_publications, "cache_info")
-                else None
+            cached = was_cache_hit(
+                self._cached_get_variant_publications,
+                before=initial_hits,
             )
-            cached = cache_info_after.hits > initial_hits if cache_info_after else False
 
             # Create publication objects (simplified for now)
             from litvar_link.models.variants import Publication
@@ -354,36 +352,12 @@ class VariantService:
             ValidationError: For invalid input parameters
             LitVarAPIError: For API-related errors
         """
-        if not rsid or not rsid.strip():
-            msg = "RSID cannot be empty"
-            raise ValidationError(msg, field="rsid")
-
-        rsid = rsid.strip().lower()
-
-        # Validate RSID format
-        if not rsid.startswith("rs") or not rsid[2:].isdigit():
-            msg = "Invalid RSID format"
-            raise ValidationError(msg, field="rsid")
+        rsid = validate_rsid(rsid)
 
         try:
-            # Check cache info before call
-            cache_info_before = (
-                self._cached_sensor_lookup.cache_info()
-                if hasattr(self._cached_sensor_lookup, "cache_info")
-                else None
-            )
-            initial_hits = cache_info_before.hits if cache_info_before else 0
-
-            # Make cached call (caching logic handled by decorator)
+            initial_hits = hits_before(self._cached_sensor_lookup)
             sensor_data = await self._cached_sensor_lookup(rsid)
-
-            # Check if cache was hit
-            cache_info_after = (
-                self._cached_sensor_lookup.cache_info()
-                if hasattr(self._cached_sensor_lookup, "cache_info")
-                else None
-            )
-            cached = cache_info_after.hits > initial_hits if cache_info_after else False
+            cached = was_cache_hit(self._cached_sensor_lookup, before=initial_hits)
 
             # Parse sensor response - handle None case
             if sensor_data is None:
@@ -432,79 +406,23 @@ class VariantService:
             ValidationError: For invalid input parameters
             LitVarAPIError: For API-related errors
         """
-        if not gene_name or not gene_name.strip():
-            msg = "Gene name cannot be empty"
-            raise ValidationError(msg, field="gene_name")
-
-        if len(gene_name) > 50:
-            msg = "Gene name too long (max 50 characters)"
-            raise ValidationError(msg, field="gene_name")
-
-        gene_name = gene_name.strip().upper()
+        gene_name = validate_gene_name(gene_name)
         try:
-            # Check cache info before call
-            cache_info_before = (
-                self._cached_get_variants_by_gene.cache_info()
-                if hasattr(self._cached_get_variants_by_gene, "cache_info")
-                else None
-            )
-            initial_hits = cache_info_before.hits if cache_info_before else 0
-
-            # Make cached call (caching logic handled by decorator)
+            initial_hits = hits_before(self._cached_get_variants_by_gene)
             variant_data = await self._cached_get_variants_by_gene(gene_name)
-
-            # Check if cache was hit
-            cache_info_after = (
-                self._cached_get_variants_by_gene.cache_info()
-                if hasattr(self._cached_get_variants_by_gene, "cache_info")
-                else None
+            cached = was_cache_hit(
+                self._cached_get_variants_by_gene,
+                before=initial_hits,
             )
-            cached = cache_info_after.hits > initial_hits if cache_info_after else False
 
             # Parse variants using the endpoint-specific model
             from litvar_link.models.endpoint_specific import GeneVariantItem
 
-            variants = []
-            for data in variant_data:
-                try:
-                    variant = GeneVariantItem(**data)
-                    variants.append(variant)
-                except Exception as e:
-                    if self.logger:
-                        log_error_with_context(
-                            self.logger,
-                            e,
-                            "variant_parsing",
-                            {"variant_data": data},
-                        )
-                    continue
+            variants = self._parse_items(variant_data, GeneVariantItem)
 
-            # Calculate clinical significance statistics from variant data
-            pathogenic_count = 0
-            benign_count = 0
-            uncertain_count = 0
-
-            for variant in variants:
-                # Check if variant has clinical significance data
-                if (
-                    hasattr(variant, "data_clinical_significance")
-                    and variant.data_clinical_significance
-                ):
-                    clinical_sigs = variant.data_clinical_significance
-                    if any(
-                        sig in ["pathogenic", "likely pathogenic"]
-                        for sig in clinical_sigs
-                    ):
-                        pathogenic_count += 1
-                    elif any(
-                        sig in ["benign", "likely benign"] for sig in clinical_sigs
-                    ):
-                        benign_count += 1
-                    else:
-                        uncertain_count += 1
-                else:
-                    # No clinical significance data available
-                    uncertain_count += 1
+            pathogenic_count, benign_count, uncertain_count = _count_clinical_significance(
+                variants,
+            )
 
             # Calculate total publications (sum of pmids_count)
             total_publications = sum(

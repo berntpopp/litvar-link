@@ -1,7 +1,5 @@
 """Endpoint-specific models that match actual LitVar2 API response formats."""
 
-from typing import Optional
-
 from pydantic import BaseModel, Field
 
 
@@ -18,13 +16,13 @@ class GeneVariantItem(BaseModel):
     pmids_count: int = Field(description="Number of associated publications")
 
     # Optional fields that sometimes appear
-    rsid: Optional[str] = Field(None, description="Reference SNP ID if available")
-    clingen_id: Optional[str] = Field(
-        None,
+    rsid: str | None = Field(default=None, description="Reference SNP ID if available")
+    clingen_id: str | None = Field(
+        default=None,
         description="ClinGen identifier if available",
     )
-    data_clinical_significance: Optional[list[str]] = Field(
-        None,
+    data_clinical_significance: list[str] | None = Field(
+        default=None,
         description="Clinical significance annotations if available",
     )
 
@@ -53,13 +51,13 @@ class AutocompleteVariantItem(BaseModel):
     )
 
     # Optional fields that sometimes appear
-    rsid: Optional[str] = Field(None, description="Reference SNP ID if available")
-    match: Optional[str] = Field(
-        None,
+    rsid: str | None = Field(default=None, description="Reference SNP ID if available")
+    match: str | None = Field(
+        default=None,
         description="Search match description with HTML highlighting",
     )
-    data_clinical_significance: Optional[list[str]] = Field(
-        None,
+    data_clinical_significance: list[str] | None = Field(
+        default=None,
         description="Clinical significance categories",
     )
 

@@ -6,9 +6,10 @@ services:
     # Remove port mapping - NPM handles routing
     ports: []
     
-    # Use NPM environment file
+    # Use Docker/NPM environment file
     env_file:
-      - ../.env.npm
+      - path: ../.env.docker
+        required: false
     
     # Add NPM network connectivity
     networks:

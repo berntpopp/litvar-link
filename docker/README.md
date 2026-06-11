@@ -40,7 +40,7 @@ docker/
 
 # Environment files (in project root)
 ├── .env.example              # Local development template
-└── .env.npm.example          # NPM production template
+└── .env.docker.example          # Docker/NPM production template
 ```
 
 ## 🔧 Configuration
@@ -93,8 +93,8 @@ docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ### NPM Production Deployment
 ```bash
 # Setup NPM environment
-cp .env.npm.example .env.npm
-# Edit .env.npm with your domain and settings
+cp .env.docker.example .env.docker
+# Edit .env.docker with your domain and settings
 
 # Deploy with NPM configuration
 docker-compose -f docker-compose.yml -f docker-compose.npm.yml up -d
@@ -125,9 +125,9 @@ LitVar-Link includes built-in support for deployment with Nginx Proxy Manager fo
 #### 1. Environment Configuration
 ```bash
 # Copy and customize NPM environment
-cp .env.npm.example .env.npm
+cp .env.docker.example .env.docker
 
-# Edit .env.npm with your settings:
+# Edit .env.docker with your settings:
 # - NPM_SHARED_NETWORK_NAME=npm_default (or your NPM network)
 # - LITVAR_LINK_PUBLIC_DOMAIN=litvar.yourdomain.com
 # - LITVAR_LINK_CORS_ORIGINS=["https://litvar.yourdomain.com"]
@@ -298,15 +298,15 @@ git clone https://github.com/your-org/litvar-link.git
 cd litvar-link
 
 # Create production environment file
-cp .env.npm.example .env.npm
+cp .env.docker.example .env.docker
 
 # Edit environment with your domain settings
-nano .env.npm
+nano .env.docker
 ```
 
 #### 3. Environment Configuration
 
-Edit `.env.npm` with your specific settings:
+Edit `.env.docker` with your specific settings:
 
 ```env
 # Critical settings to customize:
@@ -448,7 +448,7 @@ curl https://litvar.yourdomain.com/api/health/
 
 ```bash
 # Backup environment and configs
-tar -czf litvar-backup-$(date +%Y%m%d).tar.gz .env.npm docker/
+tar -czf litvar-backup-$(date +%Y%m%d).tar.gz .env.docker docker/
 
 # Backup to remote location (optional)
 scp litvar-backup-*.tar.gz user@backup-server:/backups/
@@ -467,7 +467,7 @@ sudo systemctl status docker
 docker-compose logs litvar-link
 
 # Verify environment file
-cat .env.npm | grep -v "^#" | grep -v "^$"
+cat .env.docker | grep -v "^#" | grep -v "^$"
 ```
 
 **NPM connectivity issues:**
@@ -503,7 +503,7 @@ docker stats
 # Check LitVar2 API rate limits
 docker-compose logs litvar-link | grep -i rate
 
-# Adjust worker count in .env.npm
+# Adjust worker count in .env.docker
 # GUNICORN_WORKERS=2  # For lower-spec VPS
 ```
 

@@ -2,16 +2,48 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 import uvicorn
 
-from .app import app, mcp_app
-from .config import settings
+from .api.client import LitVar2Client
+from .app import app
+from .config import get_api_config, get_cache_config, settings
 from .logging_config import log_server_startup
+from .mcp.facade import create_litvar_mcp
+from .services.variant_service import VariantService
 
 if TYPE_CHECKING:
     from structlog.typing import FilteringBoundLogger
+
+
+def _make_service_factory(
+    logger: FilteringBoundLogger | None,
+) -> tuple[Callable[[], VariantService], Callable[[], Awaitable[None]]]:
+    """Build a shared-``VariantService`` factory plus a matching async closer.
+
+    A single ``LitVar2Client`` (and its per-method async-lru cache) is created on
+    first use and reused across every MCP tool call for the server's lifetime,
+    then closed on shutdown. This avoids leaking an ``httpx`` connection pool per
+    tool invocation (a fresh per-call client would never be closed) and keeps the
+    cache effective across calls. Returns ``(factory, aclose)``; the caller awaits
+    ``aclose()`` in a ``finally`` when the transport stops.
+    """
+    service: VariantService | None = None
+
+    def factory() -> VariantService:
+        nonlocal service
+        if service is None:
+            client = LitVar2Client(get_api_config(), logger)
+            service = VariantService(client, get_cache_config(), logger)
+        return service
+
+    async def aclose() -> None:
+        if service is not None:
+            await service.client.close()
+
+    return factory, aclose
 
 
 class UnifiedServerManager:
@@ -41,8 +73,11 @@ class UnifiedServerManager:
         if self.logger:
             log_server_startup(self.logger, "unified", host, port)
 
-        # Add MCP endpoint to the main app
-        app.mount(settings.mcp_path, mcp_app.mcp_router)
+        # Mount the explicit MCP facade as a stateless streamable-HTTP ASGI app.
+        service_factory, close_services = _make_service_factory(self.logger)
+        mcp = create_litvar_mcp(service_factory=service_factory)
+        mcp_http_app = mcp.http_app(path="/", stateless_http=True, json_response=True)
+        app.mount(settings.mcp_path, mcp_http_app)
 
         config = uvicorn.Config(
             app=app,
@@ -54,7 +89,10 @@ class UnifiedServerManager:
         )
 
         server = uvicorn.Server(config)
-        await server.serve()
+        try:
+            await server.serve()
+        finally:
+            await close_services()
 
     async def start_http_only_server(
         self,
@@ -89,21 +127,25 @@ class UnifiedServerManager:
         if self.logger:
             log_server_startup(self.logger, "stdio")
 
-        # Create FastAPI app (for MCP introspection)
-        from .app import create_app, create_mcp_app, lifespan
+        # Create FastAPI app so the shared lifespan (logging, etc.) runs.
+        from .app import create_app, lifespan
 
-        app = create_app()
+        application = create_app()
 
         # Use lifespan context manager for consistency with HTTP mode
         if self.logger:
             self.logger.info("Initializing app state using lifespan context...")
 
-        async with lifespan(app):
-            # Create MCP server within the lifespan context
-            mcp = create_mcp_app()
+        async with lifespan(application):
+            # Build the explicit MCP facade within the lifespan context.
+            service_factory, close_services = _make_service_factory(self.logger)
+            mcp = create_litvar_mcp(service_factory=service_factory)
 
             if self.logger:
                 self.logger.info("STDIO MCP server ready")
 
             # Run MCP server in STDIO mode
-            await mcp.run_async(transport="stdio")
+            try:
+                await mcp.run_async(transport="stdio")
+            finally:
+                await close_services()

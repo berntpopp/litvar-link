@@ -1,6 +1,6 @@
 """Request models for LitVar-Link API."""
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -74,11 +74,11 @@ class PublicationRequest(BaseModel):
     variant_id: str = Field(
         description="Unique variant identifier",
     )
-    format: Optional[Literal["json", "pmid_list", "detailed"]] = Field(
+    format: Literal["json", "pmid_list", "detailed"] | None = Field(
         default="json",
         description="Response format",
     )
-    limit: Optional[int] = Field(
+    limit: int | None = Field(
         default=None,
         ge=1,
         le=1000,
@@ -135,17 +135,17 @@ class GeneVariantsRequest(BaseModel):
     gene_name: str = Field(
         description="Gene symbol (e.g., CFH, BRCA1)",
     )
-    limit: Optional[int] = Field(
+    limit: int | None = Field(
         default=None,
         ge=1,
         le=1000,
         description="Maximum number of variants to return",
     )
-    sort_by: Optional[Literal["pmids_count", "name", "rsid"]] = Field(
+    sort_by: Literal["pmids_count", "name", "rsid"] | None = Field(
         default="pmids_count",
         description="Sort results by field",
     )
-    sort_order: Optional[Literal["asc", "desc"]] = Field(
+    sort_order: Literal["asc", "desc"] | None = Field(
         default="desc",
         description="Sort order",
     )
@@ -185,7 +185,7 @@ class BatchVariantRequest(BaseModel):
         default=False,
         description="Include publication data for each variant",
     )
-    format: Optional[Literal["json", "csv", "tsv"]] = Field(
+    format: Literal["json", "csv", "tsv"] | None = Field(
         default="json",
         description="Response format",
     )
@@ -227,14 +227,14 @@ class CacheRequest(BaseModel):
     operation: Literal["clear", "stats", "warm"] = Field(
         description="Cache operation to perform",
     )
-    keys: Optional[list[str]] = Field(
+    keys: list[str] | None = Field(
         default=None,
         description="Specific cache keys to operate on (for selective operations)",
     )
 
     @field_validator("keys")
     @classmethod
-    def validate_keys(cls, v: Optional[list[str]]) -> Optional[list[str]]:
+    def validate_keys(cls, v: list[str] | None) -> list[str] | None:
         """Validate cache keys."""
         if v is None:
             return v

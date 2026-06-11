@@ -9,7 +9,8 @@ services:
     
     # Environment configuration
     env_file:
-      - ../.env
+      - path: ../.env
+        required: false
     
     environment:
       # Development overrides
