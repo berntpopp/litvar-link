@@ -7,6 +7,7 @@ from fastapi import APIRouter, Path
 from litvar_link.models import GeneVariantsResponse
 
 from .dependencies import LoggerDep, ServiceDep
+from .openapi_examples import GENE_VARIANTS_RESPONSES
 
 router = APIRouter(prefix="/api/genes", tags=["Genes"])
 
@@ -17,69 +18,7 @@ router = APIRouter(prefix="/api/genes", tags=["Genes"])
     summary="Get gene-associated variants",
     description="Retrieve all genetic variants associated with a specific gene symbol.",
     operation_id="get_gene_variants",
-    responses={
-        200: {
-            "description": "Gene variants retrieved successfully with statistics",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "gene_name": "CFH",
-                        "total_count": 234,
-                        "pathogenic_count": 45,
-                        "benign_count": 123,
-                        "uncertain_count": 66,
-                        "variants": [
-                            {
-                                "id": "rs1061170",
-                                "hgvs_protein": "p.Y402H",
-                                "clinical_significance": "pathogenic",
-                                "publication_count": 127,
-                                "allele_frequency": 0.23,
-                            },
-                            {
-                                "id": "rs9970784",
-                                "hgvs_protein": "p.I62V",
-                                "clinical_significance": "benign",
-                                "publication_count": 34,
-                                "allele_frequency": 0.45,
-                            },
-                        ],
-                        "cached": False,
-                        "search_time_ms": 567,
-                    },
-                },
-            },
-        },
-        400: {
-            "description": "Invalid gene symbol format",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "detail": "Invalid gene symbol. Must be a valid HUGO gene symbol",
-                    },
-                },
-            },
-        },
-        404: {
-            "description": "Gene not found or no variants available",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "gene_name": "NONEXISTENT",
-                        "total_count": 0,
-                        "variants": [],
-                        "message": "No variants found for gene NONEXISTENT",
-                    },
-                },
-            },
-        },
-        502: {
-            "description": "LitVar2 API communication error",
-            "content": {
-                "application/json": {"example": {"detail": "LitVar2 API error"}},
-            },
-        },
-    },
+    responses=GENE_VARIANTS_RESPONSES,
 )
 async def get_gene_variants(
     gene_name: str = Path(

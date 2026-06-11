@@ -7,6 +7,7 @@ from fastapi import APIRouter, Path
 from litvar_link.models import SensorResponse
 
 from .dependencies import LoggerDep, ServiceDep
+from .openapi_examples import SENSOR_RESPONSES
 
 router = APIRouter(prefix="/api/sensor", tags=["Sensor"])
 
@@ -17,57 +18,7 @@ router = APIRouter(prefix="/api/sensor", tags=["Sensor"])
     summary="Check RSID availability",
     description="Check if a Reference SNP ID (RSID) exists in the LitVar2 database.",
     operation_id="check_rsid_availability",
-    responses={
-        200: {
-            "description": "RSID availability check completed successfully",
-            "content": {
-                "application/json": {
-                    "examples": {
-                        "available_rsid": {
-                            "summary": "Available RSID with variant data",
-                            "value": {
-                                "rsid": "rs1061170",
-                                "available": True,
-                                "variant_info": {
-                                    "gene": "CFH",
-                                    "hgvs_protein": "p.Y402H",
-                                    "clinical_significance": "pathogenic",
-                                },
-                                "cached": False,
-                                "response_time_ms": 123,
-                            },
-                        },
-                        "unavailable_rsid": {
-                            "summary": "RSID not found in database",
-                            "value": {
-                                "rsid": "rs999999999",
-                                "available": False,
-                                "variant_info": None,
-                                "cached": True,
-                                "response_time_ms": 45,
-                            },
-                        },
-                    },
-                },
-            },
-        },
-        400: {
-            "description": "Invalid RSID format",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "detail": "Invalid RSID format. Must start with 'rs' followed by digits (e.g., rs1061170)",
-                    },
-                },
-            },
-        },
-        502: {
-            "description": "LitVar2 API communication error",
-            "content": {
-                "application/json": {"example": {"detail": "LitVar2 API error"}},
-            },
-        },
-    },
+    responses=SENSOR_RESPONSES,
 )
 async def lookup_rsid(
     rsid: str = Path(

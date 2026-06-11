@@ -7,6 +7,7 @@ from fastapi import APIRouter, Path
 from litvar_link.models import PublicationResponse
 
 from .dependencies import LoggerDep, ServiceDep
+from .openapi_examples import PUBLICATIONS_RESPONSES
 
 router = APIRouter(prefix="/api/publications", tags=["Publications"])
 
@@ -17,72 +18,7 @@ router = APIRouter(prefix="/api/publications", tags=["Publications"])
     summary="Get variant-associated publications",
     description="Retrieve all publications that mention or study a specific genetic variant.",
     operation_id="get_variant_publications",
-    responses={
-        200: {
-            "description": "Publications retrieved successfully with metadata",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "variant_id": "rs1061170",
-                        "total_count": 127,
-                        "publications": [
-                            {
-                                "pmid": "32511357",
-                                "pmcid": "PMC7279073",
-                                "title": "Complement factor H Y402H polymorphism and age-related macular degeneration",
-                                "journal": "Nature Genetics",
-                                "publication_year": 2020,
-                                "study_type": "genome-wide association study",
-                            },
-                            {
-                                "pmid": "29355051",
-                                "title": "CFH variants and AMD risk in European populations",
-                                "journal": "Human Genetics",
-                                "publication_year": 2018,
-                                "study_type": "meta-analysis",
-                            },
-                        ],
-                        "journal_distribution": {
-                            "Nature Genetics": 23,
-                            "Human Genetics": 18,
-                            "PLOS Genetics": 15,
-                        },
-                        "cached": False,
-                        "search_time_ms": 341,
-                    },
-                },
-            },
-        },
-        404: {
-            "description": "No publications found for variant",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "variant_id": "rs999999999",
-                        "total_count": 0,
-                        "publications": [],
-                        "message": "No publications found for variant rs999999999",
-                    },
-                },
-            },
-        },
-        400: {
-            "description": "Invalid variant identifier format",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "detail": "Invalid variant ID format. Expected RSID, gene symbol, or HGVS notation",
-                    },
-                },
-            },
-        },
-        502: {
-            "description": "LitVar2 API communication error",
-            "content": {
-                "application/json": {"example": {"detail": "LitVar2 API error"}},
-            },
-        },
-    },
+    responses=PUBLICATIONS_RESPONSES,
 )
 async def get_variant_publications(
     variant_id: str = Path(

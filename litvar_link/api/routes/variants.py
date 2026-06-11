@@ -12,6 +12,7 @@ from litvar_link.models import (
 )
 
 from .dependencies import LoggerDep, ServiceDep
+from .openapi_examples import SEARCH_RESPONSES, VARIANT_DETAILS_RESPONSES
 
 router = APIRouter(prefix="/api/variants", tags=["Variants"])
 
@@ -22,52 +23,7 @@ router = APIRouter(prefix="/api/variants", tags=["Variants"])
     summary="Search genetic variants",
     description="Search for genetic variants using gene symbols, variant names, RSIDs, or HGVS notation.",
     operation_id="search_genetic_variants",
-    responses={
-        200: {
-            "description": "Variant search results with metadata",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "query": "CFH p.Y402H",
-                        "total_count": 15,
-                        "variants": [
-                            {
-                                "id": "rs1061170",
-                                "gene": "CFH",
-                                "hgvs_protein": "p.Y402H",
-                                "clinical_significance": "pathogenic",
-                                "publication_count": 127,
-                            },
-                        ],
-                        "cached": False,
-                        "search_time_ms": 245,
-                    },
-                },
-            },
-        },
-        400: {
-            "description": "Invalid query parameters or format",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Query must be between 1 and 100 characters"},
-                },
-            },
-        },
-        422: {
-            "description": "Query validation error",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Invalid HGVS notation format"},
-                },
-            },
-        },
-        502: {
-            "description": "LitVar2 API communication error",
-            "content": {
-                "application/json": {"example": {"detail": "LitVar2 API error"}},
-            },
-        },
-    },
+    responses=SEARCH_RESPONSES,
 )
 async def search_variants(
     query: str = Query(
@@ -221,53 +177,7 @@ async def search_variants(
     summary="Get detailed variant information",
     description="Retrieve comprehensive information about a specific genetic variant by ID.",
     operation_id="get_variant_details",
-    responses={
-        200: {
-            "description": "Detailed variant information retrieved successfully",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "variant_id": "rs1061170",
-                        "found": True,
-                        "variant": {
-                            "id": "rs1061170",
-                            "gene": "CFH",
-                            "hgvs_protein": "p.Y402H",
-                            "clinical_significance": "pathogenic",
-                            "publication_count": 127,
-                            "allele_frequency": 0.23,
-                        },
-                        "cached": False,
-                        "search_time_ms": 189,
-                    },
-                },
-            },
-        },
-        404: {
-            "description": "Variant not found in database",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "variant_id": "rs999999999",
-                        "found": False,
-                        "variant": None,
-                        "cached": True,
-                        "search_time_ms": 45,
-                    },
-                },
-            },
-        },
-        400: {
-            "description": "Invalid variant ID format",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "detail": "Invalid variant ID format. Expected RSID, gene symbol, or HGVS notation",
-                    },
-                },
-            },
-        },
-    },
+    responses=VARIANT_DETAILS_RESPONSES,
 )
 async def get_variant_details(
     variant_id: str = Path(
