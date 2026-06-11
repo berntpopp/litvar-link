@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, Path
 
-from litvar_link.exceptions import LitVarAPIError, ValidationError
 from litvar_link.models import GeneVariantsResponse
 
 from .dependencies import LoggerDep, ServiceDep
@@ -176,28 +175,17 @@ async def get_gene_variants(
         HTTPException(502): LitVar2 API communication or rate limit errors
         HTTPException(500): Internal server error or unexpected failures
     """
-    try:
-        logger.info("Gene variants requested", gene_name=gene_name)
+    logger.info("Gene variants requested", gene_name=gene_name)
 
-        response = await service.search_gene_variants(gene_name)
+    response = await service.search_gene_variants(gene_name)
 
-        logger.info(
-            "Gene variants completed",
-            gene_name=gene_name,
-            variant_count=response.total_count,
-            pathogenic_count=response.pathogenic_count,
-            benign_count=response.benign_count,
-            cached=response.cached,
-        )
+    logger.info(
+        "Gene variants completed",
+        gene_name=gene_name,
+        variant_count=response.total_count,
+        pathogenic_count=response.pathogenic_count,
+        benign_count=response.benign_count,
+        cached=response.cached,
+    )
 
-        return response
-
-    except ValidationError as e:
-        logger.warning("Validation error in gene variants", error=str(e))
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except LitVarAPIError as e:
-        logger.exception("API error in gene variants", error=str(e))
-        raise HTTPException(status_code=502, detail="LitVar2 API error") from e
-    except Exception as e:
-        logger.error("Unexpected error in gene variants", error=str(e), exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error") from e
+    return response

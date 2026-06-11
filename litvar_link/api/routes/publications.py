@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, Path
 
-from litvar_link.exceptions import LitVarAPIError, ValidationError
 from litvar_link.models import PublicationResponse
 
 from .dependencies import LoggerDep, ServiceDep
@@ -190,30 +189,15 @@ async def get_variant_publications(
         HTTPException(502): LitVar2 API communication or rate limit errors
         HTTPException(500): Internal server error or unexpected failures
     """
-    try:
-        logger.info("Variant publications requested", variant_id=variant_id)
+    logger.info("Variant publications requested", variant_id=variant_id)
 
-        response = await service.get_variant_literature(variant_id)
+    response = await service.get_variant_literature(variant_id)
 
-        logger.info(
-            "Variant publications completed",
-            variant_id=variant_id,
-            publication_count=response.total_count,
-            cached=response.cached,
-        )
+    logger.info(
+        "Variant publications completed",
+        variant_id=variant_id,
+        publication_count=response.total_count,
+        cached=response.cached,
+    )
 
-        return response
-
-    except ValidationError as e:
-        logger.warning("Validation error in variant publications", error=str(e))
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except LitVarAPIError as e:
-        logger.exception("API error in variant publications", error=str(e))
-        raise HTTPException(status_code=502, detail="LitVar2 API error") from e
-    except Exception as e:
-        logger.error(
-            "Unexpected error in variant publications",
-            error=str(e),
-            exc_info=True,
-        )
-        raise HTTPException(status_code=500, detail="Internal server error") from e
+    return response

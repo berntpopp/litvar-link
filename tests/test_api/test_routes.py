@@ -180,7 +180,9 @@ class TestVariantRoutes:
 
         app = create_app()
         app.dependency_overrides[get_variant_service] = lambda: mock_service
-        test_client = TestClient(app)
+        # raise_server_exceptions=False so the app-level Exception handler's
+        # 500 response is returned instead of Starlette re-raising in tests.
+        test_client = TestClient(app, raise_server_exceptions=False)
 
         response = test_client.get("/api/variants/search?query=CFH")
 
@@ -346,7 +348,9 @@ class TestPublicationRoutes:
 
         app = create_app()
         app.dependency_overrides[get_variant_service] = lambda: mock_service
-        test_client = TestClient(app)
+        # raise_server_exceptions=False so the app-level Exception handler's
+        # 500 response is returned instead of Starlette re-raising in tests.
+        test_client = TestClient(app, raise_server_exceptions=False)
 
         response = test_client.get("/api/publications/variant/test_variant_id")
 
@@ -453,7 +457,9 @@ class TestGeneRoutes:
 
         app = create_app()
         app.dependency_overrides[get_variant_service] = lambda: mock_service
-        test_client = TestClient(app)
+        # raise_server_exceptions=False so the app-level Exception handler's
+        # 500 response is returned instead of Starlette re-raising in tests.
+        test_client = TestClient(app, raise_server_exceptions=False)
 
         response = test_client.get("/api/genes/CFH/variants")
 
@@ -583,7 +589,9 @@ class TestSensorRoutes:
 
         app = create_app()
         app.dependency_overrides[get_variant_service] = lambda: mock_service
-        test_client = TestClient(app)
+        # raise_server_exceptions=False so the app-level Exception handler's
+        # 500 response is returned instead of Starlette re-raising in tests.
+        test_client = TestClient(app, raise_server_exceptions=False)
 
         response = test_client.get("/api/sensor/rs1234567")
 
@@ -864,3 +872,34 @@ class TestRequestValidation:
             query="BRCA1 c.317-1G>A",
             limit=10,
         )
+
+
+class TestErrorHandlingViaAppHandlers:
+    """Routes no longer carry inline try/except; app handlers translate errors."""
+
+    def test_validation_error_surfaces_as_400(self) -> None:
+        from litvar_link.api.routes.dependencies import get_variant_service
+        from litvar_link.app import create_app
+        from litvar_link.exceptions import ValidationError
+
+        app = create_app()
+        svc = AsyncMock()
+        svc.search_variants = AsyncMock(side_effect=ValidationError("nope", field="query"))
+        app.dependency_overrides[get_variant_service] = lambda: svc
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.get("/api/variants/search", params={"query": "x"})
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "nope"
+
+    def test_litvar_api_error_surfaces_as_502(self) -> None:
+        from litvar_link.api.routes.dependencies import get_variant_service
+        from litvar_link.app import create_app
+        from litvar_link.exceptions import LitVarAPIError
+
+        app = create_app()
+        svc = AsyncMock()
+        svc.search_gene_variants = AsyncMock(side_effect=LitVarAPIError("boom"))
+        app.dependency_overrides[get_variant_service] = lambda: svc
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.get("/api/genes/CFH/variants")
+        assert resp.status_code == 502

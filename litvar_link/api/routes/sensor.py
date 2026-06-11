@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, Path
 
-from litvar_link.exceptions import LitVarAPIError, ValidationError
 from litvar_link.models import SensorResponse
 
 from .dependencies import LoggerDep, ServiceDep
@@ -168,26 +167,15 @@ async def lookup_rsid(
         HTTPException(502): LitVar2 API communication or rate limit errors
         HTTPException(500): Internal server error or unexpected failures
     """
-    try:
-        logger.info("RSID sensor lookup requested", rsid=rsid)
+    logger.info("RSID sensor lookup requested", rsid=rsid)
 
-        response = await service.lookup_rsid(rsid)
+    response = await service.lookup_rsid(rsid)
 
-        logger.info(
-            "RSID sensor lookup completed",
-            rsid=rsid,
-            available=response.available,
-            cached=response.cached,
-        )
+    logger.info(
+        "RSID sensor lookup completed",
+        rsid=rsid,
+        available=response.available,
+        cached=response.cached,
+    )
 
-        return response
-
-    except ValidationError as e:
-        logger.warning("Validation error in RSID lookup", error=str(e))
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except LitVarAPIError as e:
-        logger.exception("API error in RSID lookup", error=str(e))
-        raise HTTPException(status_code=502, detail="LitVar2 API error") from e
-    except Exception as e:
-        logger.error("Unexpected error in RSID lookup", error=str(e), exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error") from e
+    return response
