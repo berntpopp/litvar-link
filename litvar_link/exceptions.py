@@ -1,6 +1,6 @@
 """Custom exceptions for LitVar-Link."""
 
-from typing import Any, Optional
+from typing import Any
 
 
 class LitVarAPIError(Exception):
@@ -9,8 +9,8 @@ class LitVarAPIError(Exception):
     def __init__(
         self,
         message: str,
-        status_code: Optional[int] = None,
-        response_data: Optional[dict[str, Any]] = None,
+        status_code: int | None = None,
+        response_data: dict[str, Any] | None = None,
     ) -> None:
         """Initialize LitVar API error.
 
@@ -34,7 +34,7 @@ class LitVarAPIError(Exception):
 class ValidationError(LitVarAPIError):
     """Exception raised for input validation errors."""
 
-    def __init__(self, message: str, field: Optional[str] = None) -> None:
+    def __init__(self, message: str, field: str | None = None) -> None:
         """Initialize validation error.
 
         Args:
@@ -52,7 +52,7 @@ class ValidationError(LitVarAPIError):
 class RateLimitError(LitVarAPIError):
     """Exception raised when rate limit is exceeded."""
 
-    def __init__(self, message: str, retry_after: Optional[float] = None) -> None:
+    def __init__(self, message: str, retry_after: float | None = None) -> None:
         """Initialize rate limit error.
 
         Args:
@@ -66,7 +66,7 @@ class RateLimitError(LitVarAPIError):
 class ConfigurationError(LitVarAPIError):
     """Exception raised for configuration errors."""
 
-    def __init__(self, message: str, config_key: Optional[str] = None) -> None:
+    def __init__(self, message: str, config_key: str | None = None) -> None:
         """Initialize configuration error.
 
         Args:

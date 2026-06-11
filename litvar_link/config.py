@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -16,16 +16,28 @@ class APIConfigModel(BaseModel):
         description="Base URL for LitVar2 API",
     )
     timeout: int = Field(
-        default=30, ge=1, le=300, description="Request timeout in seconds",
+        default=30,
+        ge=1,
+        le=300,
+        description="Request timeout in seconds",
     )
     rate_limit_per_second: float = Field(
-        default=2.0, gt=0.0, le=10.0, description="API rate limit (requests per second)",
+        default=2.0,
+        gt=0.0,
+        le=10.0,
+        description="API rate limit (requests per second)",
     )
     burst_size: int = Field(
-        default=5, ge=1, le=20, description="Maximum burst size for rate limiting",
+        default=5,
+        ge=1,
+        le=20,
+        description="Maximum burst size for rate limiting",
     )
     max_retries: int = Field(
-        default=3, ge=0, le=10, description="Maximum number of retry attempts",
+        default=3,
+        ge=0,
+        le=10,
+        description="Maximum number of retry attempts",
     )
     retry_delay: float = Field(
         default=1.0,
@@ -34,7 +46,8 @@ class APIConfigModel(BaseModel):
         description="Delay between retry attempts in seconds",
     )
     user_agent: str = Field(
-        default="LitVar-Link/0.1.0", description="User agent string for API requests",
+        default="LitVar-Link/0.1.0",
+        description="User agent string for API requests",
     )
     endpoints: dict[str, str] = Field(
         default={
@@ -60,7 +73,10 @@ class CacheConfigModel(BaseModel):
     """Cache configuration model."""
 
     size: int = Field(
-        default=1000, ge=10, le=10000, description="Maximum number of cached items",
+        default=1000,
+        ge=10,
+        le=10000,
+        description="Maximum number of cached items",
     )
     ttl: int = Field(
         default=3600,
@@ -69,10 +85,14 @@ class CacheConfigModel(BaseModel):
         description="Time-to-live for cached items in seconds",
     )
     stats_enabled: bool = Field(
-        default=True, description="Enable cache statistics tracking",
+        default=True,
+        description="Enable cache statistics tracking",
     )
     cleanup_interval: int = Field(
-        default=300, ge=60, le=3600, description="Cache cleanup interval in seconds",
+        default=300,
+        ge=60,
+        le=3600,
+        description="Cache cleanup interval in seconds",
     )
 
 
@@ -132,12 +152,14 @@ class ServerSettings(BaseSettings):
 
     # API configuration
     api: APIConfigModel = Field(
-        default_factory=APIConfigModel, description="LitVar2 API configuration",
+        default_factory=APIConfigModel,
+        description="LitVar2 API configuration",
     )
 
     # Cache configuration
     cache: CacheConfigModel = Field(
-        default_factory=CacheConfigModel, description="Caching configuration",
+        default_factory=CacheConfigModel,
+        description="Caching configuration",
     )
 
     @field_validator("mcp_path")
@@ -154,7 +176,7 @@ class ServerSettings(BaseSettings):
         """Parse CORS origins from string or list."""
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return v
+        return cast("list[str]", v)
 
 
 # Global settings instance

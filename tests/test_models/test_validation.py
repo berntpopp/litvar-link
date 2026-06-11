@@ -1,7 +1,7 @@
 """Comprehensive model validation tests."""
 
-from pydantic import ValidationError
 import pytest
+from pydantic import ValidationError
 
 from litvar_link.models.endpoint_specific import (
     AutocompleteVariantItem,
@@ -201,14 +201,8 @@ class TestEndpointSpecificModels:
         )
         assert item.pmids_count == 834
         assert item.rsid == "rs1061170"
-        assert (
-            item.link
-            == "https://www.ncbi.nlm.nih.gov/research/litvar2/docsum?text=rs1061170"
-        )
-        assert (
-            item.logo
-            == "https://www.ncbi.nlm.nih.gov/research/litvar2/img/litvar_logo.png"
-        )
+        assert item.link == "https://www.ncbi.nlm.nih.gov/research/litvar2/docsum?text=rs1061170"
+        assert item.logo == "https://www.ncbi.nlm.nih.gov/research/litvar2/img/litvar_logo.png"
 
     def test_publications_item(self) -> None:
         """Test publications item."""

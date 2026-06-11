@@ -11,6 +11,7 @@ from litvar_link.models import (
     VariantSearchRequest,
     VariantSearchResponse,
 )
+
 from .dependencies import LoggerDep, ServiceDep
 
 router = APIRouter(prefix="/api/variants", tags=["Variants"])
@@ -131,8 +132,9 @@ async def search_variants(
             },
         },
     ),
-    service: ServiceDep = ...,
-    logger: LoggerDep = ...,
+    *,
+    service: ServiceDep,
+    logger: LoggerDep,
 ) -> VariantSearchResponse:
     """Search for genetic variants using multiple query formats.
 
@@ -217,13 +219,13 @@ async def search_variants(
 
     except ValidationError as e:
         logger.warning("Validation error in variant search", error=str(e))
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except LitVarAPIError as e:
         logger.exception("API error in variant search", error=str(e))
-        raise HTTPException(status_code=502, detail="LitVar2 API error")
+        raise HTTPException(status_code=502, detail="LitVar2 API error") from e
     except Exception as e:
         logger.error("Unexpected error in variant search", error=str(e), exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get(
@@ -306,8 +308,9 @@ async def get_variant_details(
             },
         },
     ),
-    service: ServiceDep = ...,
-    logger: LoggerDep = ...,
+    *,
+    service: ServiceDep,
+    logger: LoggerDep,
 ) -> dict[str, Any]:
     """Retrieve comprehensive information about a specific genetic variant.
 
@@ -386,10 +389,10 @@ async def get_variant_details(
 
     except ValidationError as e:
         logger.warning("Validation error in variant details", error=str(e))
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except LitVarAPIError as e:
         logger.exception("API error in variant details", error=str(e))
-        raise HTTPException(status_code=502, detail="LitVar2 API error")
+        raise HTTPException(status_code=502, detail="LitVar2 API error") from e
     except Exception as e:
         logger.error("Unexpected error in variant details", error=str(e), exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e

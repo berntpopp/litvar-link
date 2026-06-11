@@ -64,7 +64,7 @@ def create_app() -> FastAPI:
         return {
             "name": "LitVar-Link",
             "version": "0.1.0",
-            "description": "High-performance MCP/API server for NCBI's LitVar2 genetic variant database",  # noqa: E501
+            "description": "High-performance MCP/API server for NCBI's LitVar2 genetic variant database",
             "docs": "/docs",
             "health": "/api/health",
             "mcp_endpoint": settings.mcp_path,

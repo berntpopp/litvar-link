@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import logging
 import sys
@@ -238,13 +239,11 @@ class TestOrjsonSerializer:
         # Since orjson is available in this environment and doesn't handle non-serializable
         # objects the same way as json.dumps(default=str), this will raise a TypeError.
         # This exposes a limitation in the current implementation.
-        try:
-            import orjson
-
+        if importlib.util.find_spec("orjson") is not None:
             # If orjson is available, it will raise TypeError for non-serializable objects
             with pytest.raises(TypeError, match="Type is not JSON serializable"):
                 logging_config.orjson_serializer(test_data)
-        except ImportError:
+        else:
             # If orjson is not available, it should fall back to json with default=str
             result = logging_config.orjson_serializer(test_data)
             parsed = json.loads(result)
@@ -323,11 +322,15 @@ class TestLogCacheOperation:
         mock_logger = Mock()
 
         logging_config.log_cache_operation(
-            logger=mock_logger, operation="get", key="test_key",
+            logger=mock_logger,
+            operation="get",
+            key="test_key",
         )
 
         mock_logger.debug.assert_called_once_with(
-            "Cache operation", operation="get", key="test_key",
+            "Cache operation",
+            operation="get",
+            key="test_key",
         )
 
     def test_log_cache_operation_with_hit(self):
@@ -335,11 +338,17 @@ class TestLogCacheOperation:
         mock_logger = Mock()
 
         logging_config.log_cache_operation(
-            logger=mock_logger, operation="get", key="test_key", hit=True,
+            logger=mock_logger,
+            operation="get",
+            key="test_key",
+            hit=True,
         )
 
         mock_logger.debug.assert_called_once_with(
-            "Cache operation", operation="get", key="test_key", cache_hit=True,
+            "Cache operation",
+            operation="get",
+            key="test_key",
+            cache_hit=True,
         )
 
     def test_log_cache_operation_with_size(self):
@@ -347,11 +356,17 @@ class TestLogCacheOperation:
         mock_logger = Mock()
 
         logging_config.log_cache_operation(
-            logger=mock_logger, operation="set", key="test_key", size=1024,
+            logger=mock_logger,
+            operation="set",
+            key="test_key",
+            size=1024,
         )
 
         mock_logger.debug.assert_called_once_with(
-            "Cache operation", operation="set", key="test_key", cache_size=1024,
+            "Cache operation",
+            operation="set",
+            key="test_key",
+            cache_size=1024,
         )
 
     def test_log_cache_operation_with_all_params(self):
@@ -359,7 +374,11 @@ class TestLogCacheOperation:
         mock_logger = Mock()
 
         logging_config.log_cache_operation(
-            logger=mock_logger, operation="set", key="test_key", hit=False, size=512,
+            logger=mock_logger,
+            operation="set",
+            key="test_key",
+            hit=False,
+            size=512,
         )
 
         mock_logger.debug.assert_called_once_with(
@@ -451,11 +470,17 @@ class TestLogServerStartup:
         mock_logger = Mock()
 
         logging_config.log_server_startup(
-            logger=mock_logger, mode="http", host="127.0.0.1", port=8000,
+            logger=mock_logger,
+            mode="http",
+            host="127.0.0.1",
+            port=8000,
         )
 
         mock_logger.info.assert_called_once_with(
-            "Server starting", mode="http", host="127.0.0.1", port=8000,
+            "Server starting",
+            mode="http",
+            host="127.0.0.1",
+            port=8000,
         )
 
     def test_log_server_startup_with_partial_network_info(self):
@@ -464,7 +489,10 @@ class TestLogServerStartup:
 
         # Only host provided
         logging_config.log_server_startup(
-            logger=mock_logger, mode="http", host="127.0.0.1", port=None,
+            logger=mock_logger,
+            mode="http",
+            host="127.0.0.1",
+            port=None,
         )
 
         # Should not include host/port in log data
@@ -480,7 +508,9 @@ class TestLogErrorWithContext:
         error = ValueError("Test error")
 
         logging_config.log_error_with_context(
-            logger=mock_logger, error=error, operation="test_operation",
+            logger=mock_logger,
+            error=error,
+            operation="test_operation",
         )
 
         mock_logger.error.assert_called_once_with(
@@ -498,7 +528,10 @@ class TestLogErrorWithContext:
         context = {"url": "https://api.example.com", "retry_count": 3}
 
         logging_config.log_error_with_context(
-            logger=mock_logger, error=error, operation="api_request", context=context,
+            logger=mock_logger,
+            error=error,
+            operation="api_request",
+            context=context,
         )
 
         mock_logger.error.assert_called_once_with(
@@ -516,7 +549,10 @@ class TestLogErrorWithContext:
         error = RuntimeError("Runtime error")
 
         logging_config.log_error_with_context(
-            logger=mock_logger, error=error, operation="runtime_operation", context=None,
+            logger=mock_logger,
+            error=error,
+            operation="runtime_operation",
+            context=None,
         )
 
         # Should not include context key when context is None
@@ -528,5 +564,6 @@ class TestLogErrorWithContext:
         }
 
         mock_logger.error.assert_called_once_with(
-            "Operation failed", **expected_call_kwargs,
+            "Operation failed",
+            **expected_call_kwargs,
         )

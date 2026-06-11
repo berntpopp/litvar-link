@@ -2,8 +2,8 @@
 
 from typing import Any
 
-from pydantic import ValidationError
 import pytest
+from pydantic import ValidationError
 
 from litvar_link.models.variants import (
     ClinicalSignificance,
@@ -298,10 +298,7 @@ class TestClinicalSignificance:
         assert ClinicalSignificance.LIKELY_PATHOGENIC.value == "likely pathogenic"
         assert ClinicalSignificance.BENIGN.value == "benign"
         assert ClinicalSignificance.LIKELY_BENIGN.value == "likely benign"
-        assert (
-            ClinicalSignificance.UNCERTAIN_SIGNIFICANCE.value
-            == "uncertain significance"
-        )
+        assert ClinicalSignificance.UNCERTAIN_SIGNIFICANCE.value == "uncertain significance"
         assert ClinicalSignificance.RISK_FACTOR.value == "risk factor"
 
     def test_enum_membership(self) -> None:

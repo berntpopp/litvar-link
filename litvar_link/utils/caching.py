@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import functools
 import time
-from typing import TYPE_CHECKING, Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from async_lru import alru_cache
 
 from litvar_link.logging_config import log_cache_operation
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable
+    from collections.abc import Awaitable, Coroutine
 
     from structlog.typing import FilteringBoundLogger
 
@@ -37,9 +38,7 @@ class CacheManager:
     def cache_stats(self) -> dict[str, Any]:
         """Get comprehensive cache statistics."""
         total_requests = self._cache_stats["hits"] + self._cache_stats["misses"]
-        hit_rate = (
-            self._cache_stats["hits"] / total_requests if total_requests > 0 else 0.0
-        )
+        hit_rate = self._cache_stats["hits"] / total_requests if total_requests > 0 else 0.0
 
         return {
             "hits": self._cache_stats["hits"],
@@ -95,7 +94,9 @@ class CacheManager:
 
         def decorator(func: Callable[..., Awaitable[R]]) -> Callable[..., Awaitable[R]]:
             # Create the cached version using alru_cache
-            cached_func = alru_cache(maxsize=maxsize, ttl=ttl)(func)
+            cached_func = alru_cache(maxsize=maxsize, ttl=ttl)(
+                cast("Callable[..., Coroutine[Any, Any, R]]", func),
+            )
             self._cached_functions.append(cached_func)
 
             @functools.wraps(func)
@@ -164,7 +165,8 @@ class CacheManager:
 
         for cached_func in self._cached_functions:
             if hasattr(cached_func, "cache_info") and hasattr(
-                cached_func, "cache_clear",
+                cached_func,
+                "cache_clear",
             ):
                 info_before = cached_func.cache_info()
                 cached_func.cache_clear()

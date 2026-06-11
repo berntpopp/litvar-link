@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from litvar_link.exceptions import ValidationError
 from litvar_link.logging_config import log_error_with_context
@@ -73,31 +73,37 @@ class VariantService:
     def _setup_cached_methods(self) -> None:
         """Set up cached methods using the cache manager."""
         # Use config values or defaults for search variants
-        search_maxsize = (
-            self.cache_config.size if hasattr(self.cache_config, "size") else 256
-        )
-        search_ttl = (
-            self.cache_config.ttl if hasattr(self.cache_config, "ttl") else 3600
-        )
+        search_maxsize = self.cache_config.size if hasattr(self.cache_config, "size") else 256
+        search_ttl = self.cache_config.ttl if hasattr(self.cache_config, "ttl") else 3600
 
         self._cached_search_variants = self.cache.cached(
-            maxsize=search_maxsize, ttl=search_ttl, key_pattern="search_variants",
+            maxsize=search_maxsize,
+            ttl=search_ttl,
+            key_pattern="search_variants",
         )(self._search_variants_impl)
 
         self._cached_get_variant_details = self.cache.cached(
-            maxsize=500, ttl=7200, key_pattern="variant_details",
+            maxsize=500,
+            ttl=7200,
+            key_pattern="variant_details",
         )(self._get_variant_details_impl)
 
         self._cached_get_variant_publications = self.cache.cached(
-            maxsize=500, ttl=3600, key_pattern="variant_publications",
+            maxsize=500,
+            ttl=3600,
+            key_pattern="variant_publications",
         )(self._get_variant_publications_impl)
 
         self._cached_sensor_lookup = self.cache.cached(
-            maxsize=1000, ttl=86400, key_pattern="sensor_lookup",
+            maxsize=1000,
+            ttl=86400,
+            key_pattern="sensor_lookup",
         )(self._sensor_lookup_impl)
 
         self._cached_get_variants_by_gene = self.cache.cached(
-            maxsize=200, ttl=3600, key_pattern="gene_variants",
+            maxsize=200,
+            ttl=3600,
+            key_pattern="gene_variants",
         )(self._get_variants_by_gene_impl)
 
     async def _search_variants_impl(
@@ -116,7 +122,7 @@ class VariantService:
         """Get variant publications implementation."""
         return await self.client.get_variant_publications(variant_id)
 
-    async def _sensor_lookup_impl(self, rsid: str) -> dict[str, Any]:
+    async def _sensor_lookup_impl(self, rsid: str) -> dict[str, Any] | None:
         """RSID sensor lookup implementation."""
         return await self.client.sensor_lookup(rsid)
 
@@ -264,7 +270,8 @@ class VariantService:
             variant = VariantDetails(**variant_data)
 
             return VariantDetailsResponse(
-                variant=variant,
+                # VariantDetails/VariantDetailsItem reconciliation is deferred to P3.
+                variant=cast("Any", variant),
                 cached=cached,
             )
 
@@ -491,14 +498,9 @@ class VariantService:
                     and variant.data_clinical_significance
                 ):
                     clinical_sigs = variant.data_clinical_significance
-                    if any(
-                        sig in ["pathogenic", "likely pathogenic"]
-                        for sig in clinical_sigs
-                    ):
+                    if any(sig in ["pathogenic", "likely pathogenic"] for sig in clinical_sigs):
                         pathogenic_count += 1
-                    elif any(
-                        sig in ["benign", "likely benign"] for sig in clinical_sigs
-                    ):
+                    elif any(sig in ["benign", "likely benign"] for sig in clinical_sigs):
                         benign_count += 1
                     else:
                         uncertain_count += 1

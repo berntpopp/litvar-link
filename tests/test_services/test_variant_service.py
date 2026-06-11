@@ -661,7 +661,9 @@ class TestVariantService:
         """Test cache TTL expiration."""
         # Create service with very short TTL
         cache_config = CacheConfig(
-            size=100, ttl=60, stats_enabled=True,
+            size=100,
+            ttl=60,
+            stats_enabled=True,
         )  # 60 second TTL (minimum)
         service = VariantService(mock_client, cache_config, mock_logger)
 
@@ -758,7 +760,6 @@ class TestVariantService:
         assert isinstance(result, PublicationResponse)
         assert len(result.pmids) == 0
         assert result.total_count == 0
-
 
     @pytest.mark.asyncio
     async def test_service_cleanup(

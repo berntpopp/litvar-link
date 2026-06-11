@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Path
 
 from litvar_link.exceptions import LitVarAPIError, ValidationError
 from litvar_link.models import GeneVariantsResponse
+
 from .dependencies import LoggerDep, ServiceDep
 
 router = APIRouter(prefix="/api/genes", tags=["Genes"])
@@ -113,8 +114,9 @@ async def get_gene_variants(
             },
         },
     ),
-    service: ServiceDep = ...,
-    logger: LoggerDep = ...,
+    *,
+    service: ServiceDep,
+    logger: LoggerDep,
 ) -> GeneVariantsResponse:
     """Retrieve comprehensive variant information for a specific gene.
 
@@ -192,10 +194,10 @@ async def get_gene_variants(
 
     except ValidationError as e:
         logger.warning("Validation error in gene variants", error=str(e))
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except LitVarAPIError as e:
         logger.exception("API error in gene variants", error=str(e))
-        raise HTTPException(status_code=502, detail="LitVar2 API error")
+        raise HTTPException(status_code=502, detail="LitVar2 API error") from e
     except Exception as e:
         logger.error("Unexpected error in gene variants", error=str(e), exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e

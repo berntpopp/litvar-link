@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from typing import Annotated
 
 from fastapi import Depends
@@ -20,7 +21,7 @@ def get_logger() -> FilteringBoundLogger:
 
 async def get_litvar_client(
     logger: Annotated[FilteringBoundLogger, Depends(get_logger)],
-) -> LitVar2Client:
+) -> AsyncGenerator[LitVar2Client, None]:
     """Get LitVar2 API client instance."""
     config = get_api_config()
     client = LitVar2Client(config=config, logger=logger)

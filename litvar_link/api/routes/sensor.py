@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Path
 
 from litvar_link.exceptions import LitVarAPIError, ValidationError
 from litvar_link.models import SensorResponse
+
 from .dependencies import LoggerDep, ServiceDep
 
 router = APIRouter(prefix="/api/sensor", tags=["Sensor"])
@@ -102,8 +103,9 @@ async def lookup_rsid(
             },
         },
     ),
-    service: ServiceDep = ...,
-    logger: LoggerDep = ...,
+    *,
+    service: ServiceDep,
+    logger: LoggerDep,
 ) -> SensorResponse:
     """Check Reference SNP ID (RSID) availability in LitVar2 database.
 
@@ -182,10 +184,10 @@ async def lookup_rsid(
 
     except ValidationError as e:
         logger.warning("Validation error in RSID lookup", error=str(e))
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except LitVarAPIError as e:
         logger.exception("API error in RSID lookup", error=str(e))
-        raise HTTPException(status_code=502, detail="LitVar2 API error")
+        raise HTTPException(status_code=502, detail="LitVar2 API error") from e
     except Exception as e:
         logger.error("Unexpected error in RSID lookup", error=str(e), exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e

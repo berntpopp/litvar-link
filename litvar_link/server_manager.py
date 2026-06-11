@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import uvicorn
 
@@ -42,7 +42,9 @@ class UnifiedServerManager:
             log_server_startup(self.logger, "unified", host, port)
 
         # Add MCP endpoint to the main app
-        app.mount(settings.mcp_path, mcp_app.mcp_router)
+        # fastmcp's FastMCP does not declare mcp_router in its type stubs;
+        # the explicit MCP facade rewrite is deferred to P3.
+        app.mount(settings.mcp_path, cast("Any", mcp_app).mcp_router)
 
         config = uvicorn.Config(
             app=app,

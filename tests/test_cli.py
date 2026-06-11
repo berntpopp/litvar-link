@@ -109,15 +109,18 @@ class TestSearchVariants:
 
         with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
-            with patch("litvar_link.cli.VariantService", return_value=mock_service):
-                with patch("litvar_link.cli.console.print") as mock_print:
-                    await cli.search_variants("BRCA1", limit=5)
+            with (
+                patch("litvar_link.cli.VariantService", return_value=mock_service),
+                patch("litvar_link.cli.console.print") as mock_print,
+            ):
+                await cli.search_variants("BRCA1", limit=5)
 
-                    mock_service.search_variants.assert_called_once_with(
-                        query="BRCA1", limit=5,
-                    )
-                    # Should print table and summary
-                    assert mock_print.call_count >= 2
+                mock_service.search_variants.assert_called_once_with(
+                    query="BRCA1",
+                    limit=5,
+                )
+                # Should print table and summary
+                assert mock_print.call_count >= 2
 
     @pytest.mark.asyncio
     async def test_search_variants_with_long_id(self):
@@ -143,13 +146,15 @@ class TestSearchVariants:
 
         with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
-            with patch("litvar_link.cli.VariantService", return_value=mock_service):
-                with patch("litvar_link.cli.console.print") as mock_print:
-                    await cli.search_variants("test")
+            with (
+                patch("litvar_link.cli.VariantService", return_value=mock_service),
+                patch("litvar_link.cli.console.print") as mock_print,
+            ):
+                await cli.search_variants("test")
 
-                    # Should print cached message
-                    calls = [str(call) for call in mock_print.call_args_list]
-                    assert any("cache" in call.lower() for call in calls)
+                # Should print cached message
+                calls = [str(call) for call in mock_print.call_args_list]
+                assert any("cache" in call.lower() for call in calls)
 
     @pytest.mark.asyncio
     async def test_search_variants_failure(self):
@@ -161,16 +166,18 @@ class TestSearchVariants:
 
         with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
-            with patch("litvar_link.cli.VariantService", return_value=mock_service):
-                with patch("litvar_link.cli.console.print") as mock_print:
-                    with patch("sys.exit") as mock_exit:
-                        await cli.search_variants("test")
+            with (
+                patch("litvar_link.cli.VariantService", return_value=mock_service),
+                patch("litvar_link.cli.console.print") as mock_print,
+                patch("sys.exit") as mock_exit,
+            ):
+                await cli.search_variants("test")
 
-                        mock_exit.assert_called_once_with(1)
-                        # Should print error message
-                        call_args = mock_print.call_args[0][0]
-                        output_text = render_rich_object(call_args)
-                        assert "search failed" in output_text.lower()
+                mock_exit.assert_called_once_with(1)
+                # Should print error message
+                call_args = mock_print.call_args[0][0]
+                output_text = render_rich_object(call_args)
+                assert "search failed" in output_text.lower()
 
 
 class TestLookupRSID:
@@ -192,15 +199,17 @@ class TestLookupRSID:
 
         with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
-            with patch("litvar_link.cli.VariantService", return_value=mock_service):
-                with patch("litvar_link.cli.console.print") as mock_print:
-                    await cli.lookup_rsid("rs1061170")
+            with (
+                patch("litvar_link.cli.VariantService", return_value=mock_service),
+                patch("litvar_link.cli.console.print") as mock_print,
+            ):
+                await cli.lookup_rsid("rs1061170")
 
-                    mock_service.lookup_rsid.assert_called_once_with("rs1061170")
-                    # Should print success message
-                    call_args = mock_print.call_args[0][0]
-                    output_text = render_rich_object(call_args)
-                    assert "available" in output_text.lower()
+                mock_service.lookup_rsid.assert_called_once_with("rs1061170")
+                # Should print success message
+                call_args = mock_print.call_args[0][0]
+                output_text = render_rich_object(call_args)
+                assert "available" in output_text.lower()
 
     @pytest.mark.asyncio
     async def test_rsid_lookup_not_available(self):
@@ -215,14 +224,16 @@ class TestLookupRSID:
 
         with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
-            with patch("litvar_link.cli.VariantService", return_value=mock_service):
-                with patch("litvar_link.cli.console.print") as mock_print:
-                    await cli.lookup_rsid("rs999999")
+            with (
+                patch("litvar_link.cli.VariantService", return_value=mock_service),
+                patch("litvar_link.cli.console.print") as mock_print,
+            ):
+                await cli.lookup_rsid("rs999999")
 
-                    # Should print not found message
-                    call_args = mock_print.call_args[0][0]
-                    output_text = render_rich_object(call_args)
-                    assert "not found" in output_text.lower()
+                # Should print not found message
+                call_args = mock_print.call_args[0][0]
+                output_text = render_rich_object(call_args)
+                assert "not found" in output_text.lower()
 
     @pytest.mark.asyncio
     async def test_rsid_lookup_with_none_values(self):
@@ -240,14 +251,16 @@ class TestLookupRSID:
 
         with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
-            with patch("litvar_link.cli.VariantService", return_value=mock_service):
-                with patch("litvar_link.cli.console.print") as mock_print:
-                    await cli.lookup_rsid("rs123")
+            with (
+                patch("litvar_link.cli.VariantService", return_value=mock_service),
+                patch("litvar_link.cli.console.print") as mock_print,
+            ):
+                await cli.lookup_rsid("rs123")
 
-                    # Should handle None values gracefully
-                    call_args = mock_print.call_args[0][0]
-                    output_text = render_rich_object(call_args)
-                    assert "Unknown" in output_text
+                # Should handle None values gracefully
+                call_args = mock_print.call_args[0][0]
+                output_text = render_rich_object(call_args)
+                assert "Unknown" in output_text
 
     @pytest.mark.asyncio
     async def test_rsid_lookup_failure(self):
@@ -259,16 +272,18 @@ class TestLookupRSID:
 
         with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
-            with patch("litvar_link.cli.VariantService", return_value=mock_service):
-                with patch("litvar_link.cli.console.print") as mock_print:
-                    with patch("sys.exit") as mock_exit:
-                        await cli.lookup_rsid("rs123")
+            with (
+                patch("litvar_link.cli.VariantService", return_value=mock_service),
+                patch("litvar_link.cli.console.print") as mock_print,
+                patch("sys.exit") as mock_exit,
+            ):
+                await cli.lookup_rsid("rs123")
 
-                        mock_exit.assert_called_once_with(1)
-                        # Should print error message
-                        call_args = mock_print.call_args[0][0]
-                        output_text = render_rich_object(call_args)
-                        assert "lookup failed" in output_text.lower()
+                mock_exit.assert_called_once_with(1)
+                # Should print error message
+                call_args = mock_print.call_args[0][0]
+                output_text = render_rich_object(call_args)
+                assert "lookup failed" in output_text.lower()
 
 
 class TestSearchGeneVariants:
@@ -295,13 +310,15 @@ class TestSearchGeneVariants:
 
         with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
-            with patch("litvar_link.cli.VariantService", return_value=mock_service):
-                with patch("litvar_link.cli.console.print") as mock_print:
-                    await cli.search_gene_variants("CFH", limit=10)
+            with (
+                patch("litvar_link.cli.VariantService", return_value=mock_service),
+                patch("litvar_link.cli.console.print") as mock_print,
+            ):
+                await cli.search_gene_variants("CFH", limit=10)
 
-                    mock_service.search_gene_variants.assert_called_once_with("CFH")
-                    # Should print table and statistics
-                    assert mock_print.call_count >= 2
+                mock_service.search_gene_variants.assert_called_once_with("CFH")
+                # Should print table and statistics
+                assert mock_print.call_count >= 2
 
     @pytest.mark.asyncio
     async def test_gene_variants_no_rsid(self):
@@ -324,9 +341,11 @@ class TestSearchGeneVariants:
 
         with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
-            with patch("litvar_link.cli.VariantService", return_value=mock_service):
-                with patch("litvar_link.cli.console.print"):
-                    await cli.search_gene_variants("TEST")
+            with (
+                patch("litvar_link.cli.VariantService", return_value=mock_service),
+                patch("litvar_link.cli.console.print"),
+            ):
+                await cli.search_gene_variants("TEST")
 
     @pytest.mark.asyncio
     async def test_gene_variants_failure(self):
@@ -338,16 +357,18 @@ class TestSearchGeneVariants:
 
         with patch("litvar_link.cli.LitVar2Client") as mock_client_class:
             mock_client_class.return_value.__aenter__.return_value = mock_client
-            with patch("litvar_link.cli.VariantService", return_value=mock_service):
-                with patch("litvar_link.cli.console.print") as mock_print:
-                    with patch("sys.exit") as mock_exit:
-                        await cli.search_gene_variants("INVALID")
+            with (
+                patch("litvar_link.cli.VariantService", return_value=mock_service),
+                patch("litvar_link.cli.console.print") as mock_print,
+                patch("sys.exit") as mock_exit,
+            ):
+                await cli.search_gene_variants("INVALID")
 
-                        mock_exit.assert_called_once_with(1)
-                        # Should print error message
-                        call_args = mock_print.call_args[0][0]
-                        output_text = render_rich_object(call_args)
-                        assert "search failed" in output_text.lower()
+                mock_exit.assert_called_once_with(1)
+                # Should print error message
+                call_args = mock_print.call_args[0][0]
+                output_text = render_rich_object(call_args)
+                assert "search failed" in output_text.lower()
 
 
 class TestServerCommands:
@@ -359,10 +380,12 @@ class TestServerCommands:
         mock_manager = AsyncMock()
 
         with patch("litvar_link.cli.UnifiedServerManager", return_value=mock_manager):
-            await cli.serve_http("0.0.0.0", 8080, True)
+            await cli.serve_http("0.0.0.0", 8080, True)  # noqa: S104
 
             mock_manager.start_http_only_server.assert_called_once_with(
-                host="0.0.0.0", port=8080, reload=True,
+                host="0.0.0.0",  # noqa: S104
+                port=8080,
+                reload=True,
             )
 
     @pytest.mark.asyncio
@@ -381,10 +404,12 @@ class TestServerCommands:
         mock_manager = AsyncMock()
         mock_manager.start_http_only_server.side_effect = Exception("Server error")
 
-        with patch("litvar_link.cli.UnifiedServerManager", return_value=mock_manager):
-            with patch("sys.exit") as mock_exit:
-                await cli.serve_http()
-                mock_exit.assert_called_once_with(1)
+        with (
+            patch("litvar_link.cli.UnifiedServerManager", return_value=mock_manager),
+            patch("sys.exit") as mock_exit,
+        ):
+            await cli.serve_http()
+            mock_exit.assert_called_once_with(1)
 
     @pytest.mark.asyncio
     async def test_serve_unified_success(self):
@@ -395,7 +420,9 @@ class TestServerCommands:
             await cli.serve_unified("127.0.0.1", 9000, False)
 
             mock_manager.start_unified_server.assert_called_once_with(
-                host="127.0.0.1", port=9000, reload=False,
+                host="127.0.0.1",
+                port=9000,
+                reload=False,
             )
 
     @pytest.mark.asyncio
@@ -414,10 +441,12 @@ class TestServerCommands:
         mock_manager = AsyncMock()
         mock_manager.start_unified_server.side_effect = Exception("Unified error")
 
-        with patch("litvar_link.cli.UnifiedServerManager", return_value=mock_manager):
-            with patch("sys.exit") as mock_exit:
-                await cli.serve_unified()
-                mock_exit.assert_called_once_with(1)
+        with (
+            patch("litvar_link.cli.UnifiedServerManager", return_value=mock_manager),
+            patch("sys.exit") as mock_exit,
+        ):
+            await cli.serve_unified()
+            mock_exit.assert_called_once_with(1)
 
     @pytest.mark.asyncio
     async def test_serve_mcp_success(self):
@@ -445,10 +474,12 @@ class TestServerCommands:
         mock_manager = AsyncMock()
         mock_manager.start_stdio_server.side_effect = Exception("MCP error")
 
-        with patch("litvar_link.cli.UnifiedServerManager", return_value=mock_manager):
-            with patch("sys.exit") as mock_exit:
-                await cli.serve_mcp_only()
-                mock_exit.assert_called_once_with(1)
+        with (
+            patch("litvar_link.cli.UnifiedServerManager", return_value=mock_manager),
+            patch("sys.exit") as mock_exit,
+        ):
+            await cli.serve_mcp_only()
+            mock_exit.assert_called_once_with(1)
 
 
 class TestMainFunction:
@@ -475,13 +506,15 @@ class TestMainFunction:
                 coro.close()
                 return
 
-            with patch("asyncio.run", side_effect=mock_run_func) as mock_run:
-                with patch("litvar_link.cli.search_variants"):
-                    cli.main()
-                    mock_run.assert_called_once()
-                    # Verify search_variants was called with correct args
-                    mock_run.call_args[0][0]
-                    # The call_args should be the result of search_variants("BRCA1", 5)
+            with (
+                patch("asyncio.run", side_effect=mock_run_func) as mock_run,
+                patch("litvar_link.cli.search_variants"),
+            ):
+                cli.main()
+                mock_run.assert_called_once()
+                # Verify search_variants was called with correct args
+                mock_run.call_args[0][0]
+                # The call_args should be the result of search_variants("BRCA1", 5)
 
     def test_main_search_command_default_limit(self):
         """Test main function with search command using default limit."""
@@ -540,7 +573,7 @@ class TestMainFunction:
                 "serve",
                 "http",
                 "--host",
-                "0.0.0.0",
+                "0.0.0.0",  # noqa: S104
                 "--port",
                 "8080",
                 "--reload",
@@ -593,20 +626,22 @@ class TestMainFunction:
 
     def test_main_serve_no_subcommand(self):
         """Test main function with serve but no subcommand."""
-        with patch("sys.argv", ["litvar-link", "serve"]):
-            # This actually prints help and doesn't exit, which is the current behavior
-            with patch("argparse.ArgumentParser.print_help"):
-                cli.main()
-                # The subparser should print help when no subcommand is provided
-                # This may not call print_help directly but shows usage
+        with (
+            patch("sys.argv", ["litvar-link", "serve"]),
+            patch("argparse.ArgumentParser.print_help"),
+        ):
+            cli.main()
+            # The subparser should print help when no subcommand is provided
+            # This may not call print_help directly but shows usage
 
     def test_main_no_command(self):
         """Test main function with no command."""
-        with patch("sys.argv", ["litvar-link"]):
-            # Should call print_help when no command is provided
-            with patch("argparse.ArgumentParser.print_help") as mock_help:
-                cli.main()
-                mock_help.assert_called_once()
+        with (
+            patch("sys.argv", ["litvar-link"]),
+            patch("argparse.ArgumentParser.print_help") as mock_help,
+        ):
+            cli.main()
+            mock_help.assert_called_once()
 
     def test_main_invalid_command(self):
         """Test main function with invalid command."""
@@ -658,10 +693,10 @@ class TestArgumentParsing:
         http_parser.add_argument("--reload", action="store_true")
 
         args = parser.parse_args(
-            ["serve", "http", "--host", "0.0.0.0", "--port", "8080", "--reload"],
+            ["serve", "http", "--host", "0.0.0.0", "--port", "8080", "--reload"],  # noqa: S104
         )
         assert args.command == "serve"
         assert args.serve_mode == "http"
-        assert args.host == "0.0.0.0"
+        assert args.host == "0.0.0.0"  # noqa: S104
         assert args.port == 8080
         assert args.reload is True

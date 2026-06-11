@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Path
 
 from litvar_link.exceptions import LitVarAPIError, ValidationError
 from litvar_link.models import PublicationResponse
+
 from .dependencies import LoggerDep, ServiceDep
 
 router = APIRouter(prefix="/api/publications", tags=["Publications"])
@@ -116,8 +117,9 @@ async def get_variant_publications(
             },
         },
     ),
-    service: ServiceDep = ...,
-    logger: LoggerDep = ...,
+    *,
+    service: ServiceDep,
+    logger: LoggerDep,
 ) -> PublicationResponse:
     """Retrieve comprehensive literature for genetic variant research.
 
@@ -204,14 +206,14 @@ async def get_variant_publications(
 
     except ValidationError as e:
         logger.warning("Validation error in variant publications", error=str(e))
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except LitVarAPIError as e:
         logger.exception("API error in variant publications", error=str(e))
-        raise HTTPException(status_code=502, detail="LitVar2 API error")
+        raise HTTPException(status_code=502, detail="LitVar2 API error") from e
     except Exception as e:
         logger.error(
             "Unexpected error in variant publications",
             error=str(e),
             exc_info=True,
         )
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e

@@ -3,8 +3,8 @@
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
 from litvar_link.app import create_app
 from litvar_link.exceptions import LitVarAPIError, ValidationError
@@ -332,7 +332,10 @@ class TestPublicationRoutes:
         ],
     )
     def test_get_variant_publications_comprehensive_error_handling(
-        self, client: TestClient, exception: Exception, expected_status: int,
+        self,
+        client: TestClient,
+        exception: Exception,
+        expected_status: int,
     ) -> None:
         """Test comprehensive error handling for variant publications endpoint."""
         mock_service = AsyncMock()
@@ -436,7 +439,10 @@ class TestGeneRoutes:
         ],
     )
     def test_get_gene_variants_error_handling(
-        self, client: TestClient, exception: Exception, expected_status: int,
+        self,
+        client: TestClient,
+        exception: Exception,
+        expected_status: int,
     ) -> None:
         """Test error handling for the get_gene_variants endpoint."""
         mock_service = AsyncMock()
@@ -563,7 +569,10 @@ class TestSensorRoutes:
         ],
     )
     def test_lookup_rsid_comprehensive_error_handling(
-        self, client: TestClient, exception: Exception, expected_status: int,
+        self,
+        client: TestClient,
+        exception: Exception,
+        expected_status: int,
     ) -> None:
         """Test comprehensive error handling for RSID lookup endpoint."""
         mock_service = AsyncMock()
@@ -814,9 +823,7 @@ class TestRequestValidation:
         """Test path parameter validation."""
         # Test empty path parameters
         response = client.get("/api/genes//variants")  # Empty gene name
-        assert (
-            response.status_code == 404
-        )  # FastAPI returns 404 for missing path params
+        assert response.status_code == 404  # FastAPI returns 404 for missing path params
 
     def test_query_parameter_types(self, client: TestClient) -> None:
         """Test query parameter type validation."""

@@ -6,8 +6,8 @@ import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
-from httpx import ConnectTimeout, HTTPStatusError, ReadTimeout
 import pytest
+from httpx import ConnectTimeout, HTTPStatusError, ReadTimeout
 
 from litvar_link.api.client import LitVar2Client, TokenBucketRateLimiter
 from litvar_link.config import APIConfig
@@ -680,7 +680,7 @@ class TestLitVar2Client:
             mock_request.return_value = mock_response
 
             async with LitVar2Client(config=api_config, logger=mock_logger) as client:
-                with pytest.raises(ServiceUnavailableError, match="service error.*500"):
+                with pytest.raises(ServiceUnavailableError, match=r"service error.*500"):
                     await client.search_variants("test")
 
     @pytest.mark.asyncio
@@ -701,7 +701,7 @@ class TestLitVar2Client:
             mock_request.return_value = mock_response
 
             async with LitVar2Client(config=api_config, logger=mock_logger) as client:
-                with pytest.raises(ServiceUnavailableError, match="service error.*503"):
+                with pytest.raises(ServiceUnavailableError, match=r"service error.*503"):
                     await client.search_variants("test")
 
     def test_ndjson_parsing_directly(
@@ -764,7 +764,8 @@ another invalid line without json"""
                 mock_request.side_effect = http_error
 
                 async with LitVar2Client(
-                    config=api_config, logger=mock_logger,
+                    config=api_config,
+                    logger=mock_logger,
                 ) as client:
                     with pytest.raises(expected_exception):
                         await client.search_variants("test")

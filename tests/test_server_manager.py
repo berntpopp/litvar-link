@@ -36,30 +36,35 @@ class TestUnifiedServerManager:
             mock_server = AsyncMock()
             mock_server_class.return_value = mock_server
 
-            with patch("litvar_link.server_manager.log_server_startup") as mock_log:
-                with patch("litvar_link.server_manager.app") as mock_app:
-                    with patch("litvar_link.server_manager.mcp_app"):
-                        await manager.start_unified_server()
+            with (
+                patch("litvar_link.server_manager.log_server_startup") as mock_log,
+                patch("litvar_link.server_manager.app") as mock_app,
+                patch("litvar_link.server_manager.mcp_app"),
+            ):
+                await manager.start_unified_server()
 
-                        # Check logging
-                        mock_log.assert_called_once_with(
-                            mock_logger, "unified", "127.0.0.1", 8000,
-                        )
+                # Check logging
+                mock_log.assert_called_once_with(
+                    mock_logger,
+                    "unified",
+                    "127.0.0.1",
+                    8000,
+                )
 
-                        # Check MCP mount
-                        mock_app.mount.assert_called_once()
+                # Check MCP mount
+                mock_app.mount.assert_called_once()
 
-                        # Check server creation and start
-                        mock_server_class.assert_called_once()
-                        config_arg = mock_server_class.call_args[0][0]
-                        assert isinstance(config_arg, uvicorn.Config)
-                        assert config_arg.host == "127.0.0.1"
-                        assert config_arg.port == 8000
-                        assert config_arg.reload is False
-                        assert config_arg.log_config is None
-                        assert config_arg.access_log is False
+                # Check server creation and start
+                mock_server_class.assert_called_once()
+                config_arg = mock_server_class.call_args[0][0]
+                assert isinstance(config_arg, uvicorn.Config)
+                assert config_arg.host == "127.0.0.1"
+                assert config_arg.port == 8000
+                assert config_arg.reload is False
+                assert config_arg.log_config is None
+                assert config_arg.access_log is False
 
-                        mock_server.serve.assert_called_once()
+                mock_server.serve.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_start_unified_server_with_custom_params(self):
@@ -71,23 +76,30 @@ class TestUnifiedServerManager:
             mock_server = AsyncMock()
             mock_server_class.return_value = mock_server
 
-            with patch("litvar_link.server_manager.log_server_startup") as mock_log:
-                with patch("litvar_link.server_manager.app"):
-                    with patch("litvar_link.server_manager.mcp_app"):
-                        await manager.start_unified_server(
-                            host="0.0.0.0", port=9000, reload=True,
-                        )
+            with (
+                patch("litvar_link.server_manager.log_server_startup") as mock_log,
+                patch("litvar_link.server_manager.app"),
+                patch("litvar_link.server_manager.mcp_app"),
+            ):
+                await manager.start_unified_server(
+                    host="0.0.0.0",  # noqa: S104
+                    port=9000,
+                    reload=True,
+                )
 
-                        # Check logging with custom params
-                        mock_log.assert_called_once_with(
-                            mock_logger, "unified", "0.0.0.0", 9000,
-                        )
+                # Check logging with custom params
+                mock_log.assert_called_once_with(
+                    mock_logger,
+                    "unified",
+                    "0.0.0.0",  # noqa: S104
+                    9000,
+                )
 
-                        # Check server config
-                        config_arg = mock_server_class.call_args[0][0]
-                        assert config_arg.host == "0.0.0.0"
-                        assert config_arg.port == 9000
-                        assert config_arg.reload is True
+                # Check server config
+                config_arg = mock_server_class.call_args[0][0]
+                assert config_arg.host == "0.0.0.0"  # noqa: S104
+                assert config_arg.port == 9000
+                assert config_arg.reload is True
 
     @pytest.mark.asyncio
     async def test_start_unified_server_without_logger(self):
@@ -98,13 +110,15 @@ class TestUnifiedServerManager:
             mock_server = AsyncMock()
             mock_server_class.return_value = mock_server
 
-            with patch("litvar_link.server_manager.log_server_startup") as mock_log:
-                with patch("litvar_link.server_manager.app"):
-                    with patch("litvar_link.server_manager.mcp_app"):
-                        await manager.start_unified_server()
+            with (
+                patch("litvar_link.server_manager.log_server_startup") as mock_log,
+                patch("litvar_link.server_manager.app"),
+                patch("litvar_link.server_manager.mcp_app"),
+            ):
+                await manager.start_unified_server()
 
-                        # Should not call logging
-                        mock_log.assert_not_called()
+                # Should not call logging
+                mock_log.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_start_http_only_server_with_defaults(self):
@@ -116,27 +130,32 @@ class TestUnifiedServerManager:
             mock_server = AsyncMock()
             mock_server_class.return_value = mock_server
 
-            with patch("litvar_link.server_manager.log_server_startup") as mock_log:
-                with patch("litvar_link.server_manager.app") as mock_app:
-                    await manager.start_http_only_server()
+            with (
+                patch("litvar_link.server_manager.log_server_startup") as mock_log,
+                patch("litvar_link.server_manager.app") as mock_app,
+            ):
+                await manager.start_http_only_server()
 
-                    # Check logging
-                    mock_log.assert_called_once_with(
-                        mock_logger, "http", "127.0.0.1", 8000,
-                    )
+                # Check logging
+                mock_log.assert_called_once_with(
+                    mock_logger,
+                    "http",
+                    "127.0.0.1",
+                    8000,
+                )
 
-                    # Should NOT mount MCP
-                    mock_app.mount.assert_not_called()
+                # Should NOT mount MCP
+                mock_app.mount.assert_not_called()
 
-                    # Check server creation and start
-                    mock_server_class.assert_called_once()
-                    config_arg = mock_server_class.call_args[0][0]
-                    assert isinstance(config_arg, uvicorn.Config)
-                    assert config_arg.host == "127.0.0.1"
-                    assert config_arg.port == 8000
-                    assert config_arg.reload is False
+                # Check server creation and start
+                mock_server_class.assert_called_once()
+                config_arg = mock_server_class.call_args[0][0]
+                assert isinstance(config_arg, uvicorn.Config)
+                assert config_arg.host == "127.0.0.1"
+                assert config_arg.port == 8000
+                assert config_arg.reload is False
 
-                    mock_server.serve.assert_called_once()
+                mock_server.serve.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_start_http_only_server_with_custom_params(self):
@@ -148,22 +167,29 @@ class TestUnifiedServerManager:
             mock_server = AsyncMock()
             mock_server_class.return_value = mock_server
 
-            with patch("litvar_link.server_manager.log_server_startup") as mock_log:
-                with patch("litvar_link.server_manager.app"):
-                    await manager.start_http_only_server(
-                        host="192.168.1.100", port=8080, reload=True,
-                    )
+            with (
+                patch("litvar_link.server_manager.log_server_startup") as mock_log,
+                patch("litvar_link.server_manager.app"),
+            ):
+                await manager.start_http_only_server(
+                    host="192.168.1.100",
+                    port=8080,
+                    reload=True,
+                )
 
-                    # Check logging with custom params
-                    mock_log.assert_called_once_with(
-                        mock_logger, "http", "192.168.1.100", 8080,
-                    )
+                # Check logging with custom params
+                mock_log.assert_called_once_with(
+                    mock_logger,
+                    "http",
+                    "192.168.1.100",
+                    8080,
+                )
 
-                    # Check server config
-                    config_arg = mock_server_class.call_args[0][0]
-                    assert config_arg.host == "192.168.1.100"
-                    assert config_arg.port == 8080
-                    assert config_arg.reload is True
+                # Check server config
+                config_arg = mock_server_class.call_args[0][0]
+                assert config_arg.host == "192.168.1.100"
+                assert config_arg.port == 8080
+                assert config_arg.reload is True
 
     @pytest.mark.asyncio
     async def test_start_http_only_server_without_logger(self):
@@ -174,12 +200,14 @@ class TestUnifiedServerManager:
             mock_server = AsyncMock()
             mock_server_class.return_value = mock_server
 
-            with patch("litvar_link.server_manager.log_server_startup") as mock_log:
-                with patch("litvar_link.server_manager.app"):
-                    await manager.start_http_only_server()
+            with (
+                patch("litvar_link.server_manager.log_server_startup") as mock_log,
+                patch("litvar_link.server_manager.app"),
+            ):
+                await manager.start_http_only_server()
 
-                    # Should not call logging
-                    mock_log.assert_not_called()
+                # Should not call logging
+                mock_log.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_start_stdio_server_with_logger(self):
@@ -192,22 +220,23 @@ class TestUnifiedServerManager:
         mock_mcp = AsyncMock()
         mock_lifespan = AsyncMock()
 
-        with patch("litvar_link.server_manager.log_server_startup") as mock_log:
-            with patch("litvar_link.app.create_app", return_value=mock_app):
-                with patch("litvar_link.app.create_mcp_app", return_value=mock_mcp):
-                    with patch("litvar_link.app.lifespan", return_value=mock_lifespan):
-                        # Make the async context manager work
-                        mock_lifespan.__aenter__ = AsyncMock(return_value=None)
-                        mock_lifespan.__aexit__ = AsyncMock(return_value=None)
+        with (
+            patch("litvar_link.server_manager.log_server_startup") as mock_log,
+            patch("litvar_link.app.create_app", return_value=mock_app),
+            patch("litvar_link.app.create_mcp_app", return_value=mock_mcp),
+            patch("litvar_link.app.lifespan", return_value=mock_lifespan),
+        ):
+            mock_lifespan.__aenter__ = AsyncMock(return_value=None)
+            mock_lifespan.__aexit__ = AsyncMock(return_value=None)
 
-                        await manager.start_stdio_server()
+            await manager.start_stdio_server()
 
-                        # Check logging calls
-                        mock_log.assert_called_once_with(mock_logger, "stdio")
-                        assert mock_logger.info.call_count >= 2
+            # Check logging calls
+            mock_log.assert_called_once_with(mock_logger, "stdio")
+            assert mock_logger.info.call_count >= 2
 
-                        # Check MCP server run
-                        mock_mcp.run_async.assert_called_once_with(transport="stdio")
+            # Check MCP server run
+            mock_mcp.run_async.assert_called_once_with(transport="stdio")
 
     @pytest.mark.asyncio
     async def test_start_stdio_server_without_logger(self):
@@ -219,21 +248,22 @@ class TestUnifiedServerManager:
         mock_mcp = AsyncMock()
         mock_lifespan = AsyncMock()
 
-        with patch("litvar_link.server_manager.log_server_startup") as mock_log:
-            with patch("litvar_link.app.create_app", return_value=mock_app):
-                with patch("litvar_link.app.create_mcp_app", return_value=mock_mcp):
-                    with patch("litvar_link.app.lifespan", return_value=mock_lifespan):
-                        # Make the async context manager work
-                        mock_lifespan.__aenter__ = AsyncMock(return_value=None)
-                        mock_lifespan.__aexit__ = AsyncMock(return_value=None)
+        with (
+            patch("litvar_link.server_manager.log_server_startup") as mock_log,
+            patch("litvar_link.app.create_app", return_value=mock_app),
+            patch("litvar_link.app.create_mcp_app", return_value=mock_mcp),
+            patch("litvar_link.app.lifespan", return_value=mock_lifespan),
+        ):
+            mock_lifespan.__aenter__ = AsyncMock(return_value=None)
+            mock_lifespan.__aexit__ = AsyncMock(return_value=None)
 
-                        await manager.start_stdio_server()
+            await manager.start_stdio_server()
 
-                        # Should not call logging
-                        mock_log.assert_not_called()
+            # Should not call logging
+            mock_log.assert_not_called()
 
-                        # Check MCP server still runs
-                        mock_mcp.run_async.assert_called_once_with(transport="stdio")
+            # Check MCP server still runs
+            mock_mcp.run_async.assert_called_once_with(transport="stdio")
 
     @pytest.mark.asyncio
     async def test_start_stdio_server_logs_initialization(self):
@@ -246,26 +276,25 @@ class TestUnifiedServerManager:
         mock_mcp = AsyncMock()
         mock_lifespan = AsyncMock()
 
-        with patch("litvar_link.server_manager.log_server_startup"):
-            with patch("litvar_link.app.create_app", return_value=mock_app):
-                with patch("litvar_link.app.create_mcp_app", return_value=mock_mcp):
-                    with patch("litvar_link.app.lifespan", return_value=mock_lifespan):
-                        # Make the async context manager work
-                        mock_lifespan.__aenter__ = AsyncMock(return_value=None)
-                        mock_lifespan.__aexit__ = AsyncMock(return_value=None)
+        with (
+            patch("litvar_link.server_manager.log_server_startup"),
+            patch("litvar_link.app.create_app", return_value=mock_app),
+            patch("litvar_link.app.create_mcp_app", return_value=mock_mcp),
+            patch("litvar_link.app.lifespan", return_value=mock_lifespan),
+        ):
+            mock_lifespan.__aenter__ = AsyncMock(return_value=None)
+            mock_lifespan.__aexit__ = AsyncMock(return_value=None)
 
-                        await manager.start_stdio_server()
+            await manager.start_stdio_server()
 
-                        # Check that info messages were logged
-                        info_calls = list(mock_logger.info.call_args_list)
-                        assert len(info_calls) >= 2
+            # Check that info messages were logged
+            info_calls = list(mock_logger.info.call_args_list)
+            assert len(info_calls) >= 2
 
-                        # Check specific log messages
-                        log_messages = [str(call) for call in info_calls]
-                        assert any("lifespan context" in msg for msg in log_messages)
-                        assert any(
-                            "STDIO MCP server ready" in msg for msg in log_messages
-                        )
+            # Check specific log messages
+            log_messages = [str(call) for call in info_calls]
+            assert any("lifespan context" in msg for msg in log_messages)
+            assert any("STDIO MCP server ready" in msg for msg in log_messages)
 
     @pytest.mark.asyncio
     async def test_uvicorn_config_properties(self):
@@ -278,7 +307,9 @@ class TestUnifiedServerManager:
 
             with patch("litvar_link.server_manager.app") as mock_app:
                 await manager.start_http_only_server(
-                    host="test.local", port=3000, reload=True,
+                    host="test.local",
+                    port=3000,
+                    reload=True,
                 )
 
                 # Extract the config that was passed to uvicorn.Server
@@ -301,14 +332,17 @@ class TestUnifiedServerManager:
             mock_server = AsyncMock()
             mock_server_class.return_value = mock_server
 
-            with patch("litvar_link.server_manager.app") as mock_app:
-                with patch("litvar_link.server_manager.mcp_app") as mock_mcp_app:
-                    with patch("litvar_link.server_manager.settings") as mock_settings:
-                        mock_settings.mcp_path = "/mcp"
+            with (
+                patch("litvar_link.server_manager.app") as mock_app,
+                patch("litvar_link.server_manager.mcp_app") as mock_mcp_app,
+                patch("litvar_link.server_manager.settings") as mock_settings,
+            ):
+                mock_settings.mcp_path = "/mcp"
 
-                        await manager.start_unified_server()
+                await manager.start_unified_server()
 
-                        # Verify MCP app was mounted at the correct path
-                        mock_app.mount.assert_called_once_with(
-                            "/mcp", mock_mcp_app.mcp_router,
-                        )
+                # Verify MCP app was mounted at the correct path
+                mock_app.mount.assert_called_once_with(
+                    "/mcp",
+                    mock_mcp_app.mcp_router,
+                )

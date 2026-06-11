@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import structlog
 
 from .config import settings
 
 if TYPE_CHECKING:
-    from structlog.typing import FilteringBoundLogger
+    from structlog.typing import FilteringBoundLogger, Processor
 
 
 def configure_logging() -> FilteringBoundLogger:
@@ -43,7 +43,7 @@ def configure_logging() -> FilteringBoundLogger:
         logging.getLogger("fastapi").setLevel(logging.WARNING)
 
     # Shared processors for all configurations
-    shared_processors = [
+    shared_processors: list[Processor] = [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.filter_by_level,
         structlog.stdlib.add_logger_name,
@@ -58,6 +58,7 @@ def configure_logging() -> FilteringBoundLogger:
     if settings.log_show_caller:
         shared_processors.append(structlog.processors.CallsiteParameterAdder())
 
+    processors: list[Processor]
     if settings.log_format == "json":
         # JSON logging for production
         processors = [
@@ -95,7 +96,7 @@ def configure_logging() -> FilteringBoundLogger:
         logging.getLogger("uvicorn.access").setLevel(logging.INFO)
         logging.getLogger("httpx").setLevel(logging.INFO)
 
-    return structlog.get_logger("litvar_link")
+    return cast("FilteringBoundLogger", structlog.get_logger("litvar_link"))
 
 
 def orjson_serializer(obj: Any) -> str:
@@ -119,7 +120,7 @@ def log_api_request(
     error: str | None = None,
 ) -> None:
     """Log API request with structured data."""
-    log_data = {
+    log_data: dict[str, Any] = {
         "method": method,
         "url": url,
         "response_time_ms": round(response_time * 1000, 2),
@@ -141,7 +142,7 @@ def log_cache_operation(
     size: int | None = None,
 ) -> None:
     """Log cache operation with structured data."""
-    log_data = {
+    log_data: dict[str, Any] = {
         "operation": operation,
         "key": key,
     }
@@ -163,7 +164,7 @@ def log_mcp_tool_call(
     error: str | None = None,
 ) -> None:
     """Log MCP tool call with structured data."""
-    log_data = {
+    log_data: dict[str, Any] = {
         "tool_name": tool_name,
         "params": params,
         "duration_ms": round(duration * 1000, 2),
@@ -184,7 +185,7 @@ def log_server_startup(
     port: int | None = None,
 ) -> None:
     """Log server startup with structured data."""
-    log_data = {
+    log_data: dict[str, Any] = {
         "mode": mode,
     }
 
@@ -201,7 +202,7 @@ def log_error_with_context(
     context: dict[str, Any] | None = None,
 ) -> None:
     """Log error with additional context."""
-    log_data = {
+    log_data: dict[str, Any] = {
         "operation": operation,
         "error_type": type(error).__name__,
         "error_message": str(error),

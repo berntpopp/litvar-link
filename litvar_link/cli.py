@@ -34,7 +34,7 @@ async def test_connection() -> bool:
                 if result:
                     console.print(
                         Panel(
-                            f"[bold green]:white_check_mark: Successfully connected to LitVar2 API\n"  # noqa: E501
+                            f"[bold green]:white_check_mark: Successfully connected to LitVar2 API\n"
                             f"Found {len(result)} test result(s)",
                             title="Connection Test",
                             border_style="green",
@@ -184,8 +184,8 @@ async def search_gene_variants(gene_name: str, limit: int = 20) -> None:
                 table.add_column("Clinical Significance", style="red")
 
                 for variant in result.variants[:limit]:
-                    # Gene variants endpoint doesn't include clinical significance or name  # noqa: E501
-                    # Only has: _id, rsid (optional), pmids_count, and sometimes clingen_id  # noqa: E501
+                    # Gene variants endpoint doesn't include clinical significance or name
+                    # Only has: _id, rsid (optional), pmids_count, and sometimes clingen_id
                     table.add_row(
                         "N/A",  # No name field in gene variants response
                         variant.rsid or "N/A",  # RSID is optional

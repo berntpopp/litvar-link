@@ -5,11 +5,10 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Self, cast
 from urllib.parse import urljoin
 
 import httpx
-from typing_extensions import Self
 
 from litvar_link.exceptions import (
     LitVarAPIError,
@@ -66,9 +65,7 @@ class TokenBucketRateLimiter:
                 self.request_times.append(now)
                 # Keep only recent requests
                 self.request_times = [
-                    t
-                    for t in self.request_times
-                    if now - t <= self._RATE_WINDOW_SECONDS
+                    t for t in self.request_times if now - t <= self._RATE_WINDOW_SECONDS
                 ]
                 return 0.0
             # Calculate wait time for next token
@@ -89,9 +86,7 @@ class TokenBucketRateLimiter:
         """
         now = time.time()
         # Clean up old request times
-        recent_requests = [
-            t for t in self.request_times if now - t <= self._RATE_WINDOW_SECONDS
-        ]
+        recent_requests = [t for t in self.request_times if now - t <= self._RATE_WINDOW_SECONDS]
 
         if len(recent_requests) < self._MIN_REQUESTS_FOR_RATE:
             return 0.0
@@ -186,7 +181,7 @@ class LitVar2Client:
                 except json.JSONDecodeError:
                     try:
                         # LitVar2 API returns Python-style dict syntax (single quotes)
-                        # Convert to valid JSON by replacing single quotes with double quotes  # noqa: E501
+                        # Convert to valid JSON by replacing single quotes with double quotes
                         # This is a bit hacky but works for the LitVar2 API format
                         json_line = line.replace("'", '"')
                         results.append(json.loads(json_line))
@@ -272,9 +267,7 @@ class LitVar2Client:
                         msg,
                     )
                 if response.status_code >= self._HTTP_CLIENT_ERROR:
-                    error_text = (
-                        response.text[:200] if response.text else "Unknown error"
-                    )
+                    error_text = response.text[:200] if response.text else "Unknown error"
                     msg = f"HTTP {response.status_code}: {error_text}"
                     raise LitVarAPIError(
                         msg,
@@ -405,7 +398,7 @@ class LitVar2Client:
         if isinstance(response, list):
             return response
         if isinstance(response, dict) and "results" in response:
-            return response["results"]
+            return cast("list[dict[str, Any]]", response["results"])
         return []
 
     async def get_variant_details(self, variant_id: str) -> dict[str, Any]:
@@ -420,7 +413,7 @@ class LitVar2Client:
         endpoint = self.config.endpoints["variant_details"].format(
             variant_id=variant_id,
         )
-        return await self._make_request("GET", endpoint)
+        return cast("dict[str, Any]", await self._make_request("GET", endpoint))
 
     async def get_variant_publications(self, variant_id: str) -> list[str]:
         """Get publications associated with a variant.
@@ -440,10 +433,10 @@ class LitVar2Client:
         if isinstance(response, list):
             return response
         if isinstance(response, dict):
-            return response.get("pmids", [])
+            return cast("list[str]", response.get("pmids", []))
         return []
 
-    async def sensor_lookup(self, rsid: str) -> dict[str, Any]:
+    async def sensor_lookup(self, rsid: str) -> dict[str, Any] | None:
         """Check if RSID is available in LitVar2.
 
         Args:
@@ -464,7 +457,7 @@ class LitVar2Client:
             raise ValueError(msg)
 
         endpoint = self.config.endpoints["sensor"].format(rsid=rsid)
-        return await self._make_request("GET", endpoint)
+        return cast("dict[str, Any] | None", await self._make_request("GET", endpoint))
 
     async def get_variants_by_gene(self, gene_name: str) -> list[dict[str, Any]]:
         """Get all variants for a specific gene.
@@ -495,7 +488,7 @@ class LitVar2Client:
         if isinstance(response, list):
             return response
         if isinstance(response, dict) and "variants" in response:
-            return response["variants"]
+            return cast("list[dict[str, Any]]", response["variants"])
         return []
 
     async def health_check(self) -> dict[str, Any]:
