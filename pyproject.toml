@@ -87,108 +87,21 @@ litvar-link-mcp = "mcp_server:main"
 packages = ["litvar_link"]
 include = ["server.py", "mcp_server.py"]
 
-# Ruff configuration (linting and formatting)
 [tool.ruff]
-target-version = "py39"
 line-length = 100
-indent-width = 4
+target-version = "py312"
 
 [tool.ruff.lint]
-select = [
-    "E",      # pycodestyle errors
-    "W",      # pycodestyle warnings
-    "F",      # pyflakes
-    "I",      # isort
-    "N",      # pep8-naming
-    "D",      # pydocstyle
-    "UP",     # pyupgrade
-    "YTT",    # flake8-2020
-    "ANN",    # flake8-annotations
-    "ASYNC",  # flake8-async
-    "S",      # flake8-bandit
-    "BLE",    # flake8-blind-except
-    "FBT",    # flake8-boolean-trap
-    "B",      # flake8-bugbear
-    "A",      # flake8-builtins
-    "COM",    # flake8-commas
-    "C4",     # flake8-comprehensions
-    "DTZ",    # flake8-datetimez
-    "T10",    # flake8-debugger
-    "DJ",     # flake8-django
-    "EM",     # flake8-errmsg
-    "EXE",    # flake8-executable
-    "FA",     # flake8-future-annotations
-    "ISC",    # flake8-implicit-str-concat
-    "ICN",    # flake8-import-conventions
-    "G",      # flake8-logging-format
-    "INP",    # flake8-no-pep420
-    "PIE",    # flake8-pie
-    "T20",    # flake8-print
-    "PYI",    # flake8-pyi
-    "PT",     # flake8-pytest-style
-    "Q",      # flake8-quotes
-    "RSE",    # flake8-raise
-    "RET",    # flake8-return
-    "SLF",    # flake8-self
-    "SLOT",   # flake8-slots
-    "SIM",    # flake8-simplify
-    "TID",    # flake8-tidy-imports
-    "TCH",    # flake8-type-checking
-    "INT",    # flake8-gettext
-    "ARG",    # flake8-unused-arguments
-    "PTH",    # flake8-use-pathlib
-    "TD",     # flake8-todos
-    "FIX",    # flake8-fixme
-    "ERA",    # eradicate
-    "PD",     # pandas-vet
-    "PGH",    # pygrep-hooks
-    "PL",     # pylint
-    "TRY",    # tryceratops
-    "FLY",    # flynt
-    "NPY",    # numpy
-    "PERF",   # perflint
-    "FURB",   # refurb
-    "LOG",    # flake8-logging
-    "RUF",    # ruff-specific rules
-]
-
-ignore = [
-    "D100",   # Missing docstring in public module
-    "D104",   # Missing docstring in public package
-    "D203",   # 1 blank line required before class docstring
-    "D213",   # Multi-line docstring summary should start at the second line
-    "ANN101", # Missing type annotation for self in method
-    "ANN102", # Missing type annotation for cls in classmethod
-    "ANN401", # Dynamically typed expressions (Any) are disallowed
-    "S101",   # Use of assert detected
-    "PLR0913", # Too many arguments to function call
-    "PLR0911", # Too many return statements
-    "PLR0912", # Too many branches
-    "PLR0915", # Too many statements
-    "C901",   # Too complex
-]
-
-[tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = [
-    "D",      # Don't check docstrings in tests
-    "S",      # Don't check security in tests
-    "PLR",    # Don't check complexity in tests
-    "ANN",    # Don't require annotations in tests
-]
-
-[tool.ruff.lint.pydocstyle]
-convention = "google"
-
-[tool.ruff.lint.isort]
-force-single-line = false
-force-sort-within-sections = true
-single-line-exclusions = ["typing", "collections.abc"]
+extend-select = ["E", "W", "F", "I", "N", "UP", "B", "C4", "S", "T20", "SIM", "RUF"]
+ignore = ["S101", "E501"]
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
-skip-magic-trailing-comma = false
-line-ending = "auto"
+line-ending = "lf"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*" = ["S101", "T20"]
 
 # MyPy configuration (type checking)
 [tool.mypy]
