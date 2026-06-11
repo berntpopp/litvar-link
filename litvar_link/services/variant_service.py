@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from litvar_link.exceptions import ValidationError
 from litvar_link.logging_config import log_error_with_context
@@ -29,6 +29,32 @@ if TYPE_CHECKING:
 
     from litvar_link.api.client import LitVar2Client
     from litvar_link.config import CacheConfig
+
+_ModelT = TypeVar("_ModelT")
+
+_PATHOGENIC = ("pathogenic", "likely pathogenic")
+_BENIGN = ("benign", "likely benign")
+
+
+def _count_clinical_significance(variants: list[Any]) -> tuple[int, int, int]:
+    """Tally ``(pathogenic, benign, uncertain)`` counts across gene variants.
+
+    A variant with no ``data_clinical_significance`` (or empty) counts as
+    uncertain; otherwise the first matching pathogenic/benign bucket wins, else
+    uncertain.
+    """
+    pathogenic = benign = uncertain = 0
+    for variant in variants:
+        sigs = getattr(variant, "data_clinical_significance", None)
+        if not sigs:
+            uncertain += 1
+        elif any(sig in _PATHOGENIC for sig in sigs):
+            pathogenic += 1
+        elif any(sig in _BENIGN for sig in sigs):
+            benign += 1
+        else:
+            uncertain += 1
+    return pathogenic, benign, uncertain
 
 
 class VariantService:
@@ -140,6 +166,31 @@ class VariantService:
         """Get variants by gene implementation."""
         return await self.client.get_variants_by_gene(gene_name)
 
+    def _parse_items(
+        self,
+        data_list: list[dict[str, Any]],
+        model_cls: type[_ModelT],
+    ) -> list[_ModelT]:
+        """Parse raw rows into ``model_cls`` instances, skipping bad rows.
+
+        Rows that fail validation are logged (with context) and dropped rather
+        than aborting the whole response. Shared by the autocomplete-search and
+        gene-search parse paths.
+        """
+        parsed: list[_ModelT] = []
+        for data in data_list:
+            try:
+                parsed.append(model_cls(**data))
+            except Exception as e:  # per-row resilience: skip bad rows
+                if self.logger:
+                    log_error_with_context(
+                        self.logger,
+                        e,
+                        "variant_parsing",
+                        {"variant_data": data},
+                    )
+        return parsed
+
     async def search_variants(
         self,
         query: str,
@@ -171,20 +222,7 @@ class VariantService:
             # Parse variants using the endpoint-specific model
             from litvar_link.models.endpoint_specific import AutocompleteVariantItem
 
-            variants = []
-            for data in variant_data:
-                try:
-                    variant = AutocompleteVariantItem(**data)
-                    variants.append(variant)
-                except Exception as e:
-                    if self.logger:
-                        log_error_with_context(
-                            self.logger,
-                            e,
-                            "variant_parsing",
-                            {"variant_data": data},
-                        )
-                    continue
+            variants = self._parse_items(variant_data, AutocompleteVariantItem)
 
             search_time = (time.time() - start_time) * 1000
 
@@ -380,42 +418,11 @@ class VariantService:
             # Parse variants using the endpoint-specific model
             from litvar_link.models.endpoint_specific import GeneVariantItem
 
-            variants = []
-            for data in variant_data:
-                try:
-                    variant = GeneVariantItem(**data)
-                    variants.append(variant)
-                except Exception as e:
-                    if self.logger:
-                        log_error_with_context(
-                            self.logger,
-                            e,
-                            "variant_parsing",
-                            {"variant_data": data},
-                        )
-                    continue
+            variants = self._parse_items(variant_data, GeneVariantItem)
 
-            # Calculate clinical significance statistics from variant data
-            pathogenic_count = 0
-            benign_count = 0
-            uncertain_count = 0
-
-            for variant in variants:
-                # Check if variant has clinical significance data
-                if (
-                    hasattr(variant, "data_clinical_significance")
-                    and variant.data_clinical_significance
-                ):
-                    clinical_sigs = variant.data_clinical_significance
-                    if any(sig in ["pathogenic", "likely pathogenic"] for sig in clinical_sigs):
-                        pathogenic_count += 1
-                    elif any(sig in ["benign", "likely benign"] for sig in clinical_sigs):
-                        benign_count += 1
-                    else:
-                        uncertain_count += 1
-                else:
-                    # No clinical significance data available
-                    uncertain_count += 1
+            pathogenic_count, benign_count, uncertain_count = _count_clinical_significance(
+                variants,
+            )
 
             # Calculate total publications (sum of pmids_count)
             total_publications = sum(

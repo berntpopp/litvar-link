@@ -21,6 +21,25 @@ P = TypeVar("P")
 R = TypeVar("R")
 
 
+def _build_cache_key(
+    func_name: str,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    key_pattern: str | None,
+) -> str:
+    """Build a logging cache key from the call signature.
+
+    Uses ``key_pattern`` when provided, otherwise the function name, then
+    appends positional args and sorted keyword args.
+    """
+    prefix = key_pattern or func_name
+    key = f"{prefix}:{':'.join(str(arg) for arg in args)}"
+    if kwargs:
+        key_parts = [f"{k}={v}" for k, v in sorted(kwargs.items())]
+        key += f":{':'.join(key_parts)}"
+    return key
+
+
 class CacheManager:
     """Centralized cache management with statistics tracking."""
 
@@ -68,32 +87,19 @@ class CacheManager:
     ) -> Callable[[Callable[..., Awaitable[R]]], Callable[..., Awaitable[R]]]:
         """Advanced caching decorator with statistics tracking.
 
-        This decorator provides unified caching functionality with:
-        - Configurable cache size and TTL
-        - Automatic cache statistics tracking
-        - Centralized logging of cache operations
-        - Support for custom cache key patterns
+        Wraps an async function with :func:`async_lru.alru_cache` plus hit/miss
+        statistics and structured logging of each cache operation.
 
         Args:
-            maxsize: Maximum number of cached items (default: 256)
-            ttl: Time-to-live in seconds (default: 3600 = 1 hour)
-            key_pattern: Optional pattern for generating cache keys
+            maxsize: Maximum number of cached items (default: 256).
+            ttl: Time-to-live in seconds (default: 3600).
+            key_pattern: Optional prefix for generated cache keys.
 
         Returns:
-            Decorated function with caching capabilities
-
-        Example:
-            ```python
-            cache_manager = CacheManager(logger)
-
-            @cache_manager.cached(maxsize=500, ttl=7200, key_pattern="variant_details")
-            async def get_variant_details(variant_id: str) -> dict:
-                return await client.get_variant_details(variant_id)
-            ```
+            Decorator that adds caching to an async function.
         """
 
         def decorator(func: Callable[..., Awaitable[R]]) -> Callable[..., Awaitable[R]]:
-            # Create the cached version using alru_cache
             cached_func = alru_cache(maxsize=maxsize, ttl=ttl)(
                 cast("Callable[..., Coroutine[Any, Any, R]]", func),
             )
@@ -101,42 +107,25 @@ class CacheManager:
 
             @functools.wraps(func)
             async def wrapper(*args: Any, **kwargs: Any) -> R:
-                # Generate cache key for logging
-                if key_pattern:
-                    cache_key = f"{key_pattern}:{':'.join(str(arg) for arg in args)}"
-                    if kwargs:
-                        key_parts = [f"{k}={v}" for k, v in sorted(kwargs.items())]
-                        cache_key += f":{':'.join(key_parts)}"
-                else:
-                    cache_key = f"{func.__name__}:{':'.join(str(arg) for arg in args)}"
-
-                # Check cache hit/miss by comparing cache info before and after
-                cache_info_before = cached_func.cache_info()
-                initial_hits = cache_info_before.hits
-
+                cache_key = _build_cache_key(func.__name__, args, kwargs, key_pattern)
+                initial_hits = cached_func.cache_info().hits
                 start_time = time.time()
 
-                # Execute cached function
                 result = await cached_func(*args, **kwargs)
 
-                # Determine if cache was hit
                 cache_info_after = cached_func.cache_info()
                 was_cache_hit = cache_info_after.hits > initial_hits
-
-                # Log cache operation
                 if was_cache_hit:
                     self._log_cache_hit(cache_key)
                 else:
                     self._log_cache_miss(cache_key)
 
-                # Log performance metrics
-                execution_time = (time.time() - start_time) * 1000
                 if self.logger:
                     self.logger.debug(
                         "Cache operation completed",
                         cache_key=cache_key,
                         hit=was_cache_hit,
-                        execution_time_ms=execution_time,
+                        execution_time_ms=(time.time() - start_time) * 1000,
                         cache_size=cache_info_after.currsize,
                         max_size=maxsize,
                     )

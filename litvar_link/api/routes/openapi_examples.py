@@ -1,12 +1,177 @@
-"""OpenAPI ``responses={...}`` example payloads extracted from route handlers.
+"""OpenAPI example payloads extracted from route handlers.
 
-Pulling these large example dicts out of the decorators keeps the handler
-functions short (they were the dominant source of route-file bloat).
+Pulling these large example dicts out of the decorators and parameter
+declarations keeps the handler functions short (they were the dominant source
+of route-file bloat). This module holds both the ``responses={...}`` payloads
+and the per-parameter ``openapi_examples`` dicts referenced by ``Query``/``Path``.
 """
 
 from __future__ import annotations
 
 from typing import Any
+
+# --- Parameter ``openapi_examples`` dicts (referenced by Query/Path) ---------
+
+SEARCH_QUERY_EXAMPLES: dict[str, Any] = {
+    "cfh_variant": {
+        "summary": "CFH complement factor variant",
+        "description": "Search for Y402H variant in complement factor H gene (LitVar2 example)",
+        "value": "CFH p.Y402H",
+    },
+    "brca1_mutation": {
+        "summary": "BRCA1 pathogenic mutation",
+        "description": "Search for Met1Val mutation in BRCA1 tumor suppressor gene",
+        "value": "BRCA1 p.Met1Val",
+    },
+    "rsid_lookup": {
+        "summary": "Reference SNP ID lookup",
+        "description": "Direct lookup using dbSNP reference ID",
+        "value": "rs1061170",
+    },
+    "hgvs_notation": {
+        "summary": "HGVS genomic notation",
+        "description": "Search using Human Genome Variation Society notation",
+        "value": "NM_000014.6:c.1204T>C",
+    },
+    "gene_symbol": {
+        "summary": "Gene symbol search",
+        "description": "Find all variants in specific gene",
+        "value": "NAA10",
+    },
+    "protein_change": {
+        "summary": "Protein change notation",
+        "description": "Search using amino acid change description",
+        "value": "p.V600E",
+    },
+}
+
+SEARCH_LIMIT_EXAMPLES: dict[str, Any] = {
+    "default_limit": {
+        "summary": "Default result count",
+        "description": "Return standard 10 results for quick overview",
+        "value": 10,
+    },
+    "comprehensive_search": {
+        "summary": "Comprehensive results",
+        "description": "Return up to 50 results for detailed analysis",
+        "value": 50,
+    },
+    "maximum_results": {
+        "summary": "Maximum allowed results",
+        "description": "Return maximum 100 results for exhaustive search",
+        "value": 100,
+    },
+}
+
+VARIANT_DETAILS_ID_EXAMPLES: dict[str, Any] = {
+    "rsid_lookup": {
+        "summary": "RSID variant lookup",
+        "description": "Get details for CFH Y402H variant using reference SNP ID",
+        "value": "rs1061170",
+    },
+    "braf_mutation": {
+        "summary": "BRAF oncogene variant",
+        "description": "Get details for BRAF V600E mutation (common in melanoma)",
+        "value": "rs113488022",
+    },
+    "gene_variant": {
+        "summary": "Gene-specific variant",
+        "description": "Get details using gene symbol and protein change",
+        "value": "BRCA1 p.Met1Val",
+    },
+    "hgvs_identifier": {
+        "summary": "HGVS notation lookup",
+        "description": "Get details using standard HGVS nomenclature",
+        "value": "NM_000059.4:c.68A>G",
+    },
+}
+
+GENE_NAME_EXAMPLES: dict[str, Any] = {
+    "cfh_complement": {
+        "summary": "Complement factor H gene",
+        "description": "Get variants in complement factor H gene "
+        "(major age-related macular degeneration gene)",
+        "value": "CFH",
+    },
+    "brca1_oncology": {
+        "summary": "BRCA1 tumor suppressor",
+        "description": "Comprehensive variants in BRCA1 breast cancer gene",
+        "value": "BRCA1",
+    },
+    "brca2_oncology": {
+        "summary": "BRCA2 tumor suppressor",
+        "description": "Get variants in BRCA2 hereditary breast cancer gene",
+        "value": "BRCA2",
+    },
+    "naa10_rare": {
+        "summary": "NAA10 acetyltransferase",
+        "description": "N-alpha-acetyltransferase variants (LitVar2 example dataset)",
+        "value": "NAA10",
+    },
+    "braf_oncogene": {
+        "summary": "BRAF proto-oncogene",
+        "description": "Get variants in BRAF gene (common in melanoma and other cancers)",
+        "value": "BRAF",
+    },
+}
+
+PUBLICATIONS_ID_EXAMPLES: dict[str, Any] = {
+    "cfh_amd_variant": {
+        "summary": "CFH Y402H AMD variant",
+        "description": "Get publications for major age-related macular degeneration risk variant",
+        "value": "rs1061170",
+    },
+    "braf_melanoma": {
+        "summary": "BRAF V600E melanoma",
+        "description": "Get publications for common BRAF mutation in melanoma research",
+        "value": "rs113488022",
+    },
+    "brca1_founder": {
+        "summary": "BRCA1 founder mutation",
+        "description": "Get publications for Ashkenazi Jewish BRCA1 founder mutation",
+        "value": "rs80357906",
+    },
+    "protein_notation": {
+        "summary": "Protein change notation",
+        "description": "Get publications using amino acid change description",
+        "value": "p.V600E",
+    },
+    "gene_variant": {
+        "summary": "Gene-specific variant",
+        "description": "Get publications for gene symbol with protein change",
+        "value": "CFH p.Y402H",
+    },
+}
+
+SENSOR_RSID_EXAMPLES: dict[str, Any] = {
+    "cfh_y402h": {
+        "summary": "CFH Y402H variant",
+        "description": "Check availability of major age-related macular degeneration risk variant",
+        "value": "rs1061170",
+    },
+    "braf_v600e": {
+        "summary": "BRAF V600E oncogene",
+        "description": "Check availability of common melanoma-associated mutation",
+        "value": "rs113488022",
+    },
+    "rare_variant": {
+        "summary": "Rare genetic variant",
+        "description": "Check availability of less common variant (LitVar2 example)",
+        "value": "rs878853264",
+    },
+    "brca1_founder": {
+        "summary": "BRCA1 founder mutation",
+        "description": "Check availability of Ashkenazi Jewish BRCA1 founder mutation",
+        "value": "rs80357906",
+    },
+    "high_rsid": {
+        "summary": "High-numbered RSID",
+        "description": "Check availability of recently assigned variant identifier",
+        "value": "rs1234567890",
+    },
+}
+
+# --- ``responses={...}`` payloads --------------------------------------------
 
 SEARCH_RESPONSES: dict[int | str, dict[str, Any]] = {
     200: {
