@@ -81,7 +81,7 @@ Changelog = "https://github.com/litvar-link/litvar-link/blob/main/CHANGELOG.md"
 
 [project.scripts]
 litvar-link = "litvar_link.cli:main"
-litvar-mcp = "mcp_server:main"
+litvar-link-mcp = "mcp_server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["litvar_link"]
