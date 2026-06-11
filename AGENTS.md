@@ -145,26 +145,30 @@ How:
 
 ### Function size
 
-Two complementary guards (both switched on at the end of the P3 refactor; see
-`docs/superpowers/specs/`):
+Two complementary guards are **enforced** (both run in `make lint-loc` /
+`make lint` and therefore `make ci-local` + pre-commit):
 
 - **Per-function line cap ~60** - enforced by an AST pass in
-  `scripts/check_file_size.py`. Ruff has no per-function line-count rule, so
-  this AST check is what catches low-complexity but line-bloated functions
-  (e.g. route handlers padded with inline OpenAPI example dicts).
+  `scripts/check_file_size.py` (`make lint-loc`). Ruff has no per-function
+  line-count rule, so this AST check is what catches low-complexity but
+  line-bloated functions (e.g. route handlers padded with inline OpenAPI
+  example dicts). Allowlist a function only as a last resort via a
+  `path::function[:ceiling]` entry in `.loc-allowlist` with a one-line
+  justification; prefer a cohesive extraction. There are currently **no**
+  per-function allowlist entries.
 - **Complexity / statement budget** - ruff `C901` (cyclomatic complexity
-  <= 10, the McCabe/NIST threshold) plus `PLR0915` (<= 50 statements).
-  `PLR0912`/`PLR0913` are deliberately left off to avoid friction with
-  FastAPI dependency-injection signatures.
+  <= 10, the McCabe/NIST threshold, `max-complexity = 10`) plus `PLR0915`
+  (`max-statements = 50`). `PLR0912`/`PLR0913` are deliberately left off to
+  avoid friction with FastAPI dependency-injection signatures. Tests are
+  exempt (`C901`, `PLR0915` in the `tests/**/*` per-file-ignore).
 
 These two guards are a deliberate divergence from the sibling references
-(which cap files only). They are introduced red->green at the end of P3,
-after the functions are already small.
+(which cap files only) and a coverage floor of `fail_under = 90`.
 
 ## MCP Response Surface Conventions
 
 The MCP facade follows the house response conventions (mirrors gnomad / sysndd
-/ pubtator); these land in P3:
+/ pubtator):
 
 - **`response_mode`** on data-returning tools: `compact` (default, high-signal
   fields only - ids, rsid, gene, key counts, short title) vs `full` (raw
@@ -178,9 +182,10 @@ The MCP facade follows the house response conventions (mirrors gnomad / sysndd
 - **`recommended_citation`** (PMID-based) on literature results; paste it
   verbatim. See the citation contract above.
 - **Error contract (two classes).** User-recoverable errors (empty query,
-  `limit` out of range, malformed RSID/gene) surface as visible `ToolError`s
-  with actionable messages so the agent can self-correct. Internal errors
-  (transport/client/unexpected) are masked and logged with a correlation id.
+  `limit` out of range, malformed RSID/gene) surface as a visible
+  `ToolValidationError` with an actionable message so the agent can
+  self-correct. Internal errors (transport/client/unexpected) become a masked
+  `ToolInternalError` and are logged. See `litvar_link/mcp/errors.py`.
 
 ## Environment
 
