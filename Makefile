@@ -71,8 +71,8 @@ typecheck-fresh: ## Clear mypy cache and run typecheck
 test: ## Run tests quickly
 	uv run pytest tests -q
 
-test-fast: ## Run tests in parallel with pytest-xdist
-	uv run pytest tests -q -n auto
+test-fast: ## Run tests in parallel with pytest-xdist (excludes integration)
+	uv run pytest tests -q -n auto -m "not integration"
 
 test-unit: ## Run unit tests in parallel
 	uv run pytest tests -q -n auto -m "not integration and not slow"
@@ -80,8 +80,8 @@ test-unit: ## Run unit tests in parallel
 test-integration: ## Run integration tests serially
 	uv run pytest tests -q -m "integration"
 
-test-cov: ## Run tests with coverage
-	uv run pytest tests --cov=litvar_link --cov-report=term-missing --cov-report=html --cov-report=xml --cov-fail-under=90
+test-cov: ## Run tests with coverage (excludes integration)
+	uv run pytest tests --cov=litvar_link --cov-report=term-missing --cov-report=html --cov-report=xml --cov-fail-under=90 -m "not integration"
 
 test-all: test-cov ## Alias for full test run with coverage
 
