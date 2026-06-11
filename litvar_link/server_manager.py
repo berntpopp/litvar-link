@@ -2,16 +2,36 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import uvicorn
 
-from .app import app, mcp_app
-from .config import settings
+from .api.client import LitVar2Client
+from .app import app
+from .config import get_api_config, get_cache_config, settings
 from .logging_config import log_server_startup
+from .mcp.facade import create_litvar_mcp
+from .services.variant_service import VariantService
 
 if TYPE_CHECKING:
     from structlog.typing import FilteringBoundLogger
+
+
+def _make_service_factory(
+    logger: FilteringBoundLogger | None,
+) -> Callable[[], VariantService]:
+    """Build a per-call ``VariantService`` factory bound to a fresh client.
+
+    The MCP tools call ``service_factory()`` lazily inside each tool body so each
+    invocation gets a service over a freshly constructed ``LitVar2Client``.
+    """
+
+    def factory() -> VariantService:
+        client = LitVar2Client(get_api_config(), logger)
+        return VariantService(client, get_cache_config(), logger)
+
+    return factory
 
 
 class UnifiedServerManager:
@@ -41,10 +61,10 @@ class UnifiedServerManager:
         if self.logger:
             log_server_startup(self.logger, "unified", host, port)
 
-        # Add MCP endpoint to the main app
-        # fastmcp's FastMCP does not declare mcp_router in its type stubs;
-        # the explicit MCP facade rewrite is deferred to P3.
-        app.mount(settings.mcp_path, cast("Any", mcp_app).mcp_router)
+        # Mount the explicit MCP facade as a stateless streamable-HTTP ASGI app.
+        mcp = create_litvar_mcp(service_factory=_make_service_factory(self.logger))
+        mcp_http_app = mcp.http_app(path="/", stateless_http=True, json_response=True)
+        app.mount(settings.mcp_path, mcp_http_app)
 
         config = uvicorn.Config(
             app=app,
@@ -91,18 +111,18 @@ class UnifiedServerManager:
         if self.logger:
             log_server_startup(self.logger, "stdio")
 
-        # Create FastAPI app (for MCP introspection)
-        from .app import create_app, create_mcp_app, lifespan
+        # Create FastAPI app so the shared lifespan (logging, etc.) runs.
+        from .app import create_app, lifespan
 
-        app = create_app()
+        application = create_app()
 
         # Use lifespan context manager for consistency with HTTP mode
         if self.logger:
             self.logger.info("Initializing app state using lifespan context...")
 
-        async with lifespan(app):
-            # Create MCP server within the lifespan context
-            mcp = create_mcp_app()
+        async with lifespan(application):
+            # Build the explicit MCP facade within the lifespan context.
+            mcp = create_litvar_mcp(service_factory=_make_service_factory(self.logger))
 
             if self.logger:
                 self.logger.info("STDIO MCP server ready")

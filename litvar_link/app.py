@@ -1,4 +1,4 @@
-"""Main FastAPI application with FastMCP integration."""
+"""Main FastAPI application."""
 
 from __future__ import annotations
 
@@ -7,8 +7,6 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastmcp import FastMCP
-from fastmcp.server.openapi import MCPType, RouteMap
 
 from .api.routes import genes, health, publications, sensor, variants
 from .config import settings
@@ -77,39 +75,5 @@ def create_app() -> FastAPI:
     return app
 
 
-def create_mcp_app() -> FastMCP:
-    """Create FastMCP server from FastAPI app."""
-    app = create_app()
-
-    # MCP tool name mappings (following pubtator-link pattern)
-    mcp_custom_names = {
-        "search_variants": "search_genetic_variants",
-        "get_variant_details": "get_variant_summary",
-        "get_variant_publications": "get_variant_literature",
-        "lookup_rsid": "lookup_rsid_availability",
-        "get_gene_variants": "search_gene_variants",
-    }
-
-    # Route mappings for MCP tools (exclude utility endpoints)
-    mcp_route_maps = [
-        # Exclude health and monitoring endpoints
-        RouteMap(pattern=r"^/api/health.*$", mcp_type=MCPType.EXCLUDE),
-        # Exclude root and docs endpoints
-        RouteMap(pattern=r"^/$", mcp_type=MCPType.EXCLUDE),
-        RouteMap(pattern=r"^/docs$", mcp_type=MCPType.EXCLUDE),
-        RouteMap(pattern=r"^/openapi.json$", mcp_type=MCPType.EXCLUDE),
-        RouteMap(pattern=r"^/redoc$", mcp_type=MCPType.EXCLUDE),
-    ]
-
-    # Create FastMCP instance
-    return FastMCP.from_fastapi(
-        app=app,
-        name="LitVar-Link Server",
-        mcp_names=mcp_custom_names,
-        route_maps=mcp_route_maps,
-    )
-
-
-# Create application instances
+# Create application instance
 app = create_app()
-mcp_app = create_mcp_app()

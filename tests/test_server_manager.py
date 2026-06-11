@@ -39,7 +39,7 @@ class TestUnifiedServerManager:
             with (
                 patch("litvar_link.server_manager.log_server_startup") as mock_log,
                 patch("litvar_link.server_manager.app") as mock_app,
-                patch("litvar_link.server_manager.mcp_app"),
+                patch("litvar_link.server_manager.create_litvar_mcp"),
             ):
                 await manager.start_unified_server()
 
@@ -79,7 +79,7 @@ class TestUnifiedServerManager:
             with (
                 patch("litvar_link.server_manager.log_server_startup") as mock_log,
                 patch("litvar_link.server_manager.app"),
-                patch("litvar_link.server_manager.mcp_app"),
+                patch("litvar_link.server_manager.create_litvar_mcp"),
             ):
                 await manager.start_unified_server(
                     host="0.0.0.0",  # noqa: S104
@@ -113,7 +113,7 @@ class TestUnifiedServerManager:
             with (
                 patch("litvar_link.server_manager.log_server_startup") as mock_log,
                 patch("litvar_link.server_manager.app"),
-                patch("litvar_link.server_manager.mcp_app"),
+                patch("litvar_link.server_manager.create_litvar_mcp"),
             ):
                 await manager.start_unified_server()
 
@@ -223,7 +223,7 @@ class TestUnifiedServerManager:
         with (
             patch("litvar_link.server_manager.log_server_startup") as mock_log,
             patch("litvar_link.app.create_app", return_value=mock_app),
-            patch("litvar_link.app.create_mcp_app", return_value=mock_mcp),
+            patch("litvar_link.server_manager.create_litvar_mcp", return_value=mock_mcp),
             patch("litvar_link.app.lifespan", return_value=mock_lifespan),
         ):
             mock_lifespan.__aenter__ = AsyncMock(return_value=None)
@@ -251,7 +251,7 @@ class TestUnifiedServerManager:
         with (
             patch("litvar_link.server_manager.log_server_startup") as mock_log,
             patch("litvar_link.app.create_app", return_value=mock_app),
-            patch("litvar_link.app.create_mcp_app", return_value=mock_mcp),
+            patch("litvar_link.server_manager.create_litvar_mcp", return_value=mock_mcp),
             patch("litvar_link.app.lifespan", return_value=mock_lifespan),
         ):
             mock_lifespan.__aenter__ = AsyncMock(return_value=None)
@@ -279,7 +279,7 @@ class TestUnifiedServerManager:
         with (
             patch("litvar_link.server_manager.log_server_startup"),
             patch("litvar_link.app.create_app", return_value=mock_app),
-            patch("litvar_link.app.create_mcp_app", return_value=mock_mcp),
+            patch("litvar_link.server_manager.create_litvar_mcp", return_value=mock_mcp),
             patch("litvar_link.app.lifespan", return_value=mock_lifespan),
         ):
             mock_lifespan.__aenter__ = AsyncMock(return_value=None)
@@ -334,15 +334,19 @@ class TestUnifiedServerManager:
 
             with (
                 patch("litvar_link.server_manager.app") as mock_app,
-                patch("litvar_link.server_manager.mcp_app") as mock_mcp_app,
+                patch("litvar_link.server_manager.create_litvar_mcp") as mock_create_mcp,
                 patch("litvar_link.server_manager.settings") as mock_settings,
             ):
                 mock_settings.mcp_path = "/mcp"
+                mock_http_app = Mock()
+                mock_create_mcp.return_value.http_app.return_value = mock_http_app
 
                 await manager.start_unified_server()
 
-                # Verify MCP app was mounted at the correct path
-                mock_app.mount.assert_called_once_with(
-                    "/mcp",
-                    mock_mcp_app.mcp_router,
+                # Verify the explicit facade's http_app was mounted at the path.
+                mock_create_mcp.return_value.http_app.assert_called_once_with(
+                    path="/",
+                    stateless_http=True,
+                    json_response=True,
                 )
+                mock_app.mount.assert_called_once_with("/mcp", mock_http_app)
