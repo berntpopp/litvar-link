@@ -15,6 +15,7 @@ from litvar_link.models import (
     VariantDetailsResponse,
     VariantSearchResponse,
 )
+from litvar_link.services.cache_hits import hits_before, was_cache_hit
 from litvar_link.utils.caching import create_service_cache_decorator
 from litvar_link.validation import (
     validate_gene_name,
@@ -163,24 +164,9 @@ class VariantService:
         try:
             start_time = time.time()
 
-            # Check cache info before call
-            cache_info_before = (
-                self._cached_search_variants.cache_info()
-                if hasattr(self._cached_search_variants, "cache_info")
-                else None
-            )
-            initial_hits = cache_info_before.hits if cache_info_before else 0
-
-            # Make cached call (caching logic handled by decorator)
+            initial_hits = hits_before(self._cached_search_variants)
             variant_data = await self._cached_search_variants(query, limit)
-
-            # Check if cache was hit
-            cache_info_after = (
-                self._cached_search_variants.cache_info()
-                if hasattr(self._cached_search_variants, "cache_info")
-                else None
-            )
-            cached = cache_info_after.hits > initial_hits if cache_info_after else False
+            cached = was_cache_hit(self._cached_search_variants, before=initial_hits)
 
             # Parse variants using the endpoint-specific model
             from litvar_link.models.endpoint_specific import AutocompleteVariantItem
@@ -241,24 +227,9 @@ class VariantService:
 
         variant_id = variant_id.strip()
         try:
-            # Check cache info before call
-            cache_info_before = (
-                self._cached_get_variant_details.cache_info()
-                if hasattr(self._cached_get_variant_details, "cache_info")
-                else None
-            )
-            initial_hits = cache_info_before.hits if cache_info_before else 0
-
-            # Make cached call (caching logic handled by decorator)
+            initial_hits = hits_before(self._cached_get_variant_details)
             variant_data = await self._cached_get_variant_details(variant_id)
-
-            # Check if cache was hit
-            cache_info_after = (
-                self._cached_get_variant_details.cache_info()
-                if hasattr(self._cached_get_variant_details, "cache_info")
-                else None
-            )
-            cached = cache_info_after.hits > initial_hits if cache_info_after else False
+            cached = was_cache_hit(self._cached_get_variant_details, before=initial_hits)
 
             # Parse variant details
             variant = VariantDetails(**variant_data)
@@ -298,24 +269,12 @@ class VariantService:
 
         variant_id = variant_id.strip()
         try:
-            # Check cache info before call
-            cache_info_before = (
-                self._cached_get_variant_publications.cache_info()
-                if hasattr(self._cached_get_variant_publications, "cache_info")
-                else None
-            )
-            initial_hits = cache_info_before.hits if cache_info_before else 0
-
-            # Make cached call (caching logic handled by decorator)
+            initial_hits = hits_before(self._cached_get_variant_publications)
             pmids = await self._cached_get_variant_publications(variant_id)
-
-            # Check if cache was hit
-            cache_info_after = (
-                self._cached_get_variant_publications.cache_info()
-                if hasattr(self._cached_get_variant_publications, "cache_info")
-                else None
+            cached = was_cache_hit(
+                self._cached_get_variant_publications,
+                before=initial_hits,
             )
-            cached = cache_info_after.hits > initial_hits if cache_info_after else False
 
             # Create publication objects (simplified for now)
             from litvar_link.models.variants import Publication
@@ -358,24 +317,9 @@ class VariantService:
         rsid = validate_rsid(rsid)
 
         try:
-            # Check cache info before call
-            cache_info_before = (
-                self._cached_sensor_lookup.cache_info()
-                if hasattr(self._cached_sensor_lookup, "cache_info")
-                else None
-            )
-            initial_hits = cache_info_before.hits if cache_info_before else 0
-
-            # Make cached call (caching logic handled by decorator)
+            initial_hits = hits_before(self._cached_sensor_lookup)
             sensor_data = await self._cached_sensor_lookup(rsid)
-
-            # Check if cache was hit
-            cache_info_after = (
-                self._cached_sensor_lookup.cache_info()
-                if hasattr(self._cached_sensor_lookup, "cache_info")
-                else None
-            )
-            cached = cache_info_after.hits > initial_hits if cache_info_after else False
+            cached = was_cache_hit(self._cached_sensor_lookup, before=initial_hits)
 
             # Parse sensor response - handle None case
             if sensor_data is None:
@@ -426,24 +370,12 @@ class VariantService:
         """
         gene_name = validate_gene_name(gene_name)
         try:
-            # Check cache info before call
-            cache_info_before = (
-                self._cached_get_variants_by_gene.cache_info()
-                if hasattr(self._cached_get_variants_by_gene, "cache_info")
-                else None
-            )
-            initial_hits = cache_info_before.hits if cache_info_before else 0
-
-            # Make cached call (caching logic handled by decorator)
+            initial_hits = hits_before(self._cached_get_variants_by_gene)
             variant_data = await self._cached_get_variants_by_gene(gene_name)
-
-            # Check if cache was hit
-            cache_info_after = (
-                self._cached_get_variants_by_gene.cache_info()
-                if hasattr(self._cached_get_variants_by_gene, "cache_info")
-                else None
+            cached = was_cache_hit(
+                self._cached_get_variants_by_gene,
+                before=initial_hits,
             )
-            cached = cache_info_after.hits > initial_hits if cache_info_after else False
 
             # Parse variants using the endpoint-specific model
             from litvar_link.models.endpoint_specific import GeneVariantItem
