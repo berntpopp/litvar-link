@@ -114,6 +114,86 @@ def _line_count(path: Path) -> int:
         return sum(1 for _ in handle)
 
 
+class _Findings:
+    """Accumulated budget violations across the scanned files."""
+
+    def __init__(self) -> None:
+        self.files: list[str] = []
+        self.functions: list[str] = []
+        self.grew: list[str] = []
+
+    @property
+    def clean(self) -> bool:
+        return not (self.files or self.functions or self.grew)
+
+
+def _check_functions(
+    path: Path,
+    limit: int,
+    func_allowlist: dict[str, int],
+) -> list[str]:
+    """Return non-allowlisted per-function violations for ``path``."""
+    out: list[str] = []
+    for msg in find_oversized_functions(path, limit=limit):
+        key = msg.strip().split(" ", 1)[0]  # "path::function"
+        if key not in func_allowlist:
+            out.append(msg)
+    return out
+
+
+def _check_file(path: Path, limit: int, file_allowlist: dict[str, int]) -> str | None:
+    """Return a per-file violation message for ``path``, or None if within budget."""
+    rel = path.as_posix()
+    loc = _line_count(path)
+    if rel in file_allowlist:
+        ceiling = file_allowlist[rel]
+        if ceiling > 0 and loc > ceiling:
+            return (
+                f"  {rel}: {loc} lines (grandfathered ceiling {ceiling}). "
+                f"Decompose or lower the entry in .loc-allowlist."
+            )
+        return None
+    if loc > limit:
+        return (
+            f"  {rel}: {loc} lines (limit {limit}). "
+            f"Split into smaller modules. See AGENTS.md 'File Size Discipline'."
+        )
+    return None
+
+
+def _collect(targets: list[Path], file_limit: int, function_limit: int) -> _Findings:
+    """Scan ``targets`` and accumulate file/function budget findings."""
+    file_allowlist, func_allowlist = _load_allowlist()
+    findings = _Findings()
+    for path in _iter_python_files(targets):
+        findings.functions.extend(_check_functions(path, function_limit, func_allowlist))
+        message = _check_file(path, file_limit, file_allowlist)
+        if message is None:
+            continue
+        if "grandfathered ceiling" in message:
+            findings.grew.append(message)
+        else:
+            findings.files.append(message)
+    return findings
+
+
+def _report(findings: _Findings) -> None:
+    """Write a human-readable report of ``findings`` to stderr."""
+    if findings.files:
+        sys.stderr.write("\nFiles exceeding the per-file line budget:\n")
+        sys.stderr.write("\n".join(findings.files) + "\n")
+    if findings.functions:
+        sys.stderr.write("\nFunctions exceeding the per-function line budget:\n")
+        sys.stderr.write("\n".join(findings.functions) + "\n")
+    if findings.grew:
+        sys.stderr.write("\nGrandfathered files that have grown past their ceiling:\n")
+        sys.stderr.write("\n".join(findings.grew) + "\n")
+    sys.stderr.write(
+        "\nAdd new files/functions to .loc-allowlist with an explicit ceiling only "
+        "as a temporary exception with a tracked decomposition plan.\n"
+    )
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("paths", nargs="*", type=Path)
@@ -135,49 +215,10 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     targets = args.paths or list(DEFAULT_TARGETS)
-    file_allowlist, func_allowlist = _load_allowlist()
-    violations: list[str] = []
-    grew: list[str] = []
-    long_funcs: list[str] = []
-
-    for path in _iter_python_files(targets):
-        rel = path.as_posix()
-        loc = _line_count(path)
-        for msg in find_oversized_functions(path, limit=args.function_limit):
-            key = msg.strip().split(" ", 1)[0]  # "path::function"
-            if key in func_allowlist:
-                continue
-            long_funcs.append(msg)
-        if rel in file_allowlist:
-            ceiling = file_allowlist[rel]
-            if ceiling > 0 and loc > ceiling:
-                grew.append(
-                    f"  {rel}: {loc} lines (grandfathered ceiling {ceiling}). "
-                    f"Decompose or lower the entry in .loc-allowlist."
-                )
-            continue
-        if loc > args.limit:
-            violations.append(
-                f"  {rel}: {loc} lines (limit {args.limit}). "
-                f"Split into smaller modules. See AGENTS.md 'File Size Discipline'."
-            )
-
-    if not violations and not grew and not long_funcs:
+    findings = _collect(targets, args.limit, args.function_limit)
+    if findings.clean:
         return 0
-
-    if violations:
-        sys.stderr.write("\nFiles exceeding the per-file line budget:\n")
-        sys.stderr.write("\n".join(violations) + "\n")
-    if long_funcs:
-        sys.stderr.write("\nFunctions exceeding the per-function line budget:\n")
-        sys.stderr.write("\n".join(long_funcs) + "\n")
-    if grew:
-        sys.stderr.write("\nGrandfathered files that have grown past their ceiling:\n")
-        sys.stderr.write("\n".join(grew) + "\n")
-    sys.stderr.write(
-        "\nAdd new files/functions to .loc-allowlist with an explicit ceiling only "
-        "as a temporary exception with a tracked decomposition plan.\n"
-    )
+    _report(findings)
     return 1
 
 
