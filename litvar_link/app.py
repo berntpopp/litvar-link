@@ -57,6 +57,10 @@ def create_app() -> FastAPI:
     app.include_router(sensor.router)
     app.include_router(health.router)
 
+    from .api.error_handlers import register_exception_handlers
+
+    register_exception_handlers(app)
+
     # Root endpoint
     @app.get("/")
     async def root() -> dict[str, Any]:
