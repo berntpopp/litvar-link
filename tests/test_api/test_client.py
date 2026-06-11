@@ -11,7 +11,11 @@ from httpx import ConnectTimeout, HTTPStatusError, ReadTimeout
 
 from litvar_link.api.client import LitVar2Client, TokenBucketRateLimiter
 from litvar_link.config import APIConfig
-from litvar_link.exceptions import LitVarAPIError, ServiceUnavailableError
+from litvar_link.exceptions import (
+    LitVarAPIError,
+    ServiceUnavailableError,
+    ValidationError,
+)
 
 
 class TestTokenBucketRateLimiter:
@@ -231,18 +235,18 @@ class TestLitVar2Client:
         """Test query validation in search_variants."""
         async with LitVar2Client(config=api_config, logger=mock_logger) as client:
             # Test empty query
-            with pytest.raises(ValueError, match="Query cannot be empty"):
+            with pytest.raises(ValidationError, match="Query cannot be empty"):
                 await client.search_variants("", limit=10)
 
             # Test query too long
-            with pytest.raises(ValueError, match="Query too long"):
+            with pytest.raises(ValidationError, match="Query too long"):
                 await client.search_variants("x" * 101, limit=10)
 
             # Test invalid limit
-            with pytest.raises(ValueError, match="Limit must be between"):
+            with pytest.raises(ValidationError, match="Limit must be between"):
                 await client.search_variants("test", limit=0)
 
-            with pytest.raises(ValueError, match="Limit must be between"):
+            with pytest.raises(ValidationError, match="Limit must be between"):
                 await client.search_variants("test", limit=101)
 
     @pytest.mark.asyncio
@@ -287,13 +291,13 @@ class TestLitVar2Client:
         """Test RSID validation in sensor lookup."""
         async with LitVar2Client(config=api_config, logger=mock_logger) as client:
             # Test invalid RSID format
-            with pytest.raises(ValueError, match="Invalid RSID format"):
+            with pytest.raises(ValidationError, match="Invalid RSID format"):
                 await client.sensor_lookup("invalid_rsid")
 
-            with pytest.raises(ValueError, match="Invalid RSID format"):
+            with pytest.raises(ValidationError, match="Invalid RSID format"):
                 await client.sensor_lookup("rs")
 
-            with pytest.raises(ValueError, match="Invalid RSID format"):
+            with pytest.raises(ValidationError, match="Invalid RSID format"):
                 await client.sensor_lookup("1061170")
 
     @pytest.mark.asyncio
@@ -339,11 +343,11 @@ class TestLitVar2Client:
         """Test gene name validation."""
         async with LitVar2Client(config=api_config, logger=mock_logger) as client:
             # Test empty gene name
-            with pytest.raises(ValueError, match="Gene name cannot be empty"):
+            with pytest.raises(ValidationError, match="Gene name cannot be empty"):
                 await client.get_variants_by_gene("")
 
             # Test gene name too long
-            with pytest.raises(ValueError, match="Gene name too long"):
+            with pytest.raises(ValidationError, match="Gene name too long"):
                 await client.get_variants_by_gene("x" * 51)
 
     @pytest.mark.asyncio

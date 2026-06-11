@@ -16,6 +16,12 @@ from litvar_link.models import (
     VariantSearchResponse,
 )
 from litvar_link.utils.caching import create_service_cache_decorator
+from litvar_link.validation import (
+    validate_gene_name,
+    validate_limit,
+    validate_query,
+    validate_rsid,
+)
 
 if TYPE_CHECKING:
     from structlog.typing import FilteringBoundLogger
@@ -151,20 +157,8 @@ class VariantService:
             ValidationError: For invalid input parameters
             LitVarAPIError: For API-related errors
         """
-        # Input validation
-        if not query or not query.strip():
-            msg = "Query cannot be empty"
-            raise ValidationError(msg, field="query")
-
-        if len(query) > 100:
-            msg = "Query too long (max 100 characters)"
-            raise ValidationError(msg, field="query")
-
-        if limit < 1 or limit > 100:
-            msg = "Limit must be between 1 and 100"
-            raise ValidationError(msg, field="limit")
-
-        query = query.strip()
+        query = validate_query(query)
+        limit = validate_limit(limit)
 
         try:
             start_time = time.time()
@@ -361,16 +355,7 @@ class VariantService:
             ValidationError: For invalid input parameters
             LitVarAPIError: For API-related errors
         """
-        if not rsid or not rsid.strip():
-            msg = "RSID cannot be empty"
-            raise ValidationError(msg, field="rsid")
-
-        rsid = rsid.strip().lower()
-
-        # Validate RSID format
-        if not rsid.startswith("rs") or not rsid[2:].isdigit():
-            msg = "Invalid RSID format"
-            raise ValidationError(msg, field="rsid")
+        rsid = validate_rsid(rsid)
 
         try:
             # Check cache info before call
@@ -439,15 +424,7 @@ class VariantService:
             ValidationError: For invalid input parameters
             LitVarAPIError: For API-related errors
         """
-        if not gene_name or not gene_name.strip():
-            msg = "Gene name cannot be empty"
-            raise ValidationError(msg, field="gene_name")
-
-        if len(gene_name) > 50:
-            msg = "Gene name too long (max 50 characters)"
-            raise ValidationError(msg, field="gene_name")
-
-        gene_name = gene_name.strip().upper()
+        gene_name = validate_gene_name(gene_name)
         try:
             # Check cache info before call
             cache_info_before = (

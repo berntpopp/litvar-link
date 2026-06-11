@@ -16,6 +16,12 @@ from litvar_link.exceptions import (
     ServiceUnavailableError,
 )
 from litvar_link.logging_config import log_api_request, log_error_with_context
+from litvar_link.validation import (
+    validate_gene_name,
+    validate_limit,
+    validate_query,
+    validate_rsid,
+)
 
 if TYPE_CHECKING:
     import types
@@ -378,19 +384,11 @@ class LitVar2Client:
         Raises:
             ValueError: If query is empty or too long, or limit is out of range
         """
-        # Validate inputs
-        if not query or not query.strip():
-            msg = "Query cannot be empty"
-            raise ValueError(msg)
-        if len(query) > 100:
-            msg = "Query too long (max 100 characters)"
-            raise ValueError(msg)
-        if not 1 <= limit <= 100:
-            msg = "Limit must be between 1 and 100"
-            raise ValueError(msg)
+        query = validate_query(query)
+        limit = validate_limit(limit)
 
         endpoint = self.config.endpoints["autocomplete"]
-        params = {"query": query.strip(), "limit": limit}
+        params = {"query": query, "limit": limit}
 
         response = await self._make_request("GET", endpoint, params=params)
 
@@ -448,14 +446,7 @@ class LitVar2Client:
         Raises:
             ValueError: If RSID format is invalid
         """
-        # Validate RSID format (should start with 'rs' followed by digits)
-        if not rsid or not rsid.startswith("rs") or len(rsid) < 3:
-            msg = "Invalid RSID format (should be 'rs' followed by digits)"
-            raise ValueError(msg)
-        if not rsid[2:].isdigit():
-            msg = "Invalid RSID format (should be 'rs' followed by digits)"
-            raise ValueError(msg)
-
+        rsid = validate_rsid(rsid)
         endpoint = self.config.endpoints["sensor"].format(rsid=rsid)
         return cast("dict[str, Any] | None", await self._make_request("GET", endpoint))
 
@@ -471,16 +462,9 @@ class LitVar2Client:
         Raises:
             ValueError: If gene name is empty or too long
         """
-        # Validate gene name
-        if not gene_name or not gene_name.strip():
-            msg = "Gene name cannot be empty"
-            raise ValueError(msg)
-        if len(gene_name) > 50:
-            msg = "Gene name too long (max 50 characters)"
-            raise ValueError(msg)
-
+        gene_name = validate_gene_name(gene_name)
         endpoint = self.config.endpoints["gene_variants"].format(
-            gene_name=gene_name.strip(),
+            gene_name=gene_name,
         )
         response = await self._make_request("GET", endpoint)
 

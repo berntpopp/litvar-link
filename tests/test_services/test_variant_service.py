@@ -780,3 +780,46 @@ class TestVariantService:
         if hasattr(service, "cleanup"):
             await service.cleanup()
             # Test would verify cleanup behavior
+
+
+class TestValidationDelegation:
+    """After DRY #1, both layers raise ValidationError via validation.py."""
+
+    @pytest.fixture
+    def cache_config(self) -> CacheConfig:
+        """Create test cache config."""
+        return CacheConfig(
+            size=100,
+            ttl=300,
+            stats_enabled=True,
+            cleanup_interval=60,
+        )
+
+    @pytest.fixture
+    def mock_client(self) -> AsyncMock:
+        """Create mock LitVar2 client."""
+        client = AsyncMock()
+        client.search_variants = AsyncMock()
+        return client
+
+    @pytest.mark.asyncio
+    async def test_service_search_empty_query_raises_validation_error(
+        self, mock_client: AsyncMock, cache_config
+    ) -> None:
+        from litvar_link.services.variant_service import VariantService
+
+        service = VariantService(mock_client, cache_config)
+        with pytest.raises(ValidationError) as exc:
+            await service.search_variants("   ", limit=10)
+        assert exc.value.field == "query"
+        mock_client.search_variants.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_client_invalid_rsid_raises_validation_error(self) -> None:
+        from litvar_link.api.client import LitVar2Client
+        from litvar_link.config import get_api_config
+
+        client = LitVar2Client(config=get_api_config())
+        with pytest.raises(ValidationError):
+            await client.sensor_lookup("notanrsid")
+        await client.close()
