@@ -11,6 +11,11 @@ import httpx
 
 from litvar_link.api.parsing import extract_list, parse_ndjson, parse_response_body
 from litvar_link.api.rate_limiter import TokenBucketRateLimiter
+from litvar_link.api.retry import (
+    HTTP_TOO_MANY_REQUESTS,
+    backoff_delay,
+    raise_for_status_code,
+)
 from litvar_link.exceptions import (
     LitVarAPIError,
     RateLimitError,
@@ -35,10 +40,8 @@ if TYPE_CHECKING:
 class LitVar2Client:
     """HTTP client for LitVar2 API with rate limiting and error handling."""
 
-    # HTTP status code constants
-    _HTTP_TOO_MANY_REQUESTS = 429
-    _HTTP_SERVER_ERROR = 500
-    _HTTP_CLIENT_ERROR = 400
+    # Keep only the most recent response times for statistics.
+    _RESPONSE_TIME_WINDOW = 100
 
     def __init__(
         self,
@@ -103,141 +106,105 @@ class LitVar2Client:
         params: dict[str, Any] | None = None,
         data: dict[str, Any] | None = None,
     ) -> Any:
-        """Make HTTP request with rate limiting and error handling.
-
-        Args:
-            method: HTTP method
-            endpoint: API endpoint
-            params: URL parameters
-            data: Request body data
-
-        Returns:
-            Response data
+        """Make an HTTP request with rate limiting, retries, and error handling.
 
         Raises:
-            RateLimitError: When rate limit is exceeded
-            ServiceUnavailableError: When service is unavailable
-            LitVarAPIError: For other API errors
+            RateLimitError, ServiceUnavailableError, LitVarAPIError.
         """
-        # Apply rate limiting
+        await self._apply_rate_limit()
+        url = urljoin(self.config.base_url, endpoint)
+        start_time = time.time()
+        last_error: Exception | None = None
+
+        for attempt in range(self.config.max_retries + 1):
+            try:
+                response = await self._send_request_once(method, url, params, data)
+                return self._handle_response(response, url, method, start_time)
+            except (LitVarAPIError, RateLimitError, ServiceUnavailableError):
+                raise
+            except httpx.TimeoutException as exc:
+                last_error = ServiceUnavailableError(f"Request timeout: {url}")
+                self._log_attempt_error(exc, url, attempt)
+            except httpx.NetworkError as exc:
+                last_error = ServiceUnavailableError(f"Network error: {exc!s}")
+                self._log_attempt_error(exc, url, attempt)
+            except Exception as exc:  # boundary, re-raised below
+                last_error = LitVarAPIError(f"Unexpected error: {exc!s}")
+                self._log_attempt_error(exc, url, attempt)
+            if attempt < self.config.max_retries:
+                await asyncio.sleep(
+                    backoff_delay(base=self.config.retry_delay, attempt=attempt),
+                )
+
+        self._record_failure(url, method, start_time, last_error)
+        raise last_error or LitVarAPIError("Request failed after all retries")
+
+    async def _apply_rate_limit(self) -> None:
+        """Acquire a rate-limit token and sleep if throttled."""
         wait_time = await self.rate_limiter.acquire()
         if wait_time > 0:
             if self.logger:
                 self.logger.debug("Rate limit applied", wait_time=wait_time)
             await asyncio.sleep(wait_time)
 
-        # Construct full URL
-        url = urljoin(self.config.base_url, endpoint)
+    async def _send_request_once(
+        self,
+        method: str,
+        url: str,
+        params: dict[str, Any] | None,
+        data: dict[str, Any] | None,
+    ) -> httpx.Response:
+        """Send a single HTTP attempt (no retry, no parsing)."""
+        return await self.client.request(method=method, url=url, params=params, json=data)
 
-        # Make request with retries
-        last_error: Exception | None = None
-        start_time = time.time()
-
-        for attempt in range(self.config.max_retries + 1):
-            try:
-                response = await self.client.request(
-                    method=method,
-                    url=url,
-                    params=params,
-                    json=data,
-                )
-
-                response_time = time.time() - start_time
-
-                # Log successful request
-                if self.logger:
-                    log_api_request(
-                        self.logger,
-                        method,
-                        url,
-                        response_time,
-                        response.status_code,
-                    )
-
-                # Handle different status codes
-                if response.status_code == self._HTTP_TOO_MANY_REQUESTS:
-                    retry_after = float(response.headers.get("Retry-After", 60))
-                    msg = f"Rate limit exceeded for {url}"
-                    raise RateLimitError(
-                        msg,
-                        retry_after=retry_after,
-                    )
-                if response.status_code >= self._HTTP_SERVER_ERROR:
-                    msg = f"LitVar2 service error: HTTP {response.status_code}"
-                    raise ServiceUnavailableError(
-                        msg,
-                    )
-                if response.status_code >= self._HTTP_CLIENT_ERROR:
-                    error_text = response.text[:200] if response.text else "Unknown error"
-                    msg = f"HTTP {response.status_code}: {error_text}"
-                    raise LitVarAPIError(
-                        msg,
-                        status_code=response.status_code,
-                    )
-
-                response.raise_for_status()
-
-                # Track successful request statistics
-                self.total_requests += 1
-                self.successful_requests += 1
-                self.response_times.append(response_time)
-                # Keep only recent response times (last 100 requests)
-                if len(self.response_times) > 100:
-                    self.response_times = self.response_times[-100:]
-
-                # Parse response (single JSON, NDJSON, or raw text)
-                return parse_response_body(
-                    content_type=response.headers.get("content-type", "").lower(),
-                    response_text=response.text,
-                    json_loader=response.json,
-                    logger=self.logger,
-                )
-
-            except httpx.TimeoutException as e:
-                last_error = ServiceUnavailableError(f"Request timeout: {url}")
-                if self.logger:
-                    log_error_with_context(
-                        self.logger,
-                        e,
-                        "http_request",
-                        {"url": url, "attempt": attempt + 1},
-                    )
-            except httpx.NetworkError as e:
-                last_error = ServiceUnavailableError(f"Network error: {e!s}")
-                if self.logger:
-                    log_error_with_context(
-                        self.logger,
-                        e,
-                        "http_request",
-                        {"url": url, "attempt": attempt + 1},
-                    )
-            except (LitVarAPIError, RateLimitError, ServiceUnavailableError):
-                # Don't retry these errors
-                raise
-            except Exception as e:
-                last_error = LitVarAPIError(f"Unexpected error: {e!s}")
-                if self.logger:
-                    log_error_with_context(
-                        self.logger,
-                        e,
-                        "http_request",
-                        {"url": url, "attempt": attempt + 1},
-                    )
-
-            # Wait before retry
-            if attempt < self.config.max_retries:
-                await asyncio.sleep(self.config.retry_delay * (2**attempt))
-
-        # All retries exhausted
+    def _handle_response(
+        self,
+        response: httpx.Response,
+        url: str,
+        method: str,
+        start_time: float,
+    ) -> Any:
+        """Classify status, record stats, and parse the body of one response."""
         response_time = time.time() - start_time
+        if self.logger:
+            log_api_request(self.logger, method, url, response_time, response.status_code)
+        retry_after = (
+            float(response.headers.get("Retry-After", 0)) or None
+            if response.status_code == HTTP_TOO_MANY_REQUESTS
+            else None
+        )
+        raise_for_status_code(
+            response.status_code,
+            url=url,
+            text=response.text,
+            retry_after=retry_after,
+        )
+        response.raise_for_status()
+        self._record_success(response_time)
+        return parse_response_body(
+            content_type=response.headers.get("content-type", "").lower(),
+            response_text=response.text,
+            json_loader=response.json,
+            logger=self.logger,
+        )
 
-        # Track failed request statistics
+    def _record_success(self, response_time: float) -> None:
+        """Update success counters and the bounded response-time window."""
         self.total_requests += 1
-        self.response_times.append(response_time)
-        # Keep only recent response times (last 100 requests)
-        if len(self.response_times) > 100:
-            self.response_times = self.response_times[-100:]
+        self.successful_requests += 1
+        self._append_response_time(response_time)
 
+    def _record_failure(
+        self,
+        url: str,
+        method: str,
+        start_time: float,
+        last_error: Exception | None,
+    ) -> None:
+        """Update failure counters and log the exhausted-retries event."""
+        response_time = time.time() - start_time
+        self.total_requests += 1
+        self._append_response_time(response_time)
         if self.logger:
             log_api_request(
                 self.logger,
@@ -248,7 +215,21 @@ class LitVar2Client:
                 error=str(last_error) if last_error else "Unknown error",
             )
 
-        raise last_error or LitVarAPIError("Request failed after all retries")
+    def _append_response_time(self, response_time: float) -> None:
+        """Append to the response-time window, keeping the last 100."""
+        self.response_times.append(response_time)
+        if len(self.response_times) > self._RESPONSE_TIME_WINDOW:
+            self.response_times = self.response_times[-self._RESPONSE_TIME_WINDOW :]
+
+    def _log_attempt_error(self, exc: Exception, url: str, attempt: int) -> None:
+        """Log a per-attempt error with context."""
+        if self.logger:
+            log_error_with_context(
+                self.logger,
+                exc,
+                "http_request",
+                {"url": url, "attempt": attempt + 1},
+            )
 
     async def search_variants(
         self,

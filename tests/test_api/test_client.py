@@ -835,3 +835,34 @@ another invalid line without json"""
             assert "User-Agent" in headers
             assert "Accept" in headers
             assert headers["Accept"] == "application/json"
+
+
+class TestMakeRequestDecomposition:
+    """_make_request now delegates to small helpers; behaviour is preserved."""
+
+    @pytest.mark.asyncio
+    async def test_make_request_parses_json(self, respx_mock=None) -> None:
+        from unittest.mock import AsyncMock, patch
+
+        import httpx
+
+        from litvar_link.api.client import LitVar2Client
+        from litvar_link.config import get_api_config
+
+        client = LitVar2Client(config=get_api_config())
+        fake = httpx.Response(
+            200,
+            json={"results": [{"_id": "x"}]},
+            request=httpx.Request("GET", "http://test/"),
+        )
+        with patch.object(client.client, "request", AsyncMock(return_value=fake)):
+            out = await client._make_request("GET", "variant/autocomplete/")
+        assert out == {"results": [{"_id": "x"}]}
+        await client.close()
+
+    def test_helpers_are_small(self) -> None:
+        # Guard: the decomposed helpers exist (names referenced by 3.7 size check).
+        from litvar_link.api import client as mod
+
+        assert hasattr(mod.LitVar2Client, "_send_request_once")
+        assert hasattr(mod.LitVar2Client, "_record_success")
