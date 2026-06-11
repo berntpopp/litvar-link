@@ -48,7 +48,7 @@ dependencies = [
     # Caching and performance
     "async-lru>=2.0.4,<3.0.0",
     # Logging, correlation, and monitoring
-    "structlog>=24.1.0,<26.0.0",
+    "structlog>=26.1.0,<27.0.0",
     "asgi-correlation-id>=4.3.0,<5.0.0",
     "prometheus-client>=0.20.0,<1.0.0",
     "orjson>=3.10.0,<4.0.0",
