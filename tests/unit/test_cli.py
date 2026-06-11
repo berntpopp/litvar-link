@@ -13,11 +13,15 @@ the real console-script invocation path and remain valid for both the argparse
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 SNAPSHOT = Path(__file__).parent.parent / "fixtures" / "cli_help_snapshot.json"
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 # The scripting contract that must not silently change.
 EXPECTED = {
@@ -30,13 +34,25 @@ EXPECTED = {
 
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
-    """Invoke the CLI module the same way the console script does."""
-    return subprocess.run(  # noqa: S603 - fixed argv (sys.executable + literal module), no shell, no untrusted input
+    """Invoke the CLI module the same way the console script does.
+
+    Force a wide, un-styled terminal (``COLUMNS=200``, ``NO_COLOR``, ``TERM=dumb``)
+    and strip ANSI escapes from stdout. typer's rich help renderer otherwise
+    wraps and ANSI-fragments long option names under a narrow non-TTY terminal
+    (CI defaults to 80 columns), which made the ``--limit`` / ``--reload``
+    substring checks flaky. The scripting contract is width-independent, so the
+    flag text must be asserted against the de-styled, unwrapped output.
+    """
+    env = {**os.environ, "COLUMNS": "200", "NO_COLOR": "1", "TERM": "dumb"}
+    result = subprocess.run(  # noqa: S603 - fixed argv (sys.executable + literal module), no shell, no untrusted input
         [sys.executable, "-m", "litvar_link.cli", *args],
         capture_output=True,
         text=True,
         check=False,
+        env=env,
     )
+    result.stdout = _ANSI_RE.sub("", result.stdout)
+    return result
 
 
 def test_root_help_exit_zero_and_lists_commands() -> None:
