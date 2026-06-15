@@ -15,7 +15,7 @@ async def test_facade_builds_with_six_tools() -> None:
         "search_genetic_variants",
         "get_variant_summary",
         "get_variant_literature",
-        "lookup_rsid_availability",
+        "resolve_rsid",
         "search_gene_variants",
         "get_server_capabilities",
     }

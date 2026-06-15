@@ -76,6 +76,14 @@ def mock_variant_service(mock_litvar_client, mock_logger):
 
 
 @pytest.fixture
+def facade():
+    """A FastMCP facade built like the explicit server, for tool-surface tests."""
+    from litvar_link.mcp.facade import create_litvar_mcp
+
+    return create_litvar_mcp(service_factory=lambda: object())
+
+
+@pytest.fixture
 def app():
     """Create FastAPI application instance for testing."""
     manager = UnifiedServerManager()

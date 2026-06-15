@@ -168,9 +168,16 @@ LitVar-Link exposes five data tools plus a discovery tool:
 | `search_genetic_variants` | Autocomplete search for genetic variants. |
 | `get_variant_summary` | Detailed information about a specific variant. |
 | `get_variant_literature` | Literature associated with a variant (carries `recommended_citation`). |
-| `lookup_rsid_availability` | Check whether an RSID is available in LitVar2. |
+| `resolve_rsid` | Resolve an rsID to its existence/record in LitVar2. |
 | `search_gene_variants` | All variants within a specific gene. |
 | `get_server_capabilities` | Discovery: tool inventory, response-mode/limit semantics, citation contract, research-use notice. |
+
+**Gateway namespace.** `serverInfo.name` is `litvar-link`. Behind the
+[`genefoundry-router`](https://github.com/berntpopp/genefoundry-router) gateway
+this server mounts under the namespace token **`litvar`**, so tools surface as
+`litvar_<tool>` (e.g. `litvar_search_genetic_variants`). Leaf tool names stay
+unprefixed per the GeneFoundry Tool-Naming Standard v1 — the gateway adds the
+namespace at mount time.
 
 **Response modes.** Data tools accept `response_mode`: `compact` (default,
 high-signal fields only) or `full` (raw service payload). List-returning tools

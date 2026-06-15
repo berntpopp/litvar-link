@@ -1,6 +1,6 @@
 {
   "_provenance": {
-    "note": "from_fastapi (OLD, P3<3.5) produced BUGGY tool names due to the mcp_custom_names bug: 'check_rsid_availability' leaked and 'lookup_rsid_availability' was missing. The explicit facade replaces this with the correct target names. This snapshot records both for provenance; tool_names below is the CORRECT target the parity guard pins.",
+    "note": "from_fastapi (OLD, P3<3.5) produced BUGGY tool names due to the mcp_custom_names bug: 'check_rsid_availability' leaked and 'lookup_rsid_availability' was missing. The explicit facade fixed this. v2.0.0 then adopted the GeneFoundry Tool-Naming Standard v1, renaming 'lookup_rsid_availability' -> 'resolve_rsid' ('lookup' is a banned verb synonym). tool_names below is the CURRENT target the parity guard pins.",
     "old_from_fastapi_names": [
       "check_rsid_availability",
       "get_variant_literature",
@@ -13,7 +13,7 @@
     "get_server_capabilities",
     "get_variant_literature",
     "get_variant_summary",
-    "lookup_rsid_availability",
+    "resolve_rsid",
     "search_gene_variants",
     "search_genetic_variants"
   ]

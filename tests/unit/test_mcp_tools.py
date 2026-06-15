@@ -30,7 +30,7 @@ async def test_register_all_adds_five_capability_tools() -> None:
         "search_genetic_variants",
         "get_variant_summary",
         "get_variant_literature",
-        "lookup_rsid_availability",
+        "resolve_rsid",
         "search_gene_variants",
     }
 
@@ -187,8 +187,8 @@ async def test_rsid_tool_invokes_service() -> None:
     )
     mcp = FastMCP(name="t")
     register_all(mcp, service_factory=lambda: svc)
-    tool = await _tool_by_name(mcp, "lookup_rsid_availability")
-    result = await tool.run({"rsid": "rs1061170"})
+    tool = await _tool_by_name(mcp, "resolve_rsid")
+    result = await tool.run({"variant_id": "rs1061170"})
     payload: dict[str, Any] = result.structured_content or {}
     assert payload["rsid"] == "rs1061170"
     assert payload["available"] is True
@@ -199,9 +199,9 @@ async def test_rsid_tool_invalid_raises() -> None:
     svc = _service()
     mcp = FastMCP(name="t")
     register_all(mcp, service_factory=lambda: svc)
-    tool = await _tool_by_name(mcp, "lookup_rsid_availability")
+    tool = await _tool_by_name(mcp, "resolve_rsid")
     with pytest.raises(Exception) as exc:
-        await tool.run({"rsid": "not-an-rsid"})
+        await tool.run({"variant_id": "not-an-rsid"})
     assert "rsid" in str(exc.value).lower()
 
 
@@ -229,7 +229,7 @@ async def test_gene_tool_invokes_service_and_shapes() -> None:
     mcp = FastMCP(name="t")
     register_all(mcp, service_factory=lambda: svc)
     tool = await _tool_by_name(mcp, "search_gene_variants")
-    result = await tool.run({"gene_name": "CFH", "limit": 10, "response_mode": "compact"})
+    result = await tool.run({"gene_symbol": "CFH", "limit": 10, "response_mode": "compact"})
     payload: dict[str, Any] = result.structured_content or {}
     assert payload["gene"] == "CFH"
     assert payload["pathogenic_count"] == 1
@@ -243,7 +243,7 @@ async def test_gene_tool_empty_raises() -> None:
     register_all(mcp, service_factory=lambda: svc)
     tool = await _tool_by_name(mcp, "search_gene_variants")
     with pytest.raises(Exception) as exc:
-        await tool.run({"gene_name": "", "limit": 10, "response_mode": "compact"})
+        await tool.run({"gene_symbol": "", "limit": 10, "response_mode": "compact"})
     assert "empty" in str(exc.value).lower()
 
 

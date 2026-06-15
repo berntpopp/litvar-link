@@ -19,9 +19,13 @@ if TYPE_CHECKING:
 def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
     """Register the search_gene_variants tool."""
 
-    @mcp.tool(name="search_gene_variants", title="Search Gene Variants")
+    @mcp.tool(
+        name="search_gene_variants",
+        title="Search Gene Variants",
+        tags={"gene", "variant"},
+    )
     async def search_gene_variants(
-        gene_name: Annotated[str, Field(description="HGNC gene symbol, e.g. CFH.")],
+        gene_symbol: Annotated[str, Field(description="HGNC gene symbol, e.g. CFH.")],
         limit: Annotated[
             int,
             Field(description=f"Max variants (default {DEFAULT_LIMIT}, max 100)."),
@@ -35,7 +39,7 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
 
         async def body() -> dict[str, Any]:
             try:
-                clean = validate_gene_name(gene_name)
+                clean = validate_gene_name(gene_symbol)
             except ValidationError as exc:
                 raise ToolValidationError(str(exc)) from exc
             resp = await service_factory().search_gene_variants(clean)

@@ -1,4 +1,4 @@
-"""MCP tool: lookup_rsid_availability."""
+"""MCP tool: resolve_rsid."""
 
 from __future__ import annotations
 
@@ -16,21 +16,25 @@ if TYPE_CHECKING:
 
 
 def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
-    """Register the lookup_rsid_availability tool."""
+    """Register the resolve_rsid tool."""
 
-    @mcp.tool(name="lookup_rsid_availability", title="Lookup RSID Availability")
-    async def lookup_rsid_availability(
-        rsid: Annotated[str, Field(description="dbSNP RSID, e.g. rs1061170.")],
+    @mcp.tool(
+        name="resolve_rsid",
+        title="Resolve RSID",
+        tags={"variant"},
+    )
+    async def resolve_rsid(
+        variant_id: Annotated[str, Field(description="dbSNP rsID, e.g. rs1061170.")],
     ) -> dict[str, Any]:
-        """Check whether an rsID exists in LitVar2. Research use only."""
+        """Resolve an rsID to its existence/record in LitVar2. Research use only."""
 
         async def body() -> dict[str, Any]:
             try:
-                clean = validate_rsid(rsid)
+                clean = validate_rsid(variant_id)
             except ValidationError as exc:
                 raise ToolValidationError(str(exc)) from exc
             resp = await service_factory().lookup_rsid(clean)
             data: dict[str, Any] = resp.model_dump()
             return data
 
-        return await run_tool("lookup_rsid_availability", body)
+        return await run_tool("resolve_rsid", body)

@@ -19,7 +19,11 @@ if TYPE_CHECKING:
 def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
     """Register the search_genetic_variants tool."""
 
-    @mcp.tool(name="search_genetic_variants", title="Search Genetic Variants")
+    @mcp.tool(
+        name="search_genetic_variants",
+        title="Search Genetic Variants",
+        tags={"variant"},
+    )
     async def search_genetic_variants(
         query: Annotated[
             str,
