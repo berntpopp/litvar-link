@@ -20,4 +20,7 @@ def test_app_source_has_no_mcp_custom_names() -> None:
 
 def test_create_app_still_builds() -> None:
     app = app_module.create_app()
-    assert any(r.path == "/api/health/" for r in app.routes)
+    # FastAPI 0.137 records included routers as ``_IncludedRouter`` proxies in
+    # ``app.routes`` rather than flattening child routes, so assert against the
+    # public OpenAPI schema (the stable contract) instead of route internals.
+    assert "/api/health/" in app.openapi().get("paths", {})
