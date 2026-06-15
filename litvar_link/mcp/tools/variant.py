@@ -19,7 +19,11 @@ _COMPACT_FIELDS = ("id", "rsid", "gene", "name", "pmids_count")
 def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
     """Register the get_variant_summary tool."""
 
-    @mcp.tool(name="get_variant_summary", title="Get Variant Summary")
+    @mcp.tool(
+        name="get_variant_summary",
+        title="Get Variant Summary",
+        tags={"variant"},
+    )
     async def get_variant_summary(
         variant_id: Annotated[str, Field(description="LitVar2 variant id or RSID/HGVS.")],
         response_mode: Annotated[

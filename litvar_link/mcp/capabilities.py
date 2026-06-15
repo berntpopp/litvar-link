@@ -17,7 +17,7 @@ INSTRUCTIONS = (
     "- get_variant_summary: details for a known variant id.\n"
     "- get_variant_literature: PMIDs for a variant; each row carries "
     "recommended_citation (paste verbatim).\n"
-    "- lookup_rsid_availability: check whether an rsID exists in LitVar2.\n"
+    "- resolve_rsid: resolve an rsID to its existence/record in LitVar2.\n"
     "- search_gene_variants: all variants for a gene symbol.\n"
     "- response_mode 'compact' (default) returns high-signal fields; 'full' is the "
     "raw service payload. Lists take a limit (default "
@@ -36,7 +36,7 @@ def server_capabilities() -> dict[str, Any]:
             "search_genetic_variants",
             "get_variant_summary",
             "get_variant_literature",
-            "lookup_rsid_availability",
+            "resolve_rsid",
             "search_gene_variants",
             "get_server_capabilities",
         ],

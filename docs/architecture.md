@@ -126,7 +126,7 @@ litvar-link/
 |  |     |- search.py                 # search_genetic_variants
 |  |     |- variant.py                # get_variant_summary
 |  |     |- literature.py             # get_variant_literature
-|  |     |- rsid.py                   # lookup_rsid_availability
+|  |     |- rsid.py                   # resolve_rsid
 |  |     |- gene.py                   # search_gene_variants
 |  |     +- metadata.py               # get_server_capabilities
 |  |- models/
@@ -173,8 +173,8 @@ litvar-link/
   handlers.
 - `mcp/tools/` has one module per capability, each exposing `register(...)`,
   fanned out by `mcp/tools/__init__.py`'s `register_all(mcp, service_factory)`.
-  The five preserved tools are `search_genetic_variants`,
-  `get_variant_summary`, `get_variant_literature`, `lookup_rsid_availability`,
+  The five data tools are `search_genetic_variants`,
+  `get_variant_summary`, `get_variant_literature`, `resolve_rsid`,
   and `search_gene_variants` (in `search.py`, `variant.py`, `literature.py`,
   `rsid.py`, `gene.py`); `metadata.py` adds the `get_server_capabilities`
   discovery tool.

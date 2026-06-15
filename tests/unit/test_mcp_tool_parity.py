@@ -15,7 +15,7 @@ EXPECTED_TOOL_NAMES = {
     "search_genetic_variants",
     "get_variant_summary",
     "get_variant_literature",
-    "lookup_rsid_availability",
+    "resolve_rsid",
     "search_gene_variants",
 }
 

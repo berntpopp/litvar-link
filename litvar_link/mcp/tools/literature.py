@@ -18,7 +18,11 @@ if TYPE_CHECKING:
 def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
     """Register the get_variant_literature tool."""
 
-    @mcp.tool(name="get_variant_literature", title="Get Variant Literature")
+    @mcp.tool(
+        name="get_variant_literature",
+        title="Get Variant Literature",
+        tags={"variant", "literature"},
+    )
     async def get_variant_literature(
         variant_id: Annotated[str, Field(description="Variant id or RSID/HGVS.")],
         limit: Annotated[
