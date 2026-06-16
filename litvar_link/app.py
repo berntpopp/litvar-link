@@ -27,6 +27,27 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Application shutting down")
 
 
+def _configure_app(app: FastAPI) -> None:
+    """Attach CORS middleware, API routers, and exception handlers to ``app``."""
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=settings.cors_allow_credentials,
+        allow_methods=settings.cors_allow_methods,
+        allow_headers=settings.cors_allow_headers,
+    )
+
+    app.include_router(variants.router)
+    app.include_router(publications.router)
+    app.include_router(genes.router)
+    app.include_router(sensor.router)
+    app.include_router(health.router)
+
+    from .api.error_handlers import register_exception_handlers
+
+    register_exception_handlers(app)
+
+
 def create_app(extra_lifespan: Any = None) -> FastAPI:
     """Create and configure FastAPI application.
 
@@ -56,25 +77,7 @@ def create_app(extra_lifespan: Any = None) -> FastAPI:
         lifespan=app_lifespan,
     )
 
-    # Add CORS middleware
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=settings.cors_allow_credentials,
-        allow_methods=settings.cors_allow_methods,
-        allow_headers=settings.cors_allow_headers,
-    )
-
-    # Include routers
-    app.include_router(variants.router)
-    app.include_router(publications.router)
-    app.include_router(genes.router)
-    app.include_router(sensor.router)
-    app.include_router(health.router)
-
-    from .api.error_handlers import register_exception_handlers
-
-    register_exception_handlers(app)
+    _configure_app(app)
 
     # Root endpoint
     @app.get("/")
