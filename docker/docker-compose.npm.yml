@@ -1,6 +1,10 @@
 # NPM Production deployment - extends base docker-compose.yml
 # Usage: docker-compose -f docker-compose.yml -f docker-compose.npm.yml up -d
 
+# Pin the compose project name so layering base+npm does not default to the
+# parent dir ("docker") and collide with other services' default project.
+name: litvar-link-npm
+
 services:
   litvar-link:
     # Remove port mapping - NPM handles routing
@@ -63,4 +67,5 @@ networks:
     driver: bridge
   npm_proxy_network:
     external: true
-    name: ${NPM_SHARED_NETWORK_NAME}
+    # Default matches the NPM container's network on the GeneFoundry VPS.
+    name: ${NPM_SHARED_NETWORK_NAME:-npm_default}
