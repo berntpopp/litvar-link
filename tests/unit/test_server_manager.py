@@ -61,7 +61,7 @@ class TestUnifiedServerManager:
 
             with (
                 patch("litvar_link.server_manager.log_server_startup") as mock_log,
-                patch("litvar_link.server_manager.app") as mock_app,
+                patch("litvar_link.app.create_app") as mock_create_app,
                 patch("litvar_link.server_manager.create_litvar_mcp"),
             ):
                 await manager.start_unified_server()
@@ -74,8 +74,9 @@ class TestUnifiedServerManager:
                     8000,
                 )
 
-                # Check MCP mount
-                mock_app.mount.assert_called_once()
+                # MCP is mounted on the freshly built, lifespan-chained app
+                # (create_app(extra_lifespan=...)), not the module-level app (e5e3f83).
+                mock_create_app.return_value.mount.assert_called_once()
 
                 # Check server creation and start
                 mock_server_class.assert_called_once()
@@ -356,7 +357,7 @@ class TestUnifiedServerManager:
             mock_server_class.return_value = mock_server
 
             with (
-                patch("litvar_link.server_manager.app") as mock_app,
+                patch("litvar_link.app.create_app") as mock_create_app,
                 patch("litvar_link.server_manager.create_litvar_mcp") as mock_create_mcp,
                 patch("litvar_link.server_manager.settings") as mock_settings,
             ):
@@ -372,4 +373,7 @@ class TestUnifiedServerManager:
                     stateless_http=True,
                     json_response=True,
                 )
-                mock_app.mount.assert_called_once_with("/mcp", mock_http_app)
+                # The MCP app's lifespan is chained into a fresh app, which is what
+                # gets mounted (so FastMCP's session manager starts; see e5e3f83).
+                mock_create_app.assert_called_once_with(extra_lifespan=mock_http_app.lifespan)
+                mock_create_app.return_value.mount.assert_called_once_with("/mcp", mock_http_app)
