@@ -89,16 +89,24 @@ def configure_logging() -> FilteringBoundLogger:
     return cast("FilteringBoundLogger", structlog.get_logger("litvar_link"))
 
 
-def orjson_serializer(obj: Any) -> str:
-    """Fast JSON serializer using orjson."""
+def orjson_serializer(obj: Any, *, default: Any = None, **_kwargs: Any) -> str:
+    """Fast JSON serializer using orjson.
+
+    structlog's ``JSONRenderer`` calls the serializer with a ``default``
+    callable (the fallback used for values that are not natively JSON
+    serializable) plus other keyword args; accept and forward ``default`` and
+    tolerate the rest so structured logging works under LOG_FORMAT=json.
+    """
     try:
         import orjson
 
+        if default is not None:
+            return orjson.dumps(obj, default=default).decode("utf-8")
         return orjson.dumps(obj).decode("utf-8")
     except ImportError:
         import json
 
-        return json.dumps(obj, default=str)
+        return json.dumps(obj, default=default or str)
 
 
 def log_api_request(
