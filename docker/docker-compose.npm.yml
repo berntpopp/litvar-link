@@ -30,7 +30,13 @@ services:
       LITVAR_LINK_RELOAD: "false"
       GUNICORN_WORKERS: 4
       GUNICORN_LOG_LEVEL: warning
-    
+
+    # Run the unified CLI server so the MCP facade is mounted at /mcp. The base
+    # command (`uvicorn litvar_link.app:app`) and the image CMD (gunicorn on the
+    # same app:app) serve REST only — create_app() does not mount MCP; the mount
+    # lives in UnifiedServerManager.start_unified_server (serve unified).
+    command: ["litvar-link", "serve", "unified", "--host", "0.0.0.0", "--port", "8000"]
+
     # Enhanced health check for NPM routing
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/"]
