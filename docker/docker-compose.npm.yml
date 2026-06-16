@@ -7,8 +7,10 @@ name: litvar-link-npm
 
 services:
   litvar-link:
-    # Remove port mapping - NPM handles routing
-    ports: []
+    # Remove the base host-port mapping - NPM handles routing. `!reset` is
+    # required: a plain `ports: []` MERGES with (does not replace) the base
+    # list, leaving 8000:8000 published (collides with other host:8000 binds).
+    ports: !reset []
     
     # Use Docker/NPM environment file
     env_file:
