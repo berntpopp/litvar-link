@@ -74,13 +74,19 @@ class UnifiedServerManager:
             log_server_startup(self.logger, "unified", host, port)
 
         # Mount the explicit MCP facade as a stateless streamable-HTTP ASGI app.
+        # Build a fresh app whose lifespan also runs the MCP app's lifespan,
+        # otherwise FastMCP's StreamableHTTPSessionManager task group is never
+        # started and every /mcp request 500s. Mount the same instance.
+        from .app import create_app
+
         service_factory, close_services = _make_service_factory(self.logger)
         mcp = create_litvar_mcp(service_factory=service_factory)
         mcp_http_app = mcp.http_app(path="/", stateless_http=True, json_response=True)
-        app.mount(settings.mcp_path, mcp_http_app)
+        application = create_app(extra_lifespan=mcp_http_app.lifespan)
+        application.mount(settings.mcp_path, mcp_http_app)
 
         config = uvicorn.Config(
-            app=app,
+            app=application,
             host=host,
             port=port,
             reload=reload,

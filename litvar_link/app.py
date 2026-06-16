@@ -27,8 +27,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Application shutting down")
 
 
-def create_app() -> FastAPI:
-    """Create and configure FastAPI application."""
+def create_app(extra_lifespan: Any = None) -> FastAPI:
+    """Create and configure FastAPI application.
+
+    Args:
+        extra_lifespan: Optional additional ASGI lifespan context manager to run
+            alongside the app's own lifespan. The unified server passes the MCP
+            streamable-HTTP app's ``lifespan`` here so FastMCP's session-manager
+            task group is initialized (mounting the MCP app is not enough; its
+            lifespan must run on the parent app, per FastMCP's ASGI docs).
+    """
+    if extra_lifespan is None:
+        app_lifespan = lifespan
+    else:
+
+        @asynccontextmanager
+        async def app_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+            async with lifespan(app), extra_lifespan(app):
+                yield
+
     app = FastAPI(
         title="LitVar-Link",
         description="High-performance MCP/API server for NCBI's LitVar2 genetic variant database",
@@ -36,7 +53,7 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
-        lifespan=lifespan,
+        lifespan=app_lifespan,
     )
 
     # Add CORS middleware
