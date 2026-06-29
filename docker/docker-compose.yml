@@ -30,9 +30,10 @@ services:
     ports:
       - "${LITVAR_LINK_PORT:-8000}:8000"
     
-    # Use the default production command for simplicity
-    # For development with code changes, rebuild the container
-    command: ["uvicorn", "litvar_link.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    # Run the UNIFIED server (REST API + MCP). The bare `uvicorn litvar_link.app:app`
+    # serves only the REST API and leaves /mcp unmounted (404); `serve unified` mounts
+    # the MCP streamable-HTTP facade with its session-manager lifespan.
+    command: ["litvar-link", "serve", "unified", "--host", "0.0.0.0", "--port", "8000"]
     
     # Health check
     healthcheck:
