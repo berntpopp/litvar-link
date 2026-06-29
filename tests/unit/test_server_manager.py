@@ -367,13 +367,17 @@ class TestUnifiedServerManager:
 
                 await manager.start_unified_server()
 
-                # Verify the explicit facade's http_app was mounted at the path.
+                # The MCP path ("/mcp") is baked into the ASGI sub-app via
+                # http_app(path=...) and the sub-app is mounted at the project
+                # root, mirroring the fleet-canonical pattern (see gtex-link).
+                # This serves "/mcp" directly instead of "/mcp/" (which would
+                # make POST /mcp redirect 307).
                 mock_create_mcp.return_value.http_app.assert_called_once_with(
-                    path="/",
+                    path="/mcp",
                     stateless_http=True,
                     json_response=True,
                 )
                 # The MCP app's lifespan is chained into a fresh app, which is what
                 # gets mounted (so FastMCP's session manager starts; see e5e3f83).
                 mock_create_app.assert_called_once_with(extra_lifespan=mock_http_app.lifespan)
-                mock_create_app.return_value.mount.assert_called_once_with("/mcp", mock_http_app)
+                mock_create_app.return_value.mount.assert_called_once_with("/", mock_http_app)
