@@ -44,6 +44,13 @@ limit_request_field_size = 8190
 preload_app = True
 reuse_port = True
 
+# Gunicorn 25+ opens a control socket by default. With XDG_RUNTIME_DIR unset it
+# falls back to $HOME/.gunicorn, which is unwritable under the prod overlay's
+# read-only root filesystem ("Control server error: [Errno 30] Read-only file
+# system"). We do not use the control socket (the container is managed by the
+# orchestrator), so disable it. Worker heartbeats use the tmpfs-mounted /tmp.
+control_socket_disable = True
+
 
 # Graceful handling
 def on_starting(server: Any) -> None:
