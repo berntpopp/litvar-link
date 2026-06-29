@@ -77,13 +77,22 @@ class UnifiedServerManager:
         # Build a fresh app whose lifespan also runs the MCP app's lifespan,
         # otherwise FastMCP's StreamableHTTPSessionManager task group is never
         # started and every /mcp request 500s. Mount the same instance.
+        #
+        # Bake the MCP path (``/mcp``) into the ASGI sub-app via ``http_app(path=...)``
+        # and mount that sub-app at the project root, mirroring the fleet-canonical
+        # pattern (see gtex-link). Mounting the sub-app at ``settings.mcp_path``
+        # instead would expose MCP at ``/mcp/`` and make ``POST /mcp`` redirect
+        # (307) to ``/mcp/`` — inconsistent with the rest of the fleet, which
+        # serves ``/mcp`` directly. The FastAPI app's own routes (``/`` and
+        # ``/api/...``) are registered by ``create_app`` before this mount, so
+        # they keep precedence over the catch-all root mount.
         from .app import create_app
 
         service_factory, close_services = _make_service_factory(self.logger)
         mcp = create_litvar_mcp(service_factory=service_factory)
-        mcp_http_app = mcp.http_app(path="/", stateless_http=True, json_response=True)
+        mcp_http_app = mcp.http_app(path=settings.mcp_path, stateless_http=True, json_response=True)
         application = create_app(extra_lifespan=mcp_http_app.lifespan)
-        application.mount(settings.mcp_path, mcp_http_app)
+        application.mount("/", mcp_http_app)
 
         config = uvicorn.Config(
             app=application,
