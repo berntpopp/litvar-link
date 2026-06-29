@@ -6,6 +6,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-06-29
+
+Adopt the **GeneFoundry Container & Deployment Hardening Standard v1** (closes #28):
+pin the base image by digest (`python:3.14-slim@sha256:b877e50…`), harden the prod
+compose overlay (read-only rootfs + tmpfs scratch, `cap_drop: ALL`,
+`no-new-privileges`, `init`, pids limit, `ports: !reset []`), disable the unused
+gunicorn control socket so the read-only rootfs boots cleanly, and never send CORS
+credentials with a wildcard origin.
+
 ## [2.0.0] - 2026-06-15
 
 Adopts the **GeneFoundry Tool-Naming Standard v1** so the server composes
