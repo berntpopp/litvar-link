@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from litvar_link import __version__
+
 from .api.routes import genes, health, publications, sensor, variants
 from .config import settings
 from .logging_config import configure_logging, log_server_startup
@@ -96,6 +98,18 @@ def create_app(extra_lifespan: Any = None) -> FastAPI:
             "docs": "/docs",
             "health": "/api/health",
             "mcp_endpoint": settings.mcp_path,
+        }
+
+    # Lightweight health endpoint required by MCP Transport Standard v1.
+    # Returns the mandatory {status, version, transport} triple without any
+    # external I/O so it can be used as a readiness probe for the container.
+    @app.get("/health")
+    async def health_v1() -> dict[str, Any]:
+        """MCP Transport Standard v1 health probe."""
+        return {
+            "status": "ok",
+            "version": __version__,
+            "transport": "streamable-http-stateless",
         }
 
     return app
