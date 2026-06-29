@@ -29,10 +29,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 def _configure_app(app: FastAPI) -> None:
     """Attach CORS middleware, API routers, and exception handlers to ``app``."""
+    # Never send credentials with a wildcard origin: the browser rejects
+    # `Access-Control-Allow-Credentials: true` paired with `*`, and doing so
+    # would also be unsafe. The default cors_origins is an explicit localhost
+    # list, but cors_allow_credentials defaults True and CORS_ORIGINS can be set
+    # to "*" via env — so guard the pairing here.
+    allow_credentials = settings.cors_allow_credentials and "*" not in settings.cors_origins
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_credentials=settings.cors_allow_credentials,
+        allow_credentials=allow_credentials,
         allow_methods=settings.cors_allow_methods,
         allow_headers=settings.cors_allow_headers,
     )

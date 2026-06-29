@@ -16,13 +16,34 @@ services:
     
     # Use the default production command (Gunicorn)
     command: ["gunicorn", "-c", "gunicorn_conf.py", "litvar_link.app:app"]
-    
+
+    # Behind the reverse proxy the container is expose-only. `!reset` (not []) is
+    # required: Compose MERGES list fields across -f overlays, so a plain
+    # `ports: []` would NOT drop the base file's "${LITVAR_LINK_PORT:-8000}:8000"
+    # mapping — it would stay published on the host's public IP.
+    ports: !reset []
+
+    # Hardened runtime (Container & Deployment Hardening Standard v1, rules 7-14).
+    # LitVar-Link is a stateless live LitVar2 proxy with no persistent state, so
+    # the only writable path is an ephemeral tmpfs scratch (gunicorn worker
+    # heartbeats / TMPDIR); the root filesystem is read-only.
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    init: true
+
     # Production resource limits
     deploy:
       resources:
         limits:
           memory: 1G
           cpus: '1.0'
+          pids: 256
         reservations:
           memory: 512M
           cpus: '0.5'
