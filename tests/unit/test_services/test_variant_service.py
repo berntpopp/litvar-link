@@ -217,6 +217,62 @@ class TestVariantService:
             await service.lookup_rsid("1061170")  # Missing rs prefix
 
     @pytest.mark.asyncio
+    async def test_lookup_rsid_populates_canonical_fields_from_autocomplete(
+        self,
+        service: VariantService,
+        mock_client: AsyncMock,
+    ) -> None:
+        """resolve_rsid must return populated variant_id/gene/variant_name so the
+        result chains downstream. The sensor payload carries only pmids_count +
+        link, so the three fields are enriched from autocomplete (issue #20).
+        """
+        mock_client.sensor_lookup.return_value = {
+            "pmids_count": 884,
+            "rsid": "rs1061170",
+            "link": (
+                "https://www.ncbi.nlm.nih.gov/research/litvar2/docsum"
+                "?variant=litvar%40rs1061170%23%23&query=rs1061170"
+            ),
+            "logo": "https://www.ncbi.nlm.nih.gov/research/litvar2/assets/litvar-logo-small.png",
+        }
+        mock_client.search_variants.return_value = [
+            {
+                "_id": "litvar@rs1061170##",
+                "rsid": "rs1061170",
+                "gene": ["CFH"],
+                "name": "p.Y402H",
+                "hgvs": "p.Y402H",
+                "pmids_count": 884,
+            },
+        ]
+        result = await service.lookup_rsid("rs1061170")
+        assert result.available is True
+        assert result.variant_id == "litvar@rs1061170##"
+        assert result.gene == ["CFH"]
+        assert result.variant_name == "p.Y402H"
+        assert result.litvar_url is not None
+        assert result.pmids_count == 884
+
+    @pytest.mark.asyncio
+    async def test_lookup_rsid_upstream_not_found_is_unavailable(
+        self,
+        service: VariantService,
+        mock_client: AsyncMock,
+    ) -> None:
+        """The live sensor endpoint 400s with 'Variant not found' for an unknown
+        rsID; resolve_rsid maps that to available=False (recoverable), not an
+        internal error, and never calls autocomplete.
+        """
+        mock_client.sensor_lookup.side_effect = LitVarAPIError(
+            'HTTP 400: {"detail":"Variant not found: litvar@rs999999999##"}',
+            status_code=400,
+        )
+        result = await service.lookup_rsid("rs999999999")
+        assert result.available is False
+        assert result.variant_id is None
+        mock_client.search_variants.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_search_gene_variants_success(
         self,
         service: VariantService,

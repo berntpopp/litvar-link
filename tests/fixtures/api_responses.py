@@ -88,12 +88,20 @@ class MockLitVarResponses:
 
     @staticmethod
     def sensor_response_available() -> dict[str, Any]:
-        """Mock sensor response for available variant."""
+        """Mock sensor response for available variant (real LitVar2 sensor payload shape).
+
+        The real sensor endpoint returns {pmids_count, rsid, link, logo} -- NOT
+        litvar_url/variant_id/gene/variant_name. Those three id fields are enriched
+        from autocomplete by lookup_rsid (issue #20).
+        """
         return {
-            "rsid": "rs1061170",
             "pmids_count": 834,
-            "litvar_url": "https://www.ncbi.nlm.nih.gov/research/litvar2/docsum?text=rs1061170",
-            "logo_url": "https://www.ncbi.nlm.nih.gov/research/litvar2/img/litvar_logo.png",
+            "rsid": "rs1061170",
+            "link": (
+                "https://www.ncbi.nlm.nih.gov/research/litvar2/docsum"
+                "?variant=litvar%40rs1061170%23%23&query=rs1061170"
+            ),
+            "logo": "https://www.ncbi.nlm.nih.gov/research/litvar2/assets/litvar-logo-small.png",
         }
 
     @staticmethod

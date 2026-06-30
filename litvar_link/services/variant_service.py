@@ -393,58 +393,95 @@ class VariantService:
             self._log_literature_error(e, variant_id)
             raise
 
+    async def _resolve_rsid_record(
+        self,
+        rsid: str,
+    ) -> "AutocompleteVariantItem | None":
+        """Enrich an rsID with its canonical autocomplete record (issue #20).
+
+        The LitVar2 sensor endpoint returns only ``{pmids_count, rsid, link,
+        logo}`` -- it carries neither the canonical ``variant_id`` (``_id``) nor
+        ``gene``/``name``. resolve_rsid must surface those three so the result
+        chains into get_variant_summary / get_variant_literature, so we read them
+        from autocomplete. Best-effort: a transient autocomplete failure degrades
+        to ``None`` (availability is already known from the sensor call).
+        """
+        from litvar_link.models.endpoint_specific import AutocompleteVariantItem  # noqa: F401
+
+        try:
+            search = await self.search_variants(rsid, limit=5)
+        except Exception as exc:  # enrichment is best-effort; never break resolve
+            if self.logger:
+                log_error_with_context(
+                    self.logger, exc, "resolve_rsid_enrich", {"rsid": rsid}
+                )
+            return None
+        for item in search.variants:
+            if getattr(item, "rsid", None) == rsid:
+                return item
+        return search.variants[0] if search.variants else None
+
+    @staticmethod
+    def _unavailable_sensor(rsid: str, *, cached: bool) -> SensorResponse:
+        """Build the 'rsID not in LitVar2' response (all metadata None)."""
+        return SensorResponse(
+            rsid=rsid,
+            available=False,
+            variant_id=None,
+            litvar_url=None,
+            pmids_count=None,
+            gene=None,
+            variant_name=None,
+            cached=cached,
+        )
+
     async def lookup_rsid(self, rsid: str) -> SensorResponse:
         """Check if RSID is available in LitVar2.
 
-        Args:
-            rsid: Reference SNP ID
-
-        Returns:
-            Sensor response
+        Enriches the result with variant_id / gene / variant_name from the
+        autocomplete endpoint (issue #20): the sensor payload only carries
+        ``{pmids_count, rsid, link, logo}`` so those three id fields must come
+        from autocomplete. Maps a sensor 400 "Variant not found" to
+        ``available=False`` (recoverable) rather than propagating the error.
 
         Raises:
-            ValidationError: For invalid input parameters
-            LitVarAPIError: For API-related errors
+            ValidationError: For invalid RSID format
+            LitVarAPIError: For genuine upstream errors (rate limit, outage)
         """
         rsid = validate_rsid(rsid)
-
+        cached = False
         try:
             initial_hits = hits_before(self._cached_sensor_lookup)
             sensor_data = await self._cached_sensor_lookup(rsid)
             cached = was_cache_hit(self._cached_sensor_lookup, before=initial_hits)
 
-            # Parse sensor response - handle None case
             if sensor_data is None:
-                return SensorResponse(
-                    rsid=rsid,
-                    available=False,
-                    variant_id=None,
-                    litvar_url=None,
-                    pmids_count=None,
-                    gene=None,
-                    variant_name=None,
-                    cached=cached,
-                )
+                return self._unavailable_sensor(rsid, cached=cached)
 
+            record = await self._resolve_rsid_record(rsid)
             return SensorResponse(
                 rsid=rsid,
                 available=True,
-                variant_id=sensor_data.get("variant_id"),
-                litvar_url=sensor_data.get("litvar_url"),
+                # variant_id / gene / variant_name come from autocomplete; the
+                # sensor payload exposes only pmids_count + link (issue #20).
+                variant_id=record.id if record else None,
+                litvar_url=sensor_data.get("link"),
                 pmids_count=sensor_data.get("pmids_count"),
-                gene=sensor_data.get("gene"),
-                variant_name=sensor_data.get("variant_name"),
+                gene=record.gene if record else None,
+                variant_name=(record.name or None) if record else None,
                 cached=cached,
             )
-
+        except ValidationError:
+            raise
+        except LitVarAPIError as e:
+            if _is_variant_not_found(e):
+                return self._unavailable_sensor(rsid, cached=False)
+            if self.logger:
+                log_error_with_context(self.logger, e, "lookup_rsid", {"rsid": rsid})
+            raise
         except Exception as e:
             if self.logger:
-                log_error_with_context(
-                    self.logger,
-                    e,
-                    "lookup_rsid",
-                    {"rsid": rsid},
-                )
+                log_error_with_context(self.logger, e, "lookup_rsid", {"rsid": rsid})
             raise
 
     async def search_gene_variants(self, gene_name: str) -> GeneVariantsResponse:
