@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from typing import TYPE_CHECKING, Any, Self, cast
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
 
 import httpx
 
@@ -35,6 +35,19 @@ if TYPE_CHECKING:
     from structlog.typing import FilteringBoundLogger
 
     from litvar_link.config import APIConfig
+
+
+def _format_endpoint(template: str, **segments: str) -> str:
+    """Substitute path segments into an endpoint template, percent-encoding each.
+
+    LitVar2 canonical ids look like ``litvar@rs113993960##``; the ``@`` and the
+    trailing ``##`` MUST be percent-encoded, because an unencoded ``#`` is parsed
+    as a URL fragment delimiter -- the path is then silently truncated and the
+    server 400s ("Variant not found"). Every dynamic segment is quoted with
+    ``safe=""`` so reserved characters never leak into the path.
+    """
+    encoded = {key: quote(str(value), safe="") for key, value in segments.items()}
+    return template.format(**encoded)
 
 
 class LitVar2Client:
@@ -266,7 +279,8 @@ class LitVar2Client:
         Returns:
             Variant details dictionary
         """
-        endpoint = self.config.endpoints["variant_details"].format(
+        endpoint = _format_endpoint(
+            self.config.endpoints["variant_details"],
             variant_id=variant_id,
         )
         return cast("dict[str, Any]", await self._make_request("GET", endpoint))
@@ -280,7 +294,8 @@ class LitVar2Client:
         Returns:
             List of PMIDs
         """
-        endpoint = self.config.endpoints["variant_publications"].format(
+        endpoint = _format_endpoint(
+            self.config.endpoints["variant_publications"],
             variant_id=variant_id,
         )
         response = await self._make_request("GET", endpoint)
@@ -299,7 +314,7 @@ class LitVar2Client:
             ValueError: If RSID format is invalid
         """
         rsid = validate_rsid(rsid)
-        endpoint = self.config.endpoints["sensor"].format(rsid=rsid)
+        endpoint = _format_endpoint(self.config.endpoints["sensor"], rsid=rsid)
         return cast("dict[str, Any] | None", await self._make_request("GET", endpoint))
 
     async def get_variants_by_gene(self, gene_name: str) -> list[dict[str, Any]]:
@@ -315,7 +330,8 @@ class LitVar2Client:
             ValueError: If gene name is empty or too long
         """
         gene_name = validate_gene_name(gene_name)
-        endpoint = self.config.endpoints["gene_variants"].format(
+        endpoint = _format_endpoint(
+            self.config.endpoints["gene_variants"],
             gene_name=gene_name,
         )
         response = await self._make_request("GET", endpoint)

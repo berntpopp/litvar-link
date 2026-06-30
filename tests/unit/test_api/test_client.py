@@ -351,6 +351,35 @@ class TestLitVar2Client:
                 await client.get_variants_by_gene("x" * 51)
 
     @pytest.mark.asyncio
+    async def test_variant_publications_percent_encodes_canonical_id(
+        self,
+        api_config: APIConfig,
+        mock_logger: MagicMock,
+    ) -> None:
+        """Canonical LitVar ids carry '@' and '##'; the path segment must be
+        percent-encoded. An unencoded '#' is parsed as a URL fragment, so the
+        server receives a truncated id and 400s -- the bug that made
+        get_variant_literature fail for every input.
+        """
+        with patch("httpx.AsyncClient.request") as mock_request:
+            mock_response = AsyncMock()
+            mock_response.status_code = 200
+            mock_response.text = json.dumps({"pmids": ["111", "222"]})
+            mock_response.headers = {"content-type": "application/json"}
+            mock_response.json = MagicMock(return_value={"pmids": ["111", "222"]})
+            mock_response.raise_for_status = MagicMock()
+            mock_request.return_value = mock_response
+
+            async with LitVar2Client(config=api_config, logger=mock_logger) as client:
+                result = await client.get_variant_publications("litvar@rs113993960##")
+
+        assert result == ["111", "222"]
+        url = str(mock_request.call_args[1]["url"])
+        assert "litvar%40rs113993960%23%23" in url
+        # A raw '#' anywhere would truncate the request URL as a fragment.
+        assert "#" not in url
+
+    @pytest.mark.asyncio
     async def test_ndjson_parsing_edge_cases(
         self,
         api_config: APIConfig,
