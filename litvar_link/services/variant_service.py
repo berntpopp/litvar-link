@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
     from litvar_link.api.client import LitVar2Client
     from litvar_link.config import CacheConfig
+    from litvar_link.models.endpoint_specific import AutocompleteVariantItem
 
 _ModelT = TypeVar("_ModelT")
 
@@ -396,7 +397,7 @@ class VariantService:
     async def _resolve_rsid_record(
         self,
         rsid: str,
-    ) -> "AutocompleteVariantItem | None":
+    ) -> AutocompleteVariantItem | None:
         """Enrich an rsID with its canonical autocomplete record (issue #20).
 
         The LitVar2 sensor endpoint returns only ``{pmids_count, rsid, link,
@@ -406,15 +407,11 @@ class VariantService:
         from autocomplete. Best-effort: a transient autocomplete failure degrades
         to ``None`` (availability is already known from the sensor call).
         """
-        from litvar_link.models.endpoint_specific import AutocompleteVariantItem  # noqa: F401
-
         try:
             search = await self.search_variants(rsid, limit=5)
         except Exception as exc:  # enrichment is best-effort; never break resolve
             if self.logger:
-                log_error_with_context(
-                    self.logger, exc, "resolve_rsid_enrich", {"rsid": rsid}
-                )
+                log_error_with_context(self.logger, exc, "resolve_rsid_enrich", {"rsid": rsid})
             return None
         for item in search.variants:
             if getattr(item, "rsid", None) == rsid:

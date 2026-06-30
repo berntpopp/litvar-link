@@ -974,9 +974,7 @@ class TestVariantService:
         assert resolved.variant_id == "litvar@rs113993960##"
 
         lit = await service.get_variant_literature(resolved.variant_id)
-        mock_client.get_variant_publications.assert_awaited_once_with(
-            "litvar@rs113993960##"
-        )
+        mock_client.get_variant_publications.assert_awaited_once_with("litvar@rs113993960##")
         assert lit.total_count == 2
         assert all(isinstance(p.pmid, str) for p in lit.publications)
 
