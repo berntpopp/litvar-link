@@ -299,7 +299,9 @@ class LitVar2Client:
             variant_id=variant_id,
         )
         response = await self._make_request("GET", endpoint)
-        return cast("list[str]", extract_list(response, key="pmids"))
+        # LitVar2 returns PMIDs as integers; coerce to honour the list[str]
+        # contract (Publication.pmid is a str).
+        return [str(pmid) for pmid in extract_list(response, key="pmids")]
 
     async def sensor_lookup(self, rsid: str) -> dict[str, Any] | None:
         """Check if RSID is available in LitVar2.

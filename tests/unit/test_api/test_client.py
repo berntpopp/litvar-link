@@ -380,6 +380,33 @@ class TestLitVar2Client:
         assert "#" not in url
 
     @pytest.mark.asyncio
+    async def test_variant_publications_coerces_int_pmids_to_str(
+        self,
+        api_config: APIConfig,
+        mock_logger: MagicMock,
+    ) -> None:
+        """The LitVar2 publications endpoint returns PMIDs as integers, but the
+        Publication model (and the declared list[str] contract) require strings.
+        The client must coerce, else the literature happy path crashes the moment
+        the call actually succeeds.
+        """
+        payload = {"pmids": [37388288, 18022401]}
+        with patch("httpx.AsyncClient.request") as mock_request:
+            mock_response = AsyncMock()
+            mock_response.status_code = 200
+            mock_response.text = json.dumps(payload)
+            mock_response.headers = {"content-type": "application/json"}
+            mock_response.json = MagicMock(return_value=payload)
+            mock_response.raise_for_status = MagicMock()
+            mock_request.return_value = mock_response
+
+            async with LitVar2Client(config=api_config, logger=mock_logger) as client:
+                result = await client.get_variant_publications("litvar@rs113993960##")
+
+        assert result == ["37388288", "18022401"]
+        assert all(isinstance(pmid, str) for pmid in result)
+
+    @pytest.mark.asyncio
     async def test_ndjson_parsing_edge_cases(
         self,
         api_config: APIConfig,
