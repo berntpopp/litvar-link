@@ -939,6 +939,47 @@ class TestVariantService:
             await service.cleanup()
             # Test would verify cleanup behavior
 
+    @pytest.mark.asyncio
+    async def test_resolve_rsid_then_get_literature_chain(
+        self,
+        service: VariantService,
+        mock_client: AsyncMock,
+    ) -> None:
+        """The canonical variant_id from resolve_rsid feeds get_variant_literature
+        -- the chain issue #20 broke (a null variant_id could not be forwarded).
+        PMIDs are 8 digits so they pass Publication.pmid validation.
+        """
+        mock_client.sensor_lookup.return_value = {
+            "pmids_count": 2,
+            "rsid": "rs113993960",
+            "link": (
+                "https://www.ncbi.nlm.nih.gov/research/litvar2/docsum"
+                "?variant=litvar%40rs113993960%23%23"
+            ),
+            "logo": "x",
+        }
+        mock_client.search_variants.return_value = [
+            {
+                "_id": "litvar@rs113993960##",
+                "rsid": "rs113993960",
+                "gene": ["CFTR"],
+                "name": "p.F508del",
+                "hgvs": "p.F508del",
+                "pmids_count": 2,
+            }
+        ]
+        mock_client.get_variant_publications.return_value = ["37388288", "18022401"]
+
+        resolved = await service.lookup_rsid("rs113993960")
+        assert resolved.variant_id == "litvar@rs113993960##"
+
+        lit = await service.get_variant_literature(resolved.variant_id)
+        mock_client.get_variant_publications.assert_awaited_once_with(
+            "litvar@rs113993960##"
+        )
+        assert lit.total_count == 2
+        assert all(isinstance(p.pmid, str) for p in lit.publications)
+
 
 class TestValidationDelegation:
     """After DRY #1, both layers raise ValidationError via validation.py."""

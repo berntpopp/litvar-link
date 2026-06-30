@@ -33,3 +33,24 @@ async def test_health_check_live() -> None:
         health = await client.health_check()
     assert isinstance(health, dict)
     assert health.get("status") in {"healthy", "unhealthy"}
+
+
+@pytest.mark.asyncio
+async def test_resolve_rsid_then_literature_chain_live() -> None:
+    """End-to-end real API: sensor -> autocomplete enrichment -> publications,
+    for CFH rs1061170 (issue #20). Excluded from ci-local; run via
+    ``make test-integration``.
+    """
+    from litvar_link.config import get_cache_config
+    from litvar_link.services.variant_service import VariantService
+
+    async with LitVar2Client(get_api_config()) as client:
+        service = VariantService(client=client, cache_config=get_cache_config())
+        resolved = await service.lookup_rsid("rs1061170")
+        assert resolved.available is True
+        assert resolved.variant_id == "litvar@rs1061170##"
+        assert resolved.gene == ["CFH"]
+        assert resolved.variant_name
+        lit = await service.get_variant_literature(resolved.variant_id)
+        assert lit.total_count > 0
+        assert all(p.pmid.isdigit() for p in lit.publications)
