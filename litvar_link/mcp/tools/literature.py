@@ -24,13 +24,21 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
         tags={"variant", "literature"},
     )
     async def get_variant_literature(
-        variant_id: Annotated[str, Field(description="Variant id or RSID/HGVS.")],
+        variant_id: Annotated[
+            str,
+            Field(description="LitVar id (litvar@rs...##), rsID, or HGVS/free text."),
+        ],
         limit: Annotated[
             int,
             Field(description=f"Max publications (default {DEFAULT_LIMIT}, max 100)."),
         ] = DEFAULT_LIMIT,
     ) -> dict[str, Any]:
         """Return PMIDs for a variant; each row carries a recommended_citation.
+
+        Accepts a canonical LitVar id, an rsID, or HGVS/free text -- non-canonical
+        input is auto-resolved to the LitVar id via autocomplete. An unresolvable
+        variant returns a recoverable "not found" message (use
+        search_genetic_variants), not an internal error.
 
         Research use only; not clinical decision support.
         """

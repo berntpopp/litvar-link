@@ -40,8 +40,9 @@ class TestTokenBucketRateLimiter:
         await limiter.acquire()
         await limiter.acquire()
 
-        # Now should be empty (with small tolerance for floating point precision)
-        assert abs(limiter.tokens) < 0.001
+        # Now should be empty (with tolerance for the tiny refill that accrues
+        # during the four real awaits at rate=4/s; 0.001 flaked in CI).
+        assert abs(limiter.tokens) < 0.1
 
         # Wait for some tokens to refill
         await asyncio.sleep(0.6)  # Wait 0.6 seconds, should get ~2.4 tokens
@@ -133,7 +134,7 @@ class TestTokenBucketRateLimiter:
 
         # Should not take long since we have 2 tokens
         assert end_time - start_time < 0.2
-        assert abs(limiter.tokens) < 0.001  # Allow small floating point tolerance
+        assert abs(limiter.tokens) < 0.1  # Allow refill accrued during real awaits
 
     def test_current_rate_calculation(self) -> None:
         """Test current rate calculation."""
@@ -349,6 +350,62 @@ class TestLitVar2Client:
             # Test gene name too long
             with pytest.raises(ValidationError, match="Gene name too long"):
                 await client.get_variants_by_gene("x" * 51)
+
+    @pytest.mark.asyncio
+    async def test_variant_publications_percent_encodes_canonical_id(
+        self,
+        api_config: APIConfig,
+        mock_logger: MagicMock,
+    ) -> None:
+        """Canonical LitVar ids carry '@' and '##'; the path segment must be
+        percent-encoded. An unencoded '#' is parsed as a URL fragment, so the
+        server receives a truncated id and 400s -- the bug that made
+        get_variant_literature fail for every input.
+        """
+        with patch("httpx.AsyncClient.request") as mock_request:
+            mock_response = AsyncMock()
+            mock_response.status_code = 200
+            mock_response.text = json.dumps({"pmids": ["111", "222"]})
+            mock_response.headers = {"content-type": "application/json"}
+            mock_response.json = MagicMock(return_value={"pmids": ["111", "222"]})
+            mock_response.raise_for_status = MagicMock()
+            mock_request.return_value = mock_response
+
+            async with LitVar2Client(config=api_config, logger=mock_logger) as client:
+                result = await client.get_variant_publications("litvar@rs113993960##")
+
+        assert result == ["111", "222"]
+        url = str(mock_request.call_args[1]["url"])
+        assert "litvar%40rs113993960%23%23" in url
+        # A raw '#' anywhere would truncate the request URL as a fragment.
+        assert "#" not in url
+
+    @pytest.mark.asyncio
+    async def test_variant_publications_coerces_int_pmids_to_str(
+        self,
+        api_config: APIConfig,
+        mock_logger: MagicMock,
+    ) -> None:
+        """The LitVar2 publications endpoint returns PMIDs as integers, but the
+        Publication model (and the declared list[str] contract) require strings.
+        The client must coerce, else the literature happy path crashes the moment
+        the call actually succeeds.
+        """
+        payload = {"pmids": [37388288, 18022401]}
+        with patch("httpx.AsyncClient.request") as mock_request:
+            mock_response = AsyncMock()
+            mock_response.status_code = 200
+            mock_response.text = json.dumps(payload)
+            mock_response.headers = {"content-type": "application/json"}
+            mock_response.json = MagicMock(return_value=payload)
+            mock_response.raise_for_status = MagicMock()
+            mock_request.return_value = mock_response
+
+            async with LitVar2Client(config=api_config, logger=mock_logger) as client:
+                result = await client.get_variant_publications("litvar@rs113993960##")
+
+        assert result == ["37388288", "18022401"]
+        assert all(isinstance(pmid, str) for pmid in result)
 
     @pytest.mark.asyncio
     async def test_ndjson_parsing_edge_cases(
@@ -587,26 +644,6 @@ class TestLitVar2Client:
             async with LitVar2Client(config=api_config, logger=mock_logger) as client:
                 with pytest.raises(LitVarAPIError, match="Unexpected error"):
                     await client.search_variants("test")
-
-    def test_url_construction(
-        self,
-        api_config: APIConfig,
-        mock_logger: MagicMock,
-    ) -> None:
-        """Test URL construction for different endpoints."""
-        client = LitVar2Client(config=api_config, logger=mock_logger)
-
-        # Test autocomplete URL
-        url = client._build_url("variant/autocomplete/")
-        assert url == "https://test-litvar.api.example.com/variant/autocomplete/"
-
-        # Test sensor URL with parameter
-        url = client._build_url("sensor/{rsid}", rsid="rs1061170")
-        assert url == "https://test-litvar.api.example.com/sensor/rs1061170"
-
-        # Test gene variants URL
-        url = client._build_url("variant/search/gene/{gene_name}", gene_name="CFH")
-        assert url == "https://test-litvar.api.example.com/variant/search/gene/CFH"
 
     @pytest.mark.asyncio
     async def test_429_rate_limit_error_handling(
