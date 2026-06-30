@@ -339,6 +339,105 @@ class TestVariantService:
             await service.get_variant_literature("")
 
     @pytest.mark.asyncio
+    async def test_get_variant_literature_resolves_rsid_to_canonical_id(
+        self,
+        service: VariantService,
+        mock_client: AsyncMock,
+    ) -> None:
+        """An rsID is resolved to the canonical litvar id via autocomplete before
+        the publications call -- the publications endpoint only accepts
+        litvar@...##, so forwarding a raw rsID produces a 400.
+        """
+        mock_client.search_variants.return_value = [
+            {
+                "_id": "litvar@rs113993960##",
+                "rsid": "rs113993960",
+                "gene": ["CFTR"],
+                "name": "p.F508del",
+                "pmids_count": 2,
+            },
+        ]
+        mock_client.get_variant_publications.return_value = ["37388288", "18022401"]
+
+        result = await service.get_variant_literature("rs113993960")
+
+        mock_client.search_variants.assert_awaited_once()
+        mock_client.get_variant_publications.assert_awaited_once_with(
+            "litvar@rs113993960##",
+        )
+        assert result.variant_id == "litvar@rs113993960##"
+        assert result.total_count == 2
+
+    @pytest.mark.asyncio
+    async def test_get_variant_literature_canonical_id_skips_resolution(
+        self,
+        service: VariantService,
+        mock_client: AsyncMock,
+    ) -> None:
+        """An already-canonical litvar id is used directly: no autocomplete call."""
+        mock_client.get_variant_publications.return_value = ["37388288"]
+
+        result = await service.get_variant_literature("litvar@rs1061170##")
+
+        mock_client.search_variants.assert_not_awaited()
+        mock_client.get_variant_publications.assert_awaited_once_with(
+            "litvar@rs1061170##",
+        )
+        assert result.variant_id == "litvar@rs1061170##"
+
+    @pytest.mark.asyncio
+    async def test_get_variant_literature_unresolvable_raises_validation(
+        self,
+        service: VariantService,
+        mock_client: AsyncMock,
+    ) -> None:
+        """When autocomplete finds nothing the entry point fails RECOVERABLY
+        (ValidationError -> visible ToolValidationError), never a masked
+        'retry later' internal error, and never touches publications.
+        """
+        mock_client.search_variants.return_value = []
+
+        with pytest.raises(ValidationError, match="No LitVar2 variant found"):
+            await service.get_variant_literature("rs000000000")
+
+        mock_client.get_variant_publications.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_get_variant_literature_upstream_not_found_is_recoverable(
+        self,
+        service: VariantService,
+        mock_client: AsyncMock,
+    ) -> None:
+        """An upstream 'variant not found' 4xx surfaces as a recoverable
+        ValidationError, NOT the masked 'retry later' internal error.
+        """
+        mock_client.get_variant_publications.side_effect = LitVarAPIError(
+            'HTTP 400: {"detail":"Variant not found: litvar@rs0##"}',
+            status_code=400,
+        )
+
+        with pytest.raises(ValidationError, match="variant not found"):
+            await service.get_variant_literature("litvar@rs0##")
+
+    @pytest.mark.asyncio
+    async def test_get_variant_literature_outage_stays_transient(
+        self,
+        service: VariantService,
+        mock_client: AsyncMock,
+    ) -> None:
+        """A genuine upstream outage (5xx) is NOT rewritten to not-found: it stays
+        a ServiceUnavailableError so the agent's retry-later guidance is correct.
+        """
+        from litvar_link.exceptions import ServiceUnavailableError
+
+        mock_client.get_variant_publications.side_effect = ServiceUnavailableError(
+            "LitVar2 service error: HTTP 503",
+        )
+
+        with pytest.raises(ServiceUnavailableError):
+            await service.get_variant_literature("litvar@rs0##")
+
+    @pytest.mark.asyncio
     async def test_cache_statistics(
         self,
         service: VariantService,
@@ -496,8 +595,10 @@ class TestVariantService:
             "Publications API error",
         )
 
+        # Use a canonical id so resolution is skipped and the publications call
+        # (the path under test) is reached.
         with pytest.raises(Exception, match="Publications API error"):
-            await service.get_variant_literature("test_variant_id")
+            await service.get_variant_literature("litvar@rs1061170##")
 
     @pytest.mark.asyncio
     async def test_get_variant_summary_exception_handling(
@@ -755,8 +856,9 @@ class TestVariantService:
         assert len(result.variants) == 0
         assert result.total_count == 0
 
-        # Test empty publications
-        result = await service.get_variant_literature("nonexistent_id")
+        # Test empty publications (canonical id -> resolution skipped, so this
+        # exercises the empty-publications path, not the unresolvable path).
+        result = await service.get_variant_literature("litvar@rs0000000##")
         assert isinstance(result, PublicationResponse)
         assert len(result.pmids) == 0
         assert result.total_count == 0

@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
-from litvar_link.exceptions import ValidationError
+from litvar_link.exceptions import LitVarAPIError, ValidationError
 from litvar_link.logging_config import log_error_with_context
 from litvar_link.models import (
     GeneVariantsResponse,
@@ -34,6 +34,25 @@ _ModelT = TypeVar("_ModelT")
 
 _PATHOGENIC = ("pathogenic", "likely pathogenic")
 _BENIGN = ("benign", "likely benign")
+
+# Canonical LitVar variant ids look like "litvar@rs113993960##". The publications
+# endpoint only accepts this form, so non-canonical input (rsID/HGVS/free text)
+# must be resolved via autocomplete first.
+_CANONICAL_ID_PREFIX = "litvar@"
+
+# Upstream returns 400 with body {"detail": "Variant not found: ..."} for an id
+# that does not exist. That is a user-recoverable "not found", not an outage.
+_NOT_FOUND_STATUS = (400, 404)
+
+
+def _is_canonical_variant_id(value: str) -> bool:
+    """True for an already-canonical LitVar id like ``litvar@rs113993960##``."""
+    return value.startswith(_CANONICAL_ID_PREFIX)
+
+
+def _is_variant_not_found(exc: LitVarAPIError) -> bool:
+    """True when an upstream 4xx clearly means 'this variant id does not exist'."""
+    return exc.status_code in _NOT_FOUND_STATUS and "not found" in str(exc).lower()
 
 
 def _count_clinical_significance(variants: list[Any]) -> tuple[int, int, int]:
@@ -288,18 +307,67 @@ class VariantService:
                 )
             raise
 
+    async def _resolve_to_variant_id(self, raw: str) -> str:
+        """Resolve free-text / rsID / HGVS to a canonical LitVar id.
+
+        Already-canonical ids (``litvar@...``) pass through untouched; otherwise
+        the autocomplete endpoint resolves the top hit. Raises ``ValidationError``
+        (a user-recoverable error the tool surfaces verbatim) when nothing
+        matches, so an unresolvable variant reads as a clear "not found" rather
+        than a masked retry-later internal error.
+        """
+        if _is_canonical_variant_id(raw):
+            return raw
+        search = await self.search_variants(raw, limit=1)
+        if not search.variants:
+            msg = (
+                f"No LitVar2 variant found for {raw!r}. "
+                "Use search_genetic_variants to find the variant id."
+            )
+            raise ValidationError(msg, field="variant_id")
+        return search.variants[0].id
+
+    async def _fetch_publication_response(self, resolved_id: str) -> PublicationResponse:
+        """Fetch + shape publications for an already-canonical LitVar id."""
+        initial_hits = hits_before(self._cached_get_variant_publications)
+        pmids = await self._cached_get_variant_publications(resolved_id)
+        cached = was_cache_hit(self._cached_get_variant_publications, before=initial_hits)
+
+        from litvar_link.models.variants import Publication
+
+        publications = [Publication(pmid=pmid) for pmid in pmids if pmid]
+        return PublicationResponse(
+            variant_id=resolved_id,
+            publications=publications,
+            total_count=len(publications),
+            pmid_count=len(publications),
+            pmc_count=0,  # Not available from this endpoint
+            format="json",
+            cached=cached,
+        )
+
+    def _log_literature_error(self, exc: Exception, variant_id: str) -> None:
+        """Log an unexpected literature-path error with context (no-op if no logger)."""
+        if self.logger:
+            log_error_with_context(
+                self.logger,
+                exc,
+                "get_variant_literature",
+                {"variant_id": variant_id},
+            )
+
     async def get_variant_literature(self, variant_id: str) -> PublicationResponse:
         """Get publications associated with a variant.
 
-        Args:
-            variant_id: Unique variant identifier
-
-        Returns:
-            Publication response
+        ``variant_id`` may be a canonical LitVar id, an rsID, or HGVS/free text;
+        non-canonical input is resolved to the canonical id via autocomplete
+        before the publications call (the endpoint only accepts ``litvar@...##``).
+        An unresolvable/unknown variant raises ``ValidationError`` (a recoverable
+        "not found"), never a masked retry-later internal error.
 
         Raises:
-            ValidationError: For invalid input parameters
-            LitVarAPIError: For API-related errors
+            ValidationError: For invalid/unresolvable/unknown variants
+            LitVarAPIError: For genuine upstream errors (rate limit, outage)
         """
         if not variant_id or not variant_id.strip():
             msg = "Variant ID cannot be empty"
@@ -307,36 +375,22 @@ class VariantService:
 
         variant_id = variant_id.strip()
         try:
-            initial_hits = hits_before(self._cached_get_variant_publications)
-            pmids = await self._cached_get_variant_publications(variant_id)
-            cached = was_cache_hit(
-                self._cached_get_variant_publications,
-                before=initial_hits,
-            )
-
-            # Create publication objects (simplified for now)
-            from litvar_link.models.variants import Publication
-
-            publications = [Publication(pmid=pmid) for pmid in pmids if pmid]
-
-            return PublicationResponse(
-                variant_id=variant_id,
-                publications=publications,
-                total_count=len(publications),
-                pmid_count=len(publications),
-                pmc_count=0,  # Not available from this endpoint
-                format="json",
-                cached=cached,
-            )
-
-        except Exception as e:
-            if self.logger:
-                log_error_with_context(
-                    self.logger,
-                    e,
-                    "get_variant_literature",
-                    {"variant_id": variant_id},
+            resolved_id = await self._resolve_to_variant_id(variant_id)
+            return await self._fetch_publication_response(resolved_id)
+        except ValidationError:
+            raise  # already a clean, user-recoverable message
+        except LitVarAPIError as e:
+            if _is_variant_not_found(e):
+                msg = (
+                    f"LitVar2 has no literature record for {variant_id!r} "
+                    "(variant not found). Use search_genetic_variants to find a "
+                    "valid variant id."
                 )
+                raise ValidationError(msg, field="variant_id") from e
+            self._log_literature_error(e, variant_id)
+            raise
+        except Exception as e:
+            self._log_literature_error(e, variant_id)
             raise
 
     async def lookup_rsid(self, rsid: str) -> SensorResponse:
