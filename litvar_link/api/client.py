@@ -384,16 +384,3 @@ class LitVar2Client:
             "avg_response_time": avg_response_time,
             "current_rate": self.rate_limiter.current_rate(),
         }
-
-    def _build_url(self, endpoint: str, **kwargs: Any) -> str:
-        """Build full URL from endpoint template.
-
-        Args:
-            endpoint: Endpoint template with placeholders
-            **kwargs: Values to substitute in template
-
-        Returns:
-            Full URL
-        """
-        formatted_endpoint = endpoint.format(**kwargs)
-        return urljoin(self.config.base_url, formatted_endpoint)

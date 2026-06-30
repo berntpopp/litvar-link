@@ -940,6 +940,42 @@ class TestVariantService:
             # Test would verify cleanup behavior
 
     @pytest.mark.asyncio
+    async def test_get_variant_literature_with_legacy_pmid(
+        self,
+        service: VariantService,
+        mock_client: AsyncMock,
+    ) -> None:
+        """Legacy PMIDs (1-6 digits, pre-1976 PubMed records) must NOT cause
+        get_variant_literature to crash with a masked internal error.
+        Publication.validate_pmid formerly rejected any PMID shorter than 7
+        digits; that raised a pydantic ValidationError inside
+        _fetch_publication_response, which fell through 'except Exception'
+        and was re-raised as an opaque retry-later error for a variant that
+        actually exists.
+
+        After the fix:
+        - All valid PMIDs (1-8 digits, numeric) are accepted by the model.
+        - Per-row resilience in _fetch_publication_response skips genuinely
+          malformed rows without aborting the whole call.
+        - The legacy PMID "868328" (6 digits) is present in the result.
+        """
+        mock_client.get_variant_publications.return_value = [
+            "37388288",
+            "868328",  # 6-digit legacy PMID -- crashed the old validator
+            "18022401",
+        ]
+
+        result = await service.get_variant_literature("litvar@rs113993960##")
+
+        # Must succeed (no exception)
+        assert isinstance(result, PublicationResponse)
+        assert result.total_count == 3
+        pmids = result.pmids
+        assert "37388288" in pmids
+        assert "868328" in pmids, "Legacy PMID must be present, not silently dropped"
+        assert "18022401" in pmids
+
+    @pytest.mark.asyncio
     async def test_resolve_rsid_then_get_literature_chain(
         self,
         service: VariantService,
@@ -947,7 +983,6 @@ class TestVariantService:
     ) -> None:
         """The canonical variant_id from resolve_rsid feeds get_variant_literature
         -- the chain issue #20 broke (a null variant_id could not be forwarded).
-        PMIDs are 8 digits so they pass Publication.pmid validation.
         """
         mock_client.sensor_lookup.return_value = {
             "pmids_count": 2,
@@ -968,7 +1003,7 @@ class TestVariantService:
                 "pmids_count": 2,
             }
         ]
-        mock_client.get_variant_publications.return_value = ["37388288", "18022401"]
+        mock_client.get_variant_publications.return_value = ["868328", "18022401"]
 
         resolved = await service.lookup_rsid("rs113993960")
         assert resolved.variant_id == "litvar@rs113993960##"

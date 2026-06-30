@@ -645,26 +645,6 @@ class TestLitVar2Client:
                 with pytest.raises(LitVarAPIError, match="Unexpected error"):
                     await client.search_variants("test")
 
-    def test_url_construction(
-        self,
-        api_config: APIConfig,
-        mock_logger: MagicMock,
-    ) -> None:
-        """Test URL construction for different endpoints."""
-        client = LitVar2Client(config=api_config, logger=mock_logger)
-
-        # Test autocomplete URL
-        url = client._build_url("variant/autocomplete/")
-        assert url == "https://test-litvar.api.example.com/variant/autocomplete/"
-
-        # Test sensor URL with parameter
-        url = client._build_url("sensor/{rsid}", rsid="rs1061170")
-        assert url == "https://test-litvar.api.example.com/sensor/rs1061170"
-
-        # Test gene variants URL
-        url = client._build_url("variant/search/gene/{gene_name}", gene_name="CFH")
-        assert url == "https://test-litvar.api.example.com/variant/search/gene/CFH"
-
     @pytest.mark.asyncio
     async def test_429_rate_limit_error_handling(
         self,

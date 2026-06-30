@@ -336,7 +336,20 @@ class VariantService:
 
         from litvar_link.models.variants import Publication
 
-        publications = [Publication(pmid=pmid) for pmid in pmids if pmid]
+        publications: list[Publication] = []
+        for pmid in pmids:
+            if not pmid:
+                continue
+            try:
+                publications.append(Publication(pmid=pmid))
+            except Exception as e:  # per-row resilience: skip malformed rows
+                if self.logger:
+                    log_error_with_context(
+                        self.logger,
+                        e,
+                        "publication_parsing",
+                        {"pmid": pmid},
+                    )
         return PublicationResponse(
             variant_id=resolved_id,
             publications=publications,
