@@ -1,6 +1,12 @@
 """LitVar-Link: High-performance MCP/API server for NCBI's LitVar2 genetic variant database."""
 
-__version__ = "3.0.0"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("litvar-link")
+except PackageNotFoundError:  # pragma: no cover - source checkout without install
+    __version__ = "0.0.0"
+
 __author__ = "LitVar-Link Development Team"
 __email__ = "dev@litvar-link.org"
 __description__ = "High-performance MCP/API server for NCBI's LitVar2 genetic variant database"
