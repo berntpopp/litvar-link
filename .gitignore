@@ -184,3 +184,7 @@ cython_debug/
 .claude/
 PLAN.md
 TODO.md
+
+# Local docker env holds production secrets — never commit it
+# (keep .env.docker.example, which is a different, tracked filename)
+.env.docker
