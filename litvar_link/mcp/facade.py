@@ -7,6 +7,7 @@ from typing import Any
 
 from fastmcp import FastMCP
 
+from litvar_link import __version__
 from litvar_link.mcp.capabilities import INSTRUCTIONS
 from litvar_link.mcp.tools import register_all
 
@@ -19,6 +20,7 @@ def create_litvar_mcp(*, service_factory: Callable[[], Any]) -> FastMCP:
     """
     mcp: FastMCP = FastMCP(
         name="litvar-link",
+        version=__version__,
         instructions=INSTRUCTIONS,
         mask_error_details=True,
     )

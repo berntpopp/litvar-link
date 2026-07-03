@@ -6,6 +6,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-07-03
+
+### Fixed
+
+- MCP `initialize` now advertises the package version in `serverInfo.version`
+  instead of leaking the FastMCP framework version. `create_litvar_mcp` passes
+  `version=__version__` to the `FastMCP(...)` constructor.
+- `__version__` is now single-sourced from installed package metadata
+  (`importlib.metadata.version("litvar-link")`) instead of being hardcoded in
+  `litvar_link/__init__.py`, so `pyproject.toml [project].version` is the sole
+  source of truth across `serverInfo.version` and `/health`. A guard test
+  (`tests/unit/test_version_single_source.py`) locks the invariant.
+
 ## [3.0.0] - 2026-07-03
 
 Adopts the ratified **GeneFoundry Response-Envelope Standard v1** (flat banner;
