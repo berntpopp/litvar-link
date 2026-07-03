@@ -419,6 +419,19 @@ class VariantService:
         chains into get_variant_summary / get_variant_literature, so we read them
         from autocomplete. Best-effort: a transient autocomplete failure degrades
         to ``None`` (availability is already known from the sensor call).
+
+        Misattribution guard: autocomplete is a free-text search, not an exact
+        rsID index, so its top (or only) hit can be for a *different* variant
+        than the one queried. A result is only treated as a confident match
+        when either (a) some candidate's ``rsid`` equals the queried rsID, or
+        (b) there is exactly one candidate and it carries no ``rsid`` at all
+        (autocomplete gave nothing to compare against, so its sole answer is
+        accepted). Any other shape -- notably a sole/top candidate whose
+        ``rsid`` actively disagrees with the query -- is treated as "no
+        match" (``None``) rather than silently attributing the wrong
+        gene/variant_id/variant_name to the query. A misattributed
+        variant_id would otherwise drive get_variant_literature to return
+        literature for an unrelated variant.
         """
         try:
             search = await self.search_variants(rsid, limit=5)
@@ -429,7 +442,9 @@ class VariantService:
         for item in search.variants:
             if getattr(item, "rsid", None) == rsid:
                 return item
-        return search.variants[0] if search.variants else None
+        if len(search.variants) == 1 and search.variants[0].rsid is None:
+            return search.variants[0]
+        return None
 
     @staticmethod
     def _unavailable_sensor(rsid: str, *, cached: bool) -> SensorResponse:
@@ -481,8 +496,6 @@ class VariantService:
                 variant_name=(record.name or None) if record else None,
                 cached=cached,
             )
-        except ValidationError:
-            raise
         except LitVarAPIError as e:
             if _is_variant_not_found(e):
                 return self._unavailable_sensor(rsid, cached=False)

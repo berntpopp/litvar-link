@@ -273,6 +273,114 @@ class TestVariantService:
         mock_client.search_variants.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_lookup_rsid_does_not_misattribute_mismatched_autocomplete_hit(
+        self,
+        service: VariantService,
+        mock_client: AsyncMock,
+    ) -> None:
+        """Autocomplete is a free-text search, not an exact rsID index -- its
+        (only) hit can be for a *different* variant than the one queried.
+
+        Before the fix, ``_resolve_rsid_record`` fell back to
+        ``search.variants[0]`` unconditionally whenever no candidate's
+        ``rsid`` matched the query, silently attributing a foreign
+        gene/variant_id/variant_name to the queried rsID. That wrong
+        variant_id would then drive ``get_variant_literature`` to return
+        literature for an unrelated variant.
+
+        After the fix, a candidate whose rsid actively disagrees with the
+        query is treated as "no match" (None) rather than misattributed.
+        """
+        mock_client.sensor_lookup.return_value = {
+            "pmids_count": 5,
+            "rsid": "rs1061170",
+            "link": "https://www.ncbi.nlm.nih.gov/research/litvar2/docsum?variant=x",
+            "logo": "x",
+        }
+        # Only candidate returned by autocomplete is for a DIFFERENT rsID.
+        mock_client.search_variants.return_value = [
+            {
+                "_id": "litvar@rs9999999##",
+                "rsid": "rs9999999",
+                "gene": ["WRONG_GENE"],
+                "name": "p.Wrong",
+                "hgvs": "p.Wrong",
+                "pmids_count": 5,
+            },
+        ]
+
+        result = await service.lookup_rsid("rs1061170")
+
+        assert result.available is True  # sensor confirmed availability
+        assert result.variant_id is None, "must not attribute the mismatched variant's id"
+        assert result.gene is None, "must not attribute the mismatched variant's gene"
+        assert result.variant_name is None, "must not attribute the mismatched variant's name"
+
+    @pytest.mark.asyncio
+    async def test_lookup_rsid_degrades_gracefully_when_autocomplete_raises(
+        self,
+        service: VariantService,
+        mock_client: AsyncMock,
+    ) -> None:
+        """Enrichment is best-effort: a transient autocomplete failure during
+        ``_resolve_rsid_record`` must not propagate. Availability is already
+        known from the sensor call, so lookup_rsid degrades to variant_id /
+        gene / variant_name = None instead of raising.
+        """
+        mock_client.sensor_lookup.return_value = {
+            "pmids_count": 5,
+            "rsid": "rs1061170",
+            "link": "https://www.ncbi.nlm.nih.gov/research/litvar2/docsum?variant=x",
+            "logo": "x",
+        }
+        mock_client.search_variants.side_effect = LitVarAPIError(
+            "upstream timeout",
+            status_code=503,
+        )
+
+        result = await service.lookup_rsid("rs1061170")
+
+        assert result.available is True
+        assert result.variant_id is None
+        assert result.gene is None
+        assert result.variant_name is None
+
+    @pytest.mark.asyncio
+    async def test_lookup_rsid_accepts_sole_candidate_with_no_rsid_field(
+        self,
+        service: VariantService,
+        mock_client: AsyncMock,
+    ) -> None:
+        """When autocomplete's sole candidate carries no ``rsid`` at all (it
+        gave nothing to compare against, rather than an actively conflicting
+        value), the fallback is still legitimate and must be accepted -- this
+        is the one case the misattribution guard intentionally preserves.
+        """
+        mock_client.sensor_lookup.return_value = {
+            "pmids_count": 3,
+            "rsid": "rs1061170",
+            "link": "https://www.ncbi.nlm.nih.gov/research/litvar2/docsum?variant=x",
+            "logo": "x",
+        }
+        mock_client.search_variants.return_value = [
+            {
+                "_id": "litvar@rs1061170##",
+                # No "rsid" key at all -- autocomplete gave nothing to compare.
+                "gene": ["CFH"],
+                "name": "p.Y402H",
+                "hgvs": "p.Y402H",
+                "pmids_count": 3,
+            },
+        ]
+
+        result = await service.lookup_rsid("rs1061170")
+
+        assert result.available is True
+        assert result.variant_id == "litvar@rs1061170##"
+        assert result.gene == ["CFH"]
+        assert result.variant_name == "p.Y402H"
+
+    @pytest.mark.asyncio
     async def test_search_gene_variants_success(
         self,
         service: VariantService,
@@ -974,6 +1082,32 @@ class TestVariantService:
         assert "37388288" in pmids
         assert "868328" in pmids, "Legacy PMID must be present, not silently dropped"
         assert "18022401" in pmids
+
+    @pytest.mark.asyncio
+    async def test_get_variant_literature_skips_malformed_pmid_row(
+        self,
+        service: VariantService,
+        mock_client: AsyncMock,
+    ) -> None:
+        """A single genuinely malformed PMID row (mixed in with valid rows)
+        must be skipped -- per-row resilience in _fetch_publication_response
+        -- without aborting the whole call or dropping the valid rows.
+        """
+        mock_client.get_variant_publications.return_value = [
+            "37388288",
+            "not-a-pmid",  # non-digit -- fails Publication.validate_pmid
+            "123456789",  # 9 digits -- exceeds the 1-8 digit max
+            "18022401",
+        ]
+
+        result = await service.get_variant_literature("litvar@rs113993960##")
+
+        assert isinstance(result, PublicationResponse)
+        pmids = result.pmids
+        assert pmids == ["37388288", "18022401"]
+        assert result.total_count == 2
+        assert "not-a-pmid" not in pmids
+        assert "123456789" not in pmids
 
     @pytest.mark.asyncio
     async def test_resolve_rsid_then_get_literature_chain(
