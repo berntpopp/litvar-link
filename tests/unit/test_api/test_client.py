@@ -40,8 +40,9 @@ class TestTokenBucketRateLimiter:
         await limiter.acquire()
         await limiter.acquire()
 
-        # Now should be empty (with tolerance for the tiny refill that accrues
-        # during the four real awaits at rate=4/s; 0.001 flaked in CI).
+        # Now should be empty (with small tolerance for floating point precision)
+        # Tolerance covers the tiny refill that accrues during the real time the
+        # four awaits above take (rate=4/s); 0.001 was too tight and flaked in CI.
         assert abs(limiter.tokens) < 0.1
 
         # Wait for some tokens to refill
@@ -134,7 +135,9 @@ class TestTokenBucketRateLimiter:
 
         # Should not take long since we have 2 tokens
         assert end_time - start_time < 0.2
-        assert abs(limiter.tokens) < 0.1  # Allow refill accrued during real awaits
+        # Tolerance covers the tiny refill that accrues during the real time the
+        # four awaits above take (rate=4/s); 0.001 was too tight and flaked in CI.
+        assert abs(limiter.tokens) < 0.1  # Allow small floating point tolerance
 
     def test_current_rate_calculation(self) -> None:
         """Test current rate calculation."""
