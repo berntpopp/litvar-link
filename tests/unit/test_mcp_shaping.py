@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-import pytest
+from typing import Any
 
+import pytest
+from fastmcp.tools.tool import ToolResult
+
+from litvar_link.exceptions import LitVarAPIError, RateLimitError, ServiceUnavailableError
 from litvar_link.mcp.capabilities import INSTRUCTIONS, server_capabilities
 from litvar_link.mcp.errors import ToolValidationError, run_tool
 from litvar_link.mcp.shaping import (
@@ -18,22 +22,110 @@ from litvar_link.mcp.shaping import (
 class TestErrors:
     @pytest.mark.asyncio
     async def test_validation_error_is_visible(self) -> None:
-        async def body() -> dict[str, str]:
+        async def body() -> dict[str, Any]:
             raise ToolValidationError("empty query")
 
-        # Recoverable validation errors propagate (visible to the agent).
-        with pytest.raises(ToolValidationError):
-            await run_tool("search_genetic_variants", body)
+        # Recoverable validation errors are RETURNED as a flat in-band envelope
+        # (never raised) per the Response-Envelope Standard v1.
+        result = await run_tool("search_genetic_variants", body)
+        assert isinstance(result, ToolResult)
+        assert result.is_error is True
+        payload = result.structured_content or {}
+        assert payload["success"] is False
+        assert payload["error_code"] == "invalid_input"
+        assert "empty query" in payload["message"]
 
     @pytest.mark.asyncio
     async def test_internal_error_is_masked(self) -> None:
-        async def body() -> dict[str, str]:
+        async def body() -> dict[str, Any]:
             raise RuntimeError("secret db path /etc/x leaked")
 
-        with pytest.raises(Exception) as exc:  # asserting masking below
-            await run_tool("search_genetic_variants", body)
-        assert "secret db path" not in str(exc.value)
-        assert "search_genetic_variants" in str(exc.value)
+        result = await run_tool("search_genetic_variants", body)
+        assert isinstance(result, ToolResult)
+        assert result.is_error is True
+        payload = result.structured_content or {}
+        assert payload["success"] is False
+        assert payload["error_code"] == "internal"
+        assert "secret db path" not in payload["message"]
+        assert "search_genetic_variants" in payload["message"]
+        assert payload["_meta"]["request_id"]
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_error_is_retryable(self) -> None:
+        async def body() -> dict[str, Any]:
+            raise RateLimitError("Rate limit exceeded", retry_after=30.0)
+
+        result = await run_tool("search_genetic_variants", body)
+        assert isinstance(result, ToolResult)
+        payload = result.structured_content or {}
+        assert payload["error_code"] == "rate_limited"
+        assert payload["retryable"] is True
+
+    @pytest.mark.asyncio
+    async def test_service_unavailable_error_is_retryable(self) -> None:
+        async def body() -> dict[str, Any]:
+            raise ServiceUnavailableError()
+
+        result = await run_tool("search_genetic_variants", body)
+        assert isinstance(result, ToolResult)
+        payload = result.structured_content or {}
+        assert payload["error_code"] == "upstream_unavailable"
+        assert payload["retryable"] is True
+
+    @pytest.mark.asyncio
+    async def test_api_error_404_maps_to_not_found(self) -> None:
+        async def body() -> dict[str, Any]:
+            raise LitVarAPIError("HTTP 404: not found", status_code=404)
+
+        result = await run_tool("resolve_rsid", body)
+        assert isinstance(result, ToolResult)
+        payload = result.structured_content or {}
+        assert payload["error_code"] == "not_found"
+        assert payload["retryable"] is False
+
+    @pytest.mark.asyncio
+    async def test_api_error_other_4xx_maps_to_invalid_input(self) -> None:
+        async def body() -> dict[str, Any]:
+            raise LitVarAPIError("HTTP 400: bad request", status_code=400)
+
+        result = await run_tool("resolve_rsid", body)
+        assert isinstance(result, ToolResult)
+        payload = result.structured_content or {}
+        assert payload["error_code"] == "invalid_input"
+        assert payload["retryable"] is False
+
+    @pytest.mark.asyncio
+    async def test_api_error_without_status_code_is_upstream_unavailable(self) -> None:
+        async def body() -> dict[str, Any]:
+            raise LitVarAPIError("Unexpected error: boom")
+
+        result = await run_tool("resolve_rsid", body)
+        assert isinstance(result, ToolResult)
+        payload = result.structured_content or {}
+        assert payload["error_code"] == "upstream_unavailable"
+        assert payload["retryable"] is True
+
+    @pytest.mark.asyncio
+    async def test_timeout_error_is_upstream_unavailable(self) -> None:
+        async def body() -> dict[str, Any]:
+            raise TimeoutError("deadline exceeded")
+
+        result = await run_tool("resolve_rsid", body)
+        assert isinstance(result, ToolResult)
+        payload = result.structured_content or {}
+        assert payload["error_code"] == "upstream_unavailable"
+        assert payload["retryable"] is True
+
+    @pytest.mark.asyncio
+    async def test_success_meta_carries_elapsed_ms_and_source(self) -> None:
+        async def body() -> dict[str, Any]:
+            return {"results": []}
+
+        result = await run_tool("search_genetic_variants", body)
+        assert isinstance(result, dict)
+        assert result["_meta"]["source"] == "litvar-link"
+        assert isinstance(result["_meta"]["elapsed_ms"], int)
+        assert result["_meta"]["elapsed_ms"] >= 0
 
 
 class TestShaping:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
+from fastmcp.tools.tool import ToolResult
 from pydantic import Field
 
 from litvar_link.exceptions import ValidationError
@@ -37,7 +38,7 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
             Literal["compact", "full"],
             Field(description="compact (high-signal fields) or full (raw payload)."),
         ] = "compact",
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | ToolResult:
         """Resolve free-text/gene/RSID/HGVS into LitVar2 variant rows.
 
         Research use only; not clinical decision support.

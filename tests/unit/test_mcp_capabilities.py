@@ -24,10 +24,13 @@ async def test_capabilities_tool_registered_and_returns_contract() -> None:
     tool = await _tool_by_name(mcp, "get_server_capabilities")
     result = await tool.run({})
     payload: dict[str, Any] = result.structured_content or {}
-    assert payload["server"] == "litvar-link"
-    assert "search_genetic_variants" in payload["tools"]
-    assert payload["response_modes"] == ["compact", "full"]
-    assert "recommended_citation" in payload["citation_contract"]
+    assert payload["success"] is True
+    caps = payload["result"]
+    assert caps["server"] == "litvar-link"
+    assert "search_genetic_variants" in caps["tools"]
+    assert caps["response_modes"] == ["compact", "full"]
+    assert "recommended_citation" in caps["citation_contract"]
+    assert payload["_meta"]["unsafe_for_clinical_use"] is True
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,9 @@
-"""Each tool module registers exactly its tool and calls through to the service."""
+"""Each tool module registers exactly its tool and calls through to the service.
+
+Success responses are asserted against the flat Response-Envelope Standard v1
+banner (``success``/payload/``_meta``); failures are asserted against the flat
+in-band error frame returned (never raised) as a ``ToolResult(is_error=True)``.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +13,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastmcp import FastMCP
+from fastmcp.tools.tool import ToolResult
 
 from litvar_link.mcp.tools import register_all
 
@@ -19,6 +25,14 @@ def _service() -> AsyncMock:
 async def _tool_by_name(mcp: FastMCP, name: str) -> Any:
     tools = await mcp.list_tools()
     return next(t for t in tools if t.name == name)
+
+
+def _error_payload(result: Any) -> dict[str, Any]:
+    assert isinstance(result, ToolResult)
+    assert result.is_error is True
+    payload: dict[str, Any] = result.structured_content or {}
+    assert payload["success"] is False
+    return payload
 
 
 @pytest.mark.asyncio
@@ -61,9 +75,13 @@ async def test_search_tool_invokes_service_and_shapes() -> None:
     tool = await _tool_by_name(mcp, "search_genetic_variants")
     result = await tool.run({"query": "CFH", "limit": 10, "response_mode": "compact"})
     payload: dict[str, Any] = result.structured_content or {}
+    assert payload["success"] is True
     assert payload["returned"] == 1
     assert "match" not in payload["results"][0]  # compact drops it
     assert payload["query"] == "CFH"
+    assert payload["_meta"]["tool"] == "search_genetic_variants"
+    assert payload["_meta"]["unsafe_for_clinical_use"] is True
+    assert payload["_meta"]["request_id"]
 
 
 @pytest.mark.asyncio
@@ -72,9 +90,12 @@ async def test_search_tool_validation_error_is_visible() -> None:
     mcp = FastMCP(name="t")
     register_all(mcp, service_factory=lambda: svc)
     tool = await _tool_by_name(mcp, "search_genetic_variants")
-    with pytest.raises(Exception) as exc:  # ToolValidationError surfaces
-        await tool.run({"query": "", "limit": 10, "response_mode": "compact"})
-    assert "empty" in str(exc.value).lower()
+    result = await tool.run({"query": "", "limit": 10, "response_mode": "compact"})
+    payload = _error_payload(result)
+    assert payload["error_code"] == "invalid_input"
+    assert "empty" in payload["message"].lower()
+    assert payload["retryable"] is False
+    assert payload["recovery_action"]
 
 
 @pytest.mark.asyncio
@@ -100,8 +121,10 @@ async def test_variant_summary_tool_compacts_variant() -> None:
     tool = await _tool_by_name(mcp, "get_variant_summary")
     result = await tool.run({"variant_id": "litvar@rs1##", "response_mode": "compact"})
     payload: dict[str, Any] = result.structured_content or {}
-    assert "match" not in payload["variant"]
-    assert payload["variant"]["rsid"] == "rs1"
+    assert payload["success"] is True
+    assert "match" not in payload["result"]
+    assert payload["result"]["rsid"] == "rs1"
+    assert payload["cached"] is False
 
 
 @pytest.mark.asyncio
@@ -110,9 +133,10 @@ async def test_variant_summary_empty_id_raises() -> None:
     mcp = FastMCP(name="t")
     register_all(mcp, service_factory=lambda: svc)
     tool = await _tool_by_name(mcp, "get_variant_summary")
-    with pytest.raises(Exception) as exc:
-        await tool.run({"variant_id": "  ", "response_mode": "compact"})
-    assert "empty" in str(exc.value).lower()
+    result = await tool.run({"variant_id": "  ", "response_mode": "compact"})
+    payload = _error_payload(result)
+    assert payload["error_code"] == "invalid_input"
+    assert "empty" in payload["message"].lower()
 
 
 @pytest.mark.asyncio
@@ -126,9 +150,10 @@ async def test_variant_summary_service_validation_error_is_visible() -> None:
     mcp = FastMCP(name="t")
     register_all(mcp, service_factory=lambda: svc)
     tool = await _tool_by_name(mcp, "get_variant_summary")
-    with pytest.raises(Exception) as exc:
-        await tool.run({"variant_id": "x", "response_mode": "compact"})
-    assert "bad variant id" in str(exc.value)
+    result = await tool.run({"variant_id": "x", "response_mode": "compact"})
+    payload = _error_payload(result)
+    assert payload["error_code"] == "invalid_input"
+    assert "bad variant id" in payload["message"]
 
 
 @pytest.mark.asyncio
@@ -145,6 +170,7 @@ async def test_literature_tool_adds_recommended_citation() -> None:
     tool = await _tool_by_name(mcp, "get_variant_literature")
     result = await tool.run({"variant_id": "litvar@rs1##", "limit": 25})
     payload: dict[str, Any] = result.structured_content or {}
+    assert payload["success"] is True
     assert payload["returned"] == 2
     first = payload["results"][0]
     assert first["pmid"] == "32511357"
@@ -158,9 +184,10 @@ async def test_literature_tool_empty_id_raises() -> None:
     mcp = FastMCP(name="t")
     register_all(mcp, service_factory=lambda: svc)
     tool = await _tool_by_name(mcp, "get_variant_literature")
-    with pytest.raises(Exception) as exc:
-        await tool.run({"variant_id": "", "limit": 25})
-    assert "empty" in str(exc.value).lower()
+    result = await tool.run({"variant_id": "", "limit": 25})
+    payload = _error_payload(result)
+    assert payload["error_code"] == "invalid_input"
+    assert "empty" in payload["message"].lower()
 
 
 @pytest.mark.asyncio
@@ -174,9 +201,10 @@ async def test_literature_tool_service_validation_error_is_visible() -> None:
     mcp = FastMCP(name="t")
     register_all(mcp, service_factory=lambda: svc)
     tool = await _tool_by_name(mcp, "get_variant_literature")
-    with pytest.raises(Exception) as exc:
-        await tool.run({"variant_id": "x", "limit": 25})
-    assert "bad variant id" in str(exc.value)
+    result = await tool.run({"variant_id": "x", "limit": 25})
+    payload = _error_payload(result)
+    assert payload["error_code"] == "invalid_input"
+    assert "bad variant id" in payload["message"]
 
 
 @pytest.mark.asyncio
@@ -190,8 +218,9 @@ async def test_rsid_tool_invokes_service() -> None:
     tool = await _tool_by_name(mcp, "resolve_rsid")
     result = await tool.run({"variant_id": "rs1061170"})
     payload: dict[str, Any] = result.structured_content or {}
-    assert payload["rsid"] == "rs1061170"
-    assert payload["available"] is True
+    assert payload["success"] is True
+    assert payload["result"]["rsid"] == "rs1061170"
+    assert payload["result"]["available"] is True
 
 
 @pytest.mark.asyncio
@@ -200,9 +229,10 @@ async def test_rsid_tool_invalid_raises() -> None:
     mcp = FastMCP(name="t")
     register_all(mcp, service_factory=lambda: svc)
     tool = await _tool_by_name(mcp, "resolve_rsid")
-    with pytest.raises(Exception) as exc:
-        await tool.run({"variant_id": "not-an-rsid"})
-    assert "rsid" in str(exc.value).lower()
+    result = await tool.run({"variant_id": "not-an-rsid"})
+    payload = _error_payload(result)
+    assert payload["error_code"] == "invalid_input"
+    assert "rsid" in payload["message"].lower()
 
 
 @pytest.mark.asyncio
@@ -231,6 +261,7 @@ async def test_gene_tool_invokes_service_and_shapes() -> None:
     tool = await _tool_by_name(mcp, "search_gene_variants")
     result = await tool.run({"gene_symbol": "CFH", "limit": 10, "response_mode": "compact"})
     payload: dict[str, Any] = result.structured_content or {}
+    assert payload["success"] is True
     assert payload["gene"] == "CFH"
     assert payload["pathogenic_count"] == 1
     assert "match" not in payload["results"][0]
@@ -242,9 +273,10 @@ async def test_gene_tool_empty_raises() -> None:
     mcp = FastMCP(name="t")
     register_all(mcp, service_factory=lambda: svc)
     tool = await _tool_by_name(mcp, "search_gene_variants")
-    with pytest.raises(Exception) as exc:
-        await tool.run({"gene_symbol": "", "limit": 10, "response_mode": "compact"})
-    assert "empty" in str(exc.value).lower()
+    result = await tool.run({"gene_symbol": "", "limit": 10, "response_mode": "compact"})
+    payload = _error_payload(result)
+    assert payload["error_code"] == "invalid_input"
+    assert "empty" in payload["message"].lower()
 
 
 @pytest.mark.asyncio
@@ -254,16 +286,18 @@ async def test_internal_error_is_masked() -> None:
     mcp = FastMCP(name="t")
     register_all(mcp, service_factory=lambda: svc)
     tool = await _tool_by_name(mcp, "search_genetic_variants")
-    with pytest.raises(Exception) as exc:
-        await tool.run({"query": "CFH", "limit": 10, "response_mode": "compact"})
-    assert "secret" not in str(exc.value)
+    result = await tool.run({"query": "CFH", "limit": 10, "response_mode": "compact"})
+    payload = _error_payload(result)
+    assert payload["error_code"] == "internal"
+    assert "secret" not in payload["message"]
+    assert payload["retryable"] is False
 
 
-# --- Real protocol path: mcp.call_tool() with mask_error_details=True --------
-# tool.run() bypasses FastMCP's masking boundary; agents reach tools via the
-# MCP `tools/call` method, which routes through call_tool(). These tests pin the
-# two-class error contract on that real path: recoverable validation errors stay
-# visible, internal errors are sanitized to a correlation id with no detail leak.
+# --- Real protocol path: mcp.call_tool() -------------------------------------
+# tool.run() bypasses FastMCP's outer masking boundary; agents reach tools via
+# the MCP `tools/call` method, which routes through call_tool(). run_tool()
+# never raises, so call_tool() returns a ToolResult(is_error=True) instead of
+# raising -- these tests pin that on the real protocol path.
 
 
 @pytest.mark.asyncio
@@ -271,26 +305,25 @@ async def test_call_tool_surfaces_validation_message() -> None:
     svc = _service()
     mcp = FastMCP(name="t", mask_error_details=True)
     register_all(mcp, service_factory=lambda: svc)
-    with pytest.raises(Exception) as exc:
-        await mcp.call_tool(
-            "search_genetic_variants",
-            {"query": "", "limit": 10, "response_mode": "compact"},
-        )
+    result = await mcp.call_tool(
+        "search_genetic_variants",
+        {"query": "", "limit": 10, "response_mode": "compact"},
+    )
+    payload = _error_payload(result)
     # The actionable message reaches the agent (NOT masked to a generic string).
-    assert "empty" in str(exc.value).lower()
+    assert "empty" in payload["message"].lower()
 
 
 @pytest.mark.asyncio
-async def test_call_tool_masks_internal_detail_but_keeps_correlation_id() -> None:
+async def test_call_tool_masks_internal_detail_but_keeps_request_id() -> None:
     svc = _service()
     svc.search_variants = AsyncMock(side_effect=RuntimeError("secret /etc/passwd leaked"))
     mcp = FastMCP(name="t", mask_error_details=True)
     register_all(mcp, service_factory=lambda: svc)
-    with pytest.raises(Exception) as exc:
-        await mcp.call_tool(
-            "search_genetic_variants",
-            {"query": "CFH", "limit": 10, "response_mode": "compact"},
-        )
-    message = str(exc.value)
-    assert "secret" not in message  # no upstream detail leaks
-    assert "correlation_id=" in message  # but the support handle reaches the agent
+    result = await mcp.call_tool(
+        "search_genetic_variants",
+        {"query": "CFH", "limit": 10, "response_mode": "compact"},
+    )
+    payload = _error_payload(result)
+    assert "secret" not in payload["message"]  # no upstream detail leaks
+    assert payload["_meta"]["request_id"]  # but a support handle reaches the agent

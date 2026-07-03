@@ -6,6 +6,32 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-07-03
+
+Adopts the ratified **GeneFoundry Response-Envelope Standard v1** (flat banner;
+`docs/RESPONSE-ENVELOPE-STANDARD-v1.md` in `genefoundry-router`, OQ4 -> Option
+A). Every MCP tool now routes through a rewritten `litvar_link/mcp/errors.py`
+boundary (`run_tool`) plus a new `litvar_link/mcp/envelope.py` shaping module.
+
+### BREAKING
+
+- Success responses are now banner-wrapped: `{"success": true, results|result,
+  "_meta": {tool, request_id, elapsed_ms, source, unsafe_for_clinical_use}}`.
+  `resolve_rsid` and `get_variant_summary` now nest their single-record payload
+  under `result`; `get_server_capabilities` nests the discovery document under
+  `result`. `search_genetic_variants`, `get_variant_literature`, and
+  `search_gene_variants` already used the fleet-canon `results` key and are
+  unchanged in shape (only the banner/`_meta` wrapping is new).
+- Execution errors are no longer raised as `fastmcp.exceptions.ToolError`
+  subclasses. They are classified into a closed `error_code` enum
+  (`invalid_input` · `not_found` · `upstream_unavailable` · `rate_limited` ·
+  `internal`) and RETURNED as a flat in-band envelope (`error_code`, `message`,
+  `retryable`, `recovery_action`, `_meta`), wrapped in a
+  `fastmcp.tools.tool.ToolResult(is_error=True)` so the wire `isError` flag is
+  still set (verified against the installed fastmcp 3.4.2 API).
+- `litvar_link.mcp.errors.ToolInternalError` is removed; internal failures are
+  now the `error_code: "internal"` envelope branch instead of a raised class.
+
 ## [2.0.1] - 2026-06-29
 
 Adopt the **GeneFoundry Container & Deployment Hardening Standard v1** (closes #28):
