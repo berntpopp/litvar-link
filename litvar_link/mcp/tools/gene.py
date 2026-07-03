@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
+from fastmcp.tools.tool import ToolResult
 from pydantic import Field
 
 from litvar_link.exceptions import ValidationError
@@ -34,7 +35,7 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
             Literal["compact", "full"],
             Field(description="compact or full."),
         ] = "compact",
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | ToolResult:
         """Return all LitVar2 variants for a gene symbol. Research use only."""
 
         async def body() -> dict[str, Any]:

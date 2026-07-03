@@ -180,9 +180,13 @@ litvar-link/
   discovery tool.
 - `mcp/capabilities.py` holds the `SERVER_CAPABILITIES` dict and the facade
   instructions constant.
-- `mcp/errors.py` distinguishes user-recoverable errors (visible
-  `ToolValidationError` with actionable messages) from internal errors (masked
-  via the `run_tool` boundary).
+- `mcp/errors.py` + `mcp/envelope.py` implement the ratified GeneFoundry
+  Response-Envelope Standard v1 at the `run_tool` boundary every tool routes
+  through: successes are banner-wrapped (`success`/`_meta`); exceptions
+  (`ToolValidationError` for user-recoverable input problems, upstream/rate
+  errors, or anything else) are classified into a closed `error_code` enum and
+  RETURNED (never raised) as a flat in-band error frame, wrapped in a
+  `ToolResult(is_error=True)` so the wire `isError` flag is also set.
 - `mcp/shaping.py` implements `response_mode` (`compact`/`full`), result
   `limit`/truncation, and the `recommended_citation` field.
 - This replaces the old `FastMCP.from_fastapi` + `mcp_custom_names` path and

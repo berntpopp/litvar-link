@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Annotated, Any
 
+from fastmcp.tools.tool import ToolResult
 from pydantic import Field
 
 from litvar_link.exceptions import ValidationError
@@ -25,7 +26,7 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
     )
     async def resolve_rsid(
         variant_id: Annotated[str, Field(description="dbSNP rsID, e.g. rs1061170.")],
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | ToolResult:
         """Resolve an rsID to its existence/record in LitVar2. Research use only."""
 
         async def body() -> dict[str, Any]:
@@ -35,6 +36,6 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
                 raise ToolValidationError(str(exc)) from exc
             resp = await service_factory().lookup_rsid(clean)
             data: dict[str, Any] = resp.model_dump()
-            return data
+            return {"result": data}
 
         return await run_tool("resolve_rsid", body)

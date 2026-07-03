@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
+from fastmcp.tools.tool import ToolResult
 from pydantic import Field
 
 from litvar_link.exceptions import ValidationError
@@ -30,7 +31,7 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
             Literal["compact", "full"],
             Field(description="compact or full payload."),
         ] = "compact",
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | ToolResult:
         """Return details for a known variant id. Research use only."""
 
         async def body() -> dict[str, Any]:
@@ -42,9 +43,9 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
             except ValidationError as exc:
                 raise ToolValidationError(str(exc)) from exc
             data: dict[str, Any] = resp.model_dump()
+            variant = data.get("variant") or {}
             if response_mode == "compact":
-                variant = data.get("variant") or {}
-                data["variant"] = {k: variant[k] for k in _COMPACT_FIELDS if k in variant}
-            return data
+                variant = {k: variant[k] for k in _COMPACT_FIELDS if k in variant}
+            return {"result": variant, "cached": data.get("cached", False)}
 
         return await run_tool("get_variant_summary", body)

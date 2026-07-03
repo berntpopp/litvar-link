@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Annotated, Any
 
+from fastmcp.tools.tool import ToolResult
 from pydantic import Field
 
 from litvar_link.exceptions import ValidationError
@@ -32,7 +33,7 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
             int,
             Field(description=f"Max publications (default {DEFAULT_LIMIT}, max 100)."),
         ] = DEFAULT_LIMIT,
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | ToolResult:
         """Return PMIDs for a variant; each row carries a recommended_citation.
 
         Accepts a canonical LitVar id, an rsID, or HGVS/free text -- non-canonical
