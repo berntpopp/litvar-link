@@ -34,22 +34,31 @@ class TestPublication:
         assert len(pub.authors) == 2
 
     def test_pmid_validation(self) -> None:
-        """Test PMID validation."""
-        # Valid PMIDs
-        pub1 = Publication(pmid="1234567")  # 7 digits
-        pub2 = Publication(pmid="12345678")  # 8 digits
-        assert pub1.pmid == "1234567"
-        assert pub2.pmid == "12345678"
+        """Test PMID validation.
+
+        PubMed IDs start at 1 -- millions of pre-1976 records have 1-6 digit
+        PMIDs.  The validator accepts any numeric string of 1-8 digits; only
+        non-numeric values and strings >8 digits are rejected.
+        """
+        # Valid PMIDs -- 1 through 8 digits
+        pub1 = Publication(pmid="1")  # 1 digit (minimum)
+        pub2 = Publication(pmid="868328")  # 6-digit legacy PMID
+        pub3 = Publication(pmid="1234567")  # 7 digits
+        pub4 = Publication(pmid="12345678")  # 8 digits
+        assert pub1.pmid == "1"
+        assert pub2.pmid == "868328"
+        assert pub3.pmid == "1234567"
+        assert pub4.pmid == "12345678"
 
         # Invalid PMIDs
         with pytest.raises(ValidationError):
             Publication(pmid="abc123")  # Contains letters
 
         with pytest.raises(ValidationError):
-            Publication(pmid="123456")  # Too short
+            Publication(pmid="")  # Empty string (0 digits)
 
         with pytest.raises(ValidationError):
-            Publication(pmid="123456789")  # Too long
+            Publication(pmid="123456789")  # Too long (9 digits)
 
     def test_pmcid_validation(self) -> None:
         """Test PMCID validation."""

@@ -40,8 +40,8 @@ class Publication(BaseModel):
         if not v.isdigit():
             msg = "PMID must contain only digits"
             raise ValueError(msg)
-        if len(v) < 7 or len(v) > 8:
-            msg = "PMID must be 7-8 digits long"
+        if len(v) < 1 or len(v) > 8:
+            msg = "PMID must be 1-8 digits long"
             raise ValueError(msg)
         return v
 

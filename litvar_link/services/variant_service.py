@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
-from litvar_link.exceptions import ValidationError
+from litvar_link.exceptions import LitVarAPIError, ValidationError
 from litvar_link.logging_config import log_error_with_context
 from litvar_link.models import (
     GeneVariantsResponse,
@@ -29,11 +29,31 @@ if TYPE_CHECKING:
 
     from litvar_link.api.client import LitVar2Client
     from litvar_link.config import CacheConfig
+    from litvar_link.models.endpoint_specific import AutocompleteVariantItem
 
 _ModelT = TypeVar("_ModelT")
 
 _PATHOGENIC = ("pathogenic", "likely pathogenic")
 _BENIGN = ("benign", "likely benign")
+
+# Canonical LitVar variant ids look like "litvar@rs113993960##". The publications
+# endpoint only accepts this form, so non-canonical input (rsID/HGVS/free text)
+# must be resolved via autocomplete first.
+_CANONICAL_ID_PREFIX = "litvar@"
+
+# Upstream returns 400 with body {"detail": "Variant not found: ..."} for an id
+# that does not exist. That is a user-recoverable "not found", not an outage.
+_NOT_FOUND_STATUS = (400, 404)
+
+
+def _is_canonical_variant_id(value: str) -> bool:
+    """True for an already-canonical LitVar id like ``litvar@rs113993960##``."""
+    return value.startswith(_CANONICAL_ID_PREFIX)
+
+
+def _is_variant_not_found(exc: LitVarAPIError) -> bool:
+    """True when an upstream 4xx clearly means 'this variant id does not exist'."""
+    return exc.status_code in _NOT_FOUND_STATUS and "not found" in str(exc).lower()
 
 
 def _count_clinical_significance(variants: list[Any]) -> tuple[int, int, int]:
@@ -288,18 +308,80 @@ class VariantService:
                 )
             raise
 
+    async def _resolve_to_variant_id(self, raw: str) -> str:
+        """Resolve free-text / rsID / HGVS to a canonical LitVar id.
+
+        Already-canonical ids (``litvar@...``) pass through untouched; otherwise
+        the autocomplete endpoint resolves the top hit. Raises ``ValidationError``
+        (a user-recoverable error the tool surfaces verbatim) when nothing
+        matches, so an unresolvable variant reads as a clear "not found" rather
+        than a masked retry-later internal error.
+        """
+        if _is_canonical_variant_id(raw):
+            return raw
+        search = await self.search_variants(raw, limit=1)
+        if not search.variants:
+            msg = (
+                f"No LitVar2 variant found for {raw!r}. "
+                "Use search_genetic_variants to find the variant id."
+            )
+            raise ValidationError(msg, field="variant_id")
+        return search.variants[0].id
+
+    async def _fetch_publication_response(self, resolved_id: str) -> PublicationResponse:
+        """Fetch + shape publications for an already-canonical LitVar id."""
+        initial_hits = hits_before(self._cached_get_variant_publications)
+        pmids = await self._cached_get_variant_publications(resolved_id)
+        cached = was_cache_hit(self._cached_get_variant_publications, before=initial_hits)
+
+        from litvar_link.models.variants import Publication
+
+        publications: list[Publication] = []
+        for pmid in pmids:
+            if not pmid:
+                continue
+            try:
+                publications.append(Publication(pmid=pmid))
+            except Exception as e:  # per-row resilience: skip malformed rows
+                if self.logger:
+                    log_error_with_context(
+                        self.logger,
+                        e,
+                        "publication_parsing",
+                        {"pmid": pmid},
+                    )
+        return PublicationResponse(
+            variant_id=resolved_id,
+            publications=publications,
+            total_count=len(publications),
+            pmid_count=len(publications),
+            pmc_count=0,  # Not available from this endpoint
+            format="json",
+            cached=cached,
+        )
+
+    def _log_literature_error(self, exc: Exception, variant_id: str) -> None:
+        """Log an unexpected literature-path error with context (no-op if no logger)."""
+        if self.logger:
+            log_error_with_context(
+                self.logger,
+                exc,
+                "get_variant_literature",
+                {"variant_id": variant_id},
+            )
+
     async def get_variant_literature(self, variant_id: str) -> PublicationResponse:
         """Get publications associated with a variant.
 
-        Args:
-            variant_id: Unique variant identifier
-
-        Returns:
-            Publication response
+        ``variant_id`` may be a canonical LitVar id, an rsID, or HGVS/free text;
+        non-canonical input is resolved to the canonical id via autocomplete
+        before the publications call (the endpoint only accepts ``litvar@...##``).
+        An unresolvable/unknown variant raises ``ValidationError`` (a recoverable
+        "not found"), never a masked retry-later internal error.
 
         Raises:
-            ValidationError: For invalid input parameters
-            LitVarAPIError: For API-related errors
+            ValidationError: For invalid/unresolvable/unknown variants
+            LitVarAPIError: For genuine upstream errors (rate limit, outage)
         """
         if not variant_id or not variant_id.strip():
             msg = "Variant ID cannot be empty"
@@ -307,90 +389,122 @@ class VariantService:
 
         variant_id = variant_id.strip()
         try:
-            initial_hits = hits_before(self._cached_get_variant_publications)
-            pmids = await self._cached_get_variant_publications(variant_id)
-            cached = was_cache_hit(
-                self._cached_get_variant_publications,
-                before=initial_hits,
-            )
-
-            # Create publication objects (simplified for now)
-            from litvar_link.models.variants import Publication
-
-            publications = [Publication(pmid=pmid) for pmid in pmids if pmid]
-
-            return PublicationResponse(
-                variant_id=variant_id,
-                publications=publications,
-                total_count=len(publications),
-                pmid_count=len(publications),
-                pmc_count=0,  # Not available from this endpoint
-                format="json",
-                cached=cached,
-            )
-
-        except Exception as e:
-            if self.logger:
-                log_error_with_context(
-                    self.logger,
-                    e,
-                    "get_variant_literature",
-                    {"variant_id": variant_id},
+            resolved_id = await self._resolve_to_variant_id(variant_id)
+            return await self._fetch_publication_response(resolved_id)
+        except ValidationError:
+            raise  # already a clean, user-recoverable message
+        except LitVarAPIError as e:
+            if _is_variant_not_found(e):
+                msg = (
+                    f"LitVar2 has no literature record for {variant_id!r} "
+                    "(variant not found). Use search_genetic_variants to find a "
+                    "valid variant id."
                 )
+                raise ValidationError(msg, field="variant_id") from e
+            self._log_literature_error(e, variant_id)
             raise
+        except Exception as e:
+            self._log_literature_error(e, variant_id)
+            raise
+
+    async def _resolve_rsid_record(
+        self,
+        rsid: str,
+    ) -> AutocompleteVariantItem | None:
+        """Enrich an rsID with its canonical autocomplete record (issue #20).
+
+        The LitVar2 sensor endpoint returns only ``{pmids_count, rsid, link,
+        logo}`` -- it carries neither the canonical ``variant_id`` (``_id``) nor
+        ``gene``/``name``. resolve_rsid must surface those three so the result
+        chains into get_variant_summary / get_variant_literature, so we read them
+        from autocomplete. Best-effort: a transient autocomplete failure degrades
+        to ``None`` (availability is already known from the sensor call).
+
+        Misattribution guard: autocomplete is a free-text search, not an exact
+        rsID index, so its top (or only) hit can be for a *different* variant
+        than the one queried. A result is only treated as a confident match
+        when either (a) some candidate's ``rsid`` equals the queried rsID, or
+        (b) there is exactly one candidate and it carries no ``rsid`` at all
+        (autocomplete gave nothing to compare against, so its sole answer is
+        accepted). Any other shape -- notably a sole/top candidate whose
+        ``rsid`` actively disagrees with the query -- is treated as "no
+        match" (``None``) rather than silently attributing the wrong
+        gene/variant_id/variant_name to the query. A misattributed
+        variant_id would otherwise drive get_variant_literature to return
+        literature for an unrelated variant.
+        """
+        try:
+            search = await self.search_variants(rsid, limit=5)
+        except Exception as exc:  # enrichment is best-effort; never break resolve
+            if self.logger:
+                log_error_with_context(self.logger, exc, "resolve_rsid_enrich", {"rsid": rsid})
+            return None
+        for item in search.variants:
+            if getattr(item, "rsid", None) == rsid:
+                return item
+        if len(search.variants) == 1 and search.variants[0].rsid is None:
+            return search.variants[0]
+        return None
+
+    @staticmethod
+    def _unavailable_sensor(rsid: str, *, cached: bool) -> SensorResponse:
+        """Build the 'rsID not in LitVar2' response (all metadata None)."""
+        return SensorResponse(
+            rsid=rsid,
+            available=False,
+            variant_id=None,
+            litvar_url=None,
+            pmids_count=None,
+            gene=None,
+            variant_name=None,
+            cached=cached,
+        )
 
     async def lookup_rsid(self, rsid: str) -> SensorResponse:
         """Check if RSID is available in LitVar2.
 
-        Args:
-            rsid: Reference SNP ID
-
-        Returns:
-            Sensor response
+        Enriches the result with variant_id / gene / variant_name from the
+        autocomplete endpoint (issue #20): the sensor payload only carries
+        ``{pmids_count, rsid, link, logo}`` so those three id fields must come
+        from autocomplete. Maps a sensor 400 "Variant not found" to
+        ``available=False`` (recoverable) rather than propagating the error.
 
         Raises:
-            ValidationError: For invalid input parameters
-            LitVarAPIError: For API-related errors
+            ValidationError: For invalid RSID format
+            LitVarAPIError: For genuine upstream errors (rate limit, outage)
         """
         rsid = validate_rsid(rsid)
-
+        cached = False
         try:
             initial_hits = hits_before(self._cached_sensor_lookup)
             sensor_data = await self._cached_sensor_lookup(rsid)
             cached = was_cache_hit(self._cached_sensor_lookup, before=initial_hits)
 
-            # Parse sensor response - handle None case
             if sensor_data is None:
-                return SensorResponse(
-                    rsid=rsid,
-                    available=False,
-                    variant_id=None,
-                    litvar_url=None,
-                    pmids_count=None,
-                    gene=None,
-                    variant_name=None,
-                    cached=cached,
-                )
+                return self._unavailable_sensor(rsid, cached=cached)
 
+            record = await self._resolve_rsid_record(rsid)
             return SensorResponse(
                 rsid=rsid,
                 available=True,
-                variant_id=sensor_data.get("variant_id"),
-                litvar_url=sensor_data.get("litvar_url"),
+                # variant_id / gene / variant_name come from autocomplete; the
+                # sensor payload exposes only pmids_count + link (issue #20).
+                variant_id=record.id if record else None,
+                litvar_url=sensor_data.get("link"),
                 pmids_count=sensor_data.get("pmids_count"),
-                gene=sensor_data.get("gene"),
-                variant_name=sensor_data.get("variant_name"),
+                gene=record.gene if record else None,
+                variant_name=(record.name or None) if record else None,
                 cached=cached,
             )
-
+        except LitVarAPIError as e:
+            if _is_variant_not_found(e):
+                return self._unavailable_sensor(rsid, cached=False)
+            if self.logger:
+                log_error_with_context(self.logger, e, "lookup_rsid", {"rsid": rsid})
+            raise
         except Exception as e:
             if self.logger:
-                log_error_with_context(
-                    self.logger,
-                    e,
-                    "lookup_rsid",
-                    {"rsid": rsid},
-                )
+                log_error_with_context(self.logger, e, "lookup_rsid", {"rsid": rsid})
             raise
 
     async def search_gene_variants(self, gene_name: str) -> GeneVariantsResponse:
