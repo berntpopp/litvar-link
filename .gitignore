@@ -181,6 +181,7 @@ cython_debug/
 .cursorindexingignore
 
 # claude files
-.claude/
+.claude/*
+!.claude/skills/
 PLAN.md
 TODO.md
