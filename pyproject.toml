@@ -45,7 +45,7 @@ dependencies = [
     "httpx>=0.27.0,<1.0.0",
     # MCP integration
     "mcp[cli]>=1.28.0,<2.0.0",
-    "fastmcp>=0.2.0,<4.0.0",
+    "fastmcp>=3.4.3,<4.0.0",
     # Caching and performance
     "async-lru>=2.0.4,<3.0.0",
     # Logging, correlation, and monitoring
