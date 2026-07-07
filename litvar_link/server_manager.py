@@ -90,7 +90,17 @@ class UnifiedServerManager:
 
         service_factory, close_services = _make_service_factory(self.logger)
         mcp = create_litvar_mcp(service_factory=service_factory)
-        mcp_http_app = mcp.http_app(path=settings.mcp_path, stateless_http=True, json_response=True)
+        # host_origin_protection defaults to True since fastmcp 3.4.3, which 421s
+        # every request whose Host is not localhost -- including legitimate proxied
+        # traffic from the genefoundry-router. The reverse proxy (NPM) already
+        # validates the Host via server_name + TLS SNI, so disable the redundant
+        # app-layer guard here to keep the public /mcp reachable.
+        mcp_http_app = mcp.http_app(
+            path=settings.mcp_path,
+            stateless_http=True,
+            json_response=True,
+            host_origin_protection=False,
+        )
         application = create_app(extra_lifespan=mcp_http_app.lifespan)
         application.mount("/", mcp_http_app)
 
