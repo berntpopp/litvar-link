@@ -323,19 +323,19 @@ class TestLogCacheOperation:
     """Test the log_cache_operation function."""
 
     def test_log_cache_operation_basic(self):
-        """Test basic cache operation logging."""
+        """Test basic cache operation logging (M3: namespace, never a raw key)."""
         mock_logger = Mock()
 
         logging_config.log_cache_operation(
             logger=mock_logger,
             operation="get",
-            key="test_key",
+            namespace="search_variants",
         )
 
         mock_logger.debug.assert_called_once_with(
             "Cache operation",
             operation="get",
-            key="test_key",
+            cache_namespace="search_variants",
         )
 
     def test_log_cache_operation_with_hit(self):
@@ -345,14 +345,14 @@ class TestLogCacheOperation:
         logging_config.log_cache_operation(
             logger=mock_logger,
             operation="get",
-            key="test_key",
+            namespace="search_variants",
             hit=True,
         )
 
         mock_logger.debug.assert_called_once_with(
             "Cache operation",
             operation="get",
-            key="test_key",
+            cache_namespace="search_variants",
             cache_hit=True,
         )
 
@@ -363,14 +363,14 @@ class TestLogCacheOperation:
         logging_config.log_cache_operation(
             logger=mock_logger,
             operation="set",
-            key="test_key",
+            namespace="variant_details",
             size=1024,
         )
 
         mock_logger.debug.assert_called_once_with(
             "Cache operation",
             operation="set",
-            key="test_key",
+            cache_namespace="variant_details",
             cache_size=1024,
         )
 
@@ -381,7 +381,7 @@ class TestLogCacheOperation:
         logging_config.log_cache_operation(
             logger=mock_logger,
             operation="set",
-            key="test_key",
+            namespace="variant_details",
             hit=False,
             size=512,
         )
@@ -389,7 +389,7 @@ class TestLogCacheOperation:
         mock_logger.debug.assert_called_once_with(
             "Cache operation",
             operation="set",
-            key="test_key",
+            cache_namespace="variant_details",
             cache_hit=False,
             cache_size=512,
         )
@@ -511,7 +511,7 @@ class TestLogErrorWithContext:
     """Test the log_error_with_context function."""
 
     def test_log_error_with_context_basic(self):
-        """Test basic error logging (M3: no error_message emitted)."""
+        """Test basic error logging (M3: no error_message, no exc_info)."""
         mock_logger = Mock()
         error = ValueError("Test error")
 
@@ -522,12 +522,12 @@ class TestLogErrorWithContext:
         )
 
         # The exception type is kept for triage; the message (which can embed a
-        # variant/rsid/url) is not logged as a structured field.
+        # variant/rsid/url) is not logged as a structured field, and exc_info is
+        # NOT passed -- the rendered traceback would re-embed that message.
         mock_logger.error.assert_called_once_with(
             "Operation failed",
             operation="test_operation",
             error_type="ValueError",
-            exc_info=True,
         )
 
     def test_log_error_with_context_with_context(self):
@@ -544,13 +544,13 @@ class TestLogErrorWithContext:
         )
 
         # Only sorted context key names are emitted; the values (identifier-
-        # bearing URLs, etc.) are redacted, as is the error message.
+        # bearing URLs, etc.) are redacted, as is the error message. exc_info is
+        # NOT passed -- the rendered traceback would re-embed the identifier.
         mock_logger.error.assert_called_once_with(
             "Operation failed",
             operation="api_request",
             error_type="ConnectionError",
             context_keys=["retry_count", "url"],
-            exc_info=True,
         )
 
     def test_log_error_with_context_no_context(self):
@@ -566,11 +566,10 @@ class TestLogErrorWithContext:
         )
 
         # Should not include context_keys when context is None, and never the
-        # error message.
+        # error message or an exc_info-rendered traceback.
         expected_call_kwargs = {
             "operation": "runtime_operation",
             "error_type": "RuntimeError",
-            "exc_info": True,
         }
 
         mock_logger.error.assert_called_once_with(

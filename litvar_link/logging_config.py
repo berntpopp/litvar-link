@@ -162,14 +162,20 @@ def log_api_request(
 def log_cache_operation(
     logger: FilteringBoundLogger,
     operation: str,
-    key: str,
+    namespace: str,
     hit: bool | None = None,
     size: int | None = None,
 ) -> None:
-    """Log cache operation with structured data."""
+    """Log cache operation with structured data.
+
+    PII-safe (finding M3): ``namespace`` MUST be a non-sensitive cache namespace
+    or clear pattern (e.g. ``search_variants``, ``all``) -- never a raw cache
+    key built from call arguments, which on LitVar routes carry variant/rsid/
+    gene identifiers. Only the namespace, operation, hit, and size are emitted.
+    """
     log_data: dict[str, Any] = {
         "operation": operation,
-        "key": key,
+        "cache_namespace": namespace,
     }
 
     if hit is not None:
@@ -237,8 +243,14 @@ def log_error_with_context(
     embed a variant/rsid/url -- e.g. ``No LitVar2 variant found for '<rsid>'``)
     nor the raw ``context`` *values* (query/variant_id/rsid/gene_name/url/pmid)
     are logged. Only the operation, the exception *type*, and the sorted context
-    *key* names are emitted; the stack trace is preserved via ``exc_info`` for
-    diagnosis. Signature kept stable for callers.
+    *key* names are emitted.
+
+    ``exc_info`` is deliberately NOT passed: the production JSON renderer
+    expands it into a traceback whose ``exc_value`` re-embeds the exception
+    message (and thus the identifier) into the rendered log record, defeating
+    the field-level redaction above. Callers needing a full traceback for a
+    non-sensitive error should log it explicitly at the call site.
+    Signature kept stable for callers.
     """
     log_data: dict[str, Any] = {
         "operation": operation,
@@ -248,4 +260,4 @@ def log_error_with_context(
     if context:
         log_data["context_keys"] = sorted(context)
 
-    logger.error("Operation failed", **log_data, exc_info=True)
+    logger.error("Operation failed", **log_data)

@@ -21,23 +21,18 @@ P = TypeVar("P")
 R = TypeVar("R")
 
 
-def _build_cache_key(
-    func_name: str,
-    args: tuple[Any, ...],
-    kwargs: dict[str, Any],
-    key_pattern: str | None,
-) -> str:
-    """Build a logging cache key from the call signature.
+def _cache_log_namespace(func_name: str, key_pattern: str | None) -> str:
+    """Return the non-sensitive cache *namespace* used for logging.
 
-    Uses ``key_pattern`` when provided, otherwise the function name, then
-    appends positional args and sorted keyword args.
+    PII-safe (finding M3): the call *arguments* -- which on LitVar routes carry
+    patient-adjacent identifiers (rsIDs, HGVS, gene symbols, free-text queries)
+    -- are NEVER folded into the logged key. Only the namespace (``key_pattern``
+    when provided, else the function name) is emitted, so logs record *which*
+    cache was exercised without disclosing *what* was looked up. The actual
+    cache keying is handled by :func:`async_lru.alru_cache` on the real
+    arguments; this value is used solely for structured logging.
     """
-    prefix = key_pattern or func_name
-    key = f"{prefix}:{':'.join(str(arg) for arg in args)}"
-    if kwargs:
-        key_parts = [f"{k}={v}" for k, v in sorted(kwargs.items())]
-        key += f":{':'.join(key_parts)}"
-    return key
+    return key_pattern or func_name
 
 
 class CacheManager:
@@ -67,17 +62,17 @@ class CacheManager:
             "cached_functions": len(self._cached_functions),
         }
 
-    def _log_cache_hit(self, key: str) -> None:
+    def _log_cache_hit(self, namespace: str) -> None:
         """Log cache hit and update statistics."""
         self._cache_stats["hits"] += 1
         if self.logger:
-            log_cache_operation(self.logger, "hit", key, hit=True)
+            log_cache_operation(self.logger, "hit", namespace, hit=True)
 
-    def _log_cache_miss(self, key: str) -> None:
+    def _log_cache_miss(self, namespace: str) -> None:
         """Log cache miss and update statistics."""
         self._cache_stats["misses"] += 1
         if self.logger:
-            log_cache_operation(self.logger, "miss", key, hit=False)
+            log_cache_operation(self.logger, "miss", namespace, hit=False)
 
     def cached(
         self,
@@ -93,7 +88,7 @@ class CacheManager:
         Args:
             maxsize: Maximum number of cached items (default: 256).
             ttl: Time-to-live in seconds (default: 3600).
-            key_pattern: Optional prefix for generated cache keys.
+            key_pattern: Optional namespace label for cache-operation logs.
 
         Returns:
             Decorator that adds caching to an async function.
@@ -107,7 +102,8 @@ class CacheManager:
 
             @functools.wraps(func)
             async def wrapper(*args: Any, **kwargs: Any) -> R:
-                cache_key = _build_cache_key(func.__name__, args, kwargs, key_pattern)
+                # PII-safe (M3): log only the namespace, never the call args.
+                cache_namespace = _cache_log_namespace(func.__name__, key_pattern)
                 initial_hits = cached_func.cache_info().hits
                 start_time = time.time()
 
@@ -116,14 +112,14 @@ class CacheManager:
                 cache_info_after = cached_func.cache_info()
                 was_cache_hit = cache_info_after.hits > initial_hits
                 if was_cache_hit:
-                    self._log_cache_hit(cache_key)
+                    self._log_cache_hit(cache_namespace)
                 else:
-                    self._log_cache_miss(cache_key)
+                    self._log_cache_miss(cache_namespace)
 
                 if self.logger:
                     self.logger.debug(
                         "Cache operation completed",
-                        cache_key=cache_key,
+                        cache_namespace=cache_namespace,
                         hit=was_cache_hit,
                         execution_time_ms=(time.time() - start_time) * 1000,
                         cache_size=cache_info_after.currsize,
@@ -132,7 +128,6 @@ class CacheManager:
 
                 return result
 
-            # Store cache info access for management
             wrapper.cache_info = cached_func.cache_info  # type: ignore
             wrapper.cache_clear = cached_func.cache_clear  # type: ignore
 

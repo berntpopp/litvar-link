@@ -10,6 +10,7 @@ values themselves.
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock
 
 import httpx
@@ -18,8 +19,9 @@ import structlog
 
 from litvar_link import logging_config
 from litvar_link.api.client import LitVar2Client
-from litvar_link.config import APIConfig
+from litvar_link.config import APIConfig, settings
 from litvar_link.exceptions import LitVarAPIError, ServiceUnavailableError
+from litvar_link.utils.caching import CacheManager
 
 # A value that could only appear in a log if a caller/variant identifier leaked.
 SENTINEL = "rsSENTINEL7f3a"
@@ -174,3 +176,75 @@ class TestLogErrorWithContextRedaction:
         assert "error_message" not in kwargs
         assert "context" not in kwargs
         assert SENTINEL not in _flatten(kwargs)
+
+
+class TestRenderedErrorLogDoesNotLeakException:
+    """The *production renderer* (not capture_logs) must not leak PII.
+
+    ``capture_logs`` intercepts the event dict *before* the processor chain, so
+    it never expands ``exc_info`` into a rendered traceback -- the exact place
+    the identifier re-surfaces. This guard drives the real ``configure_logging``
+    JSON output with a sentinel-bearing exception raised in an ``except`` block
+    (so ``sys.exc_info()`` is live, reproducing the leak Codex found) and asserts
+    the sentinel never reaches the rendered sink.
+    """
+
+    def test_configure_logging_json_output_omits_exception_message(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        monkeypatch.setattr(settings, "log_format", "json")
+        monkeypatch.delenv("TRANSPORT", raising=False)
+        monkeypatch.setattr(settings, "transport_mode", None)
+
+        logging_config.configure_logging()
+        # Fresh logger name so no proxy cached by another test shadows the
+        # just-installed JSON processor chain.
+        logger = structlog.get_logger("litvar_link.rendered_pii_guard")
+
+        with caplog.at_level(logging.ERROR):
+            try:
+                raise ValueError(f"No LitVar2 variant found for {SENTINEL!r}")
+            except ValueError as exc:
+                logging_config.log_error_with_context(
+                    logger=logger,
+                    error=exc,
+                    operation="get_variant_summary",
+                    context={"variant_id": SENTINEL},
+                )
+
+        rendered = "\n".join(record.getMessage() for record in caplog.records)
+        # Sanity: the production renderer must have emitted a record, else the
+        # assertion below is a false pass.
+        assert rendered, "expected the JSON renderer to emit a rendered record"
+        assert SENTINEL not in rendered
+
+
+class TestCacheOperationDoesNotLeakArguments:
+    """The cache decorator must not log raw call arguments (rsid/HGVS/query)."""
+
+    @pytest.mark.asyncio
+    async def test_cached_wrapper_logs_namespace_not_arguments(self) -> None:
+        """Driving ``CacheManager.cached`` with a sentinel arg must not log it.
+
+        The cache-log key historically embedded the raw positional/keyword
+        arguments (e.g. ``search_variants:rsSENTINEL7f3a``), leaking the
+        variant identifier via the hit/miss log and the debug line. Only the
+        cache *namespace* may be recorded.
+        """
+        with structlog.testing.capture_logs() as entries:
+            logger = structlog.get_logger("litvar_link.cache_pii_guard")
+            manager = CacheManager(logger=logger)
+
+            @manager.cached(key_pattern="search_variants")
+            async def _lookup(rsid: str) -> str:
+                return f"result-for-{rsid}"
+
+            await _lookup(SENTINEL)  # miss
+            await _lookup(SENTINEL)  # hit
+
+        assert entries, "expected the cache decorator to emit log records"
+        _assert_no_sentinel(entries)
+        # The namespace is preserved for operational grouping.
+        assert any("search_variants" in _flatten(entry) for entry in entries)
