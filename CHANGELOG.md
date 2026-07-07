@@ -6,6 +6,34 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.2] - 2026-07-07
+
+Inbound-boundary security hardening. The backend is unauthenticated by design
+and reachable only through the router / reverse proxy; these changes remove
+identifier leakage into logs and close two default-open network/CORS footguns.
+
+### Security
+
+- **No PII in logs (M3).** Route handlers and the shared logging helpers no
+  longer emit variant/rsid/gene/query identifiers. `log_api_request` logs the
+  upstream host only (never the identifier-bearing URL path); `log_mcp_tool_call`
+  logs sorted param *key names* only; `log_error_with_context` logs the
+  exception *type* and context *key names* only.
+- **Cache logs.** Cache-operation logs now record the cache *namespace* only
+  (`search_variants`, `variant_details`, …) instead of a key built from the raw
+  call arguments (which embedded rsIDs/HGVS/queries).
+- **Traceback leak.** `log_error_with_context` no longer passes `exc_info=True`;
+  the production JSON renderer expanded it into a traceback whose `exc_value`
+  re-embedded the exception message (e.g. `No LitVar2 variant found for
+  '<rsid>'`), defeating the field-level redaction.
+- **CORS credentials off by default.** `cors_allow_credentials` now defaults to
+  `False` (this backend has no cookies/session). Startup fails closed if an
+  operator pairs `cors_allow_credentials=True` with a wildcard `*` origin.
+- **Loopback-bound dev compose.** `docker/docker-compose.yml` binds the host
+  port to `127.0.0.1` so copying the file to a server never publishes the
+  unauthenticated backend on the public IP. Production overlays keep
+  `ports: !reset []` (expose-only behind the proxy).
+
 ## [3.0.1] - 2026-07-03
 
 ### Fixed
