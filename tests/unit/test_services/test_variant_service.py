@@ -960,7 +960,7 @@ class TestVariantService:
         mock_client: AsyncMock,
         mock_logger: MagicMock,
     ) -> None:
-        """Test error handling and logging."""
+        """Test error handling and logging (M3: type logged, message redacted)."""
         # Mock client to raise error
         error_message = "Simulated API error"
         mock_client.search_variants.side_effect = LitVarAPIError(error_message)
@@ -969,10 +969,13 @@ class TestVariantService:
         with pytest.raises(LitVarAPIError, match=error_message):
             await service.search_variants("CFH", limit=10)
 
-        # Verify error was logged
+        # Verify the error was logged with its type for triage...
         mock_logger.error.assert_called()
         log_calls = mock_logger.error.call_args_list
-        assert any(error_message in str(call) for call in log_calls)
+        assert any("LitVarAPIError" in str(call) for call in log_calls)
+        # ...but the raw error message (which can embed a variant/rsid/url) is
+        # never emitted as a structured field (finding M3).
+        assert not any(error_message in str(call) for call in log_calls)
 
     @pytest.mark.asyncio
     async def test_response_time_tracking(

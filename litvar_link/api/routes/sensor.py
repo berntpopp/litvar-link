@@ -47,13 +47,13 @@ async def lookup_rsid(
     Returns:
         SensorResponse with availability status and variant metadata.
     """
-    logger.info("RSID sensor lookup requested", rsid=rsid)
+    # PII-safe (M3): the rsid is an identifier and is never logged.
+    logger.info("RSID sensor lookup requested")
 
     response = await service.lookup_rsid(rsid)
 
     logger.info(
         "RSID sensor lookup completed",
-        rsid=rsid,
         available=response.available,
         cached=response.cached,
     )

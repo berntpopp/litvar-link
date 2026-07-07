@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import sys
 from typing import TYPE_CHECKING, Any, cast
+from urllib.parse import urlsplit
 
 import structlog
 
@@ -109,6 +110,26 @@ def orjson_serializer(obj: Any, *, default: Any = None, **_kwargs: Any) -> str:
         return json.dumps(obj, default=default or str)
 
 
+def _redact_url(url: str) -> str:
+    """Reduce a URL to ``scheme://host[:port]``, dropping path/query/fragment.
+
+    LitVar2 request URLs embed patient-adjacent identifiers -- rsIDs, HGVS, gene
+    symbols, canonical variant ids -- in their *path* (e.g.
+    ``/variant/get/litvar@rs113993960##``). Logging the full URL therefore leaks
+    those identifiers to the log sink (finding M3). Only the host is retained so
+    logs still say *which* upstream was contacted without disclosing *what* was
+    looked up. A URL that does not parse degrades to a constant placeholder
+    rather than echoing the raw (possibly identifier-bearing) string.
+    """
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return "<unparseable-url>"
+    if parts.scheme and parts.netloc:
+        return f"{parts.scheme}://{parts.netloc}"
+    return parts.netloc or "<redacted-url>"
+
+
 def log_api_request(
     logger: FilteringBoundLogger,
     method: str,
@@ -117,16 +138,22 @@ def log_api_request(
     status_code: int,
     error: str | None = None,
 ) -> None:
-    """Log API request with structured data."""
+    """Log API request with structured data.
+
+    PII-safe (finding M3): the full ``url`` and any raw ``error`` string are
+    NEVER logged -- both can carry variant/rsid/gene identifiers (in the path,
+    or in a wrapped message like ``Request timeout: <url>``). Only the host,
+    method, status, and timing are emitted; ``error`` merely selects the log
+    level. The signature is kept stable for existing callers.
+    """
     log_data: dict[str, Any] = {
         "method": method,
-        "url": url,
+        "host": _redact_url(url),
         "response_time_ms": round(response_time * 1000, 2),
         "status_code": status_code,
     }
 
     if error:
-        log_data["error"] = error
         logger.error("API request failed", **log_data)
     else:
         logger.info("API request completed", **log_data)
@@ -161,16 +188,21 @@ def log_mcp_tool_call(
     success: bool,
     error: str | None = None,
 ) -> None:
-    """Log MCP tool call with structured data."""
+    """Log MCP tool call with structured data.
+
+    PII-safe (finding M3): raw ``params`` *values* (query/rsid/gene/variant) and
+    any raw ``error`` string are NEVER logged. Only the sorted param *key* names
+    are emitted (field names are not sensitive), alongside tool/timing/success;
+    ``error`` merely selects the log level. Signature kept stable for callers.
+    """
     log_data: dict[str, Any] = {
         "tool_name": tool_name,
-        "params": params,
+        "param_keys": sorted(params) if params else [],
         "duration_ms": round(duration * 1000, 2),
         "success": success,
     }
 
     if error:
-        log_data["error"] = error
         logger.error("MCP tool call failed", **log_data)
     else:
         logger.info("MCP tool call completed", **log_data)
@@ -199,14 +231,21 @@ def log_error_with_context(
     operation: str,
     context: dict[str, Any] | None = None,
 ) -> None:
-    """Log error with additional context."""
+    """Log error with additional context.
+
+    PII-safe (finding M3): neither the ``error_message`` (``str(error)`` can
+    embed a variant/rsid/url -- e.g. ``No LitVar2 variant found for '<rsid>'``)
+    nor the raw ``context`` *values* (query/variant_id/rsid/gene_name/url/pmid)
+    are logged. Only the operation, the exception *type*, and the sorted context
+    *key* names are emitted; the stack trace is preserved via ``exc_info`` for
+    diagnosis. Signature kept stable for callers.
+    """
     log_data: dict[str, Any] = {
         "operation": operation,
         "error_type": type(error).__name__,
-        "error_message": str(error),
     }
 
     if context:
-        log_data["context"] = context
+        log_data["context_keys"] = sorted(context)
 
     logger.error("Operation failed", **log_data, exc_info=True)

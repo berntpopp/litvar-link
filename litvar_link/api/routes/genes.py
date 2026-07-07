@@ -46,13 +46,13 @@ async def get_gene_variants(
     Returns:
         GeneVariantsResponse with the variant catalog and statistics.
     """
-    logger.info("Gene variants requested", gene_name=gene_name)
+    # PII-safe (M3): the gene symbol is an identifier and is never logged.
+    logger.info("Gene variants requested")
 
     response = await service.search_gene_variants(gene_name)
 
     logger.info(
         "Gene variants completed",
-        gene_name=gene_name,
         variant_count=response.total_count,
         pathogenic_count=response.pathogenic_count,
         benign_count=response.benign_count,

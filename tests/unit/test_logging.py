@@ -254,46 +254,48 @@ class TestLogApiRequest:
     """Test the log_api_request function."""
 
     def test_log_api_request_success(self):
-        """Test logging successful API request."""
+        """Test logging successful API request (M3: host only, never full URL)."""
         mock_logger = Mock()
 
         logging_config.log_api_request(
             logger=mock_logger,
             method="GET",
-            url="https://api.example.com/test",
+            url="https://api.example.com/variant/get/rs1061170",
             response_time=0.123,
             status_code=200,
         )
 
+        # The identifier-bearing path is dropped; only the host is retained.
         mock_logger.info.assert_called_once_with(
             "API request completed",
             method="GET",
-            url="https://api.example.com/test",
+            host="https://api.example.com",
             response_time_ms=123.0,
             status_code=200,
         )
         mock_logger.error.assert_not_called()
 
     def test_log_api_request_with_error(self):
-        """Test logging API request with error."""
+        """Test logging API request with error (M3: no URL, no raw error string)."""
         mock_logger = Mock()
 
         logging_config.log_api_request(
             logger=mock_logger,
             method="POST",
-            url="https://api.example.com/test",
+            url="https://api.example.com/variant/get/rs1061170",
             response_time=0.456,
             status_code=500,
-            error="Server error",
+            error="Request timeout: https://api.example.com/variant/get/rs1061170",
         )
 
+        # `error` only selects the level; neither the URL nor the raw error
+        # message (which can embed the identifier) is logged.
         mock_logger.error.assert_called_once_with(
             "API request failed",
             method="POST",
-            url="https://api.example.com/test",
+            host="https://api.example.com",
             response_time_ms=456.0,
             status_code=500,
-            error="Server error",
         )
         mock_logger.info.assert_not_called()
 
@@ -312,6 +314,9 @@ class TestLogApiRequest:
         # Should round to 2 decimal places
         call_args = mock_logger.info.call_args[1]
         assert call_args["response_time_ms"] == 123.46
+        # M3: the full URL is never emitted, only the host.
+        assert "url" not in call_args
+        assert call_args["host"] == "https://api.example.com"
 
 
 class TestLogCacheOperation:
@@ -394,7 +399,7 @@ class TestLogMcpToolCall:
     """Test the log_mcp_tool_call function."""
 
     def test_log_mcp_tool_call_success(self):
-        """Test logging successful MCP tool call."""
+        """Test logging successful MCP tool call (M3: key names only, no values)."""
         mock_logger = Mock()
 
         logging_config.log_mcp_tool_call(
@@ -405,17 +410,19 @@ class TestLogMcpToolCall:
             success=True,
         )
 
+        # Only the param key names are logged; the values (which can be an
+        # rsid/HGVS/gene/query) are redacted.
         mock_logger.info.assert_called_once_with(
             "MCP tool call completed",
             tool_name="search_variants",
-            params={"query": "BRCA1", "limit": 10},
+            param_keys=["limit", "query"],
             duration_ms=789.0,
             success=True,
         )
         mock_logger.error.assert_not_called()
 
     def test_log_mcp_tool_call_with_error(self):
-        """Test logging MCP tool call with error."""
+        """Test logging MCP tool call with error (M3: no param values, no raw error)."""
         mock_logger = Mock()
 
         logging_config.log_mcp_tool_call(
@@ -427,13 +434,14 @@ class TestLogMcpToolCall:
             error="Validation failed",
         )
 
+        # `error` only selects the level; neither the param values nor the raw
+        # error string is logged.
         mock_logger.error.assert_called_once_with(
             "MCP tool call failed",
             tool_name="search_variants",
-            params={"query": "invalid"},
+            param_keys=["query"],
             duration_ms=123.0,
             success=False,
-            error="Validation failed",
         )
         mock_logger.info.assert_not_called()
 
@@ -503,7 +511,7 @@ class TestLogErrorWithContext:
     """Test the log_error_with_context function."""
 
     def test_log_error_with_context_basic(self):
-        """Test basic error logging with context."""
+        """Test basic error logging (M3: no error_message emitted)."""
         mock_logger = Mock()
         error = ValueError("Test error")
 
@@ -513,19 +521,20 @@ class TestLogErrorWithContext:
             operation="test_operation",
         )
 
+        # The exception type is kept for triage; the message (which can embed a
+        # variant/rsid/url) is not logged as a structured field.
         mock_logger.error.assert_called_once_with(
             "Operation failed",
             operation="test_operation",
             error_type="ValueError",
-            error_message="Test error",
             exc_info=True,
         )
 
     def test_log_error_with_context_with_context(self):
-        """Test error logging with additional context."""
+        """Test error logging with context (M3: key names only, no values)."""
         mock_logger = Mock()
         error = ConnectionError("Network error")
-        context = {"url": "https://api.example.com", "retry_count": 3}
+        context = {"url": "https://api.example.com/variant/get/rs1061170", "retry_count": 3}
 
         logging_config.log_error_with_context(
             logger=mock_logger,
@@ -534,17 +543,18 @@ class TestLogErrorWithContext:
             context=context,
         )
 
+        # Only sorted context key names are emitted; the values (identifier-
+        # bearing URLs, etc.) are redacted, as is the error message.
         mock_logger.error.assert_called_once_with(
             "Operation failed",
             operation="api_request",
             error_type="ConnectionError",
-            error_message="Network error",
-            context=context,
+            context_keys=["retry_count", "url"],
             exc_info=True,
         )
 
     def test_log_error_with_context_no_context(self):
-        """Test error logging without additional context."""
+        """Test error logging without additional context (M3: no error_message)."""
         mock_logger = Mock()
         error = RuntimeError("Runtime error")
 
@@ -555,11 +565,11 @@ class TestLogErrorWithContext:
             context=None,
         )
 
-        # Should not include context key when context is None
+        # Should not include context_keys when context is None, and never the
+        # error message.
         expected_call_kwargs = {
             "operation": "runtime_operation",
             "error_type": "RuntimeError",
-            "error_message": "Runtime error",
             "exc_info": True,
         }
 

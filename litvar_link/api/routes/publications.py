@@ -46,13 +46,13 @@ async def get_variant_publications(
     Returns:
         PublicationResponse with the literature catalog and metadata.
     """
-    logger.info("Variant publications requested", variant_id=variant_id)
+    # PII-safe (M3): the variant_id is an identifier and is never logged.
+    logger.info("Variant publications requested")
 
     response = await service.get_variant_literature(variant_id)
 
     logger.info(
         "Variant publications completed",
-        variant_id=variant_id,
         publication_count=response.total_count,
         cached=response.cached,
     )

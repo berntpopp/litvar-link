@@ -69,9 +69,10 @@ async def search_variants(
     """
     request = VariantSearchRequest(query=query, limit=limit)
 
+    # PII-safe (M3): never log the query value (it can be an rsid/HGVS/gene);
+    # only non-identifying request metadata is recorded.
     logger.info(
         "Variant search requested",
-        query=request.query,
         limit=request.limit,
     )
 
@@ -82,7 +83,6 @@ async def search_variants(
 
     logger.info(
         "Variant search completed",
-        query=request.query,
         results_count=response.total_count,
         cached=response.cached,
     )
@@ -122,7 +122,8 @@ async def get_variant_details(
     Returns:
         Dictionary with variant details, availability status, and metadata.
     """
-    logger.info("Variant details requested", variant_id=variant_id)
+    # PII-safe (M3): the variant_id is an identifier and is never logged.
+    logger.info("Variant details requested")
 
     # Search for the specific variant using search_variants
     search_response = await service.search_variants(query=variant_id, limit=1)
@@ -148,7 +149,6 @@ async def get_variant_details(
 
     logger.info(
         "Variant details completed",
-        variant_id=variant_id,
         found=response["found"],
         cached=response["cached"],
     )
