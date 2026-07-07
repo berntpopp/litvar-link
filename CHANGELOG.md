@@ -6,6 +6,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.3] - 2026-07-07
+
+Release-merge of the 3.0.2 security hardening (see below) with the consolidated
+Dependabot dependency sweep. Supersedes the two colliding 3.0.2 tags.
+
+### Changed
+
+- **Dependency bumps (Dependabot #46).** `fastapi>=0.139.0`, `uvicorn[standard]>=0.50.0`,
+  `fastmcp>=3.4.3`, `typer>=0.26.8`, and `ruff>=0.15.20` (dev). Lockfile regenerated.
+- **Ignore local docker secrets.** `.env.docker` (production secrets) is now
+  git-ignored; the tracked `.env.docker.example` is unaffected.
+
 ## [3.0.2] - 2026-07-07
 
 Inbound-boundary security hardening. The backend is unauthenticated by design
