@@ -128,8 +128,12 @@ class ServerSettings(BaseSettings):
         description="Allowed CORS origins",
     )
     cors_allow_credentials: bool = Field(
-        default=True,
-        description="Allow CORS credentials",
+        default=False,
+        description=(
+            "Allow CORS credentials. Off by default: this backend is "
+            "unauthenticated (no cookies/session), so credentials are "
+            "meaningless and unsafe when paired with a wildcard origin."
+        ),
     )
     cors_allow_methods: list[str] = Field(
         default=["GET", "POST", "PUT", "DELETE", "OPTIONS"],

@@ -31,16 +31,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 def _configure_app(app: FastAPI) -> None:
     """Attach CORS middleware, API routers, and exception handlers to ``app``."""
-    # Never send credentials with a wildcard origin: the browser rejects
-    # `Access-Control-Allow-Credentials: true` paired with `*`, and doing so
-    # would also be unsafe. The default cors_origins is an explicit localhost
-    # list, but cors_allow_credentials defaults True and CORS_ORIGINS can be set
-    # to "*" via env — so guard the pairing here.
-    allow_credentials = settings.cors_allow_credentials and "*" not in settings.cors_origins
+    # This backend is unauthenticated (no cookies/session), so CORS credentials
+    # are meaningless — they default OFF (see config.cors_allow_credentials).
+    # Fail closed if an operator re-enables them alongside a wildcard origin:
+    # the browser rejects `Access-Control-Allow-Credentials: true` paired with
+    # `*`, and doing so would let any site issue credentialed cross-origin
+    # requests. Refuse to start rather than silently downgrade.
+    if settings.cors_allow_credentials and "*" in settings.cors_origins:
+        raise RuntimeError(
+            "CORS misconfiguration: cors_allow_credentials=True is incompatible "
+            "with a wildcard '*' origin. This backend is unauthenticated and "
+            "needs no credentials; set cors_allow_credentials=False."
+        )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_credentials=allow_credentials,
+        allow_credentials=settings.cors_allow_credentials,
         allow_methods=settings.cors_allow_methods,
         allow_headers=settings.cors_allow_headers,
     )
