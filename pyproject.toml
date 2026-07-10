@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "litvar-link"
-version = "3.0.3"
+version = "4.0.0"
 description = "High-performance MCP/API server for NCBI's LitVar2 genetic variant database"
 readme = "README.md"
 license = {text = "MIT"}
