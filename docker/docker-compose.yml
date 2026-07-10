@@ -25,6 +25,7 @@ services:
       LITVAR_LINK_HOST: 0.0.0.0
       LITVAR_LINK_PORT: 8000
       LITVAR_LINK_RELOAD: "false"  # Disable reload in container
+      LITVAR_LINK_ALLOWED_HOSTS: '["localhost","127.0.0.1","::1"]'
     
     # Port mapping — dev/local only, loopback-bound (127.0.0.1) so copying this
     # file to a server never publishes the unauthenticated backend on the public
@@ -41,7 +42,7 @@ services:
     
     # Health check
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/"]
+      test: ["CMD", "curl", "-f", "-H", "Host: localhost", "http://localhost:8000/api/health/"]
       interval: 30s
       timeout: 10s
       retries: 3

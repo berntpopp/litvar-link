@@ -102,7 +102,7 @@ class TestUnifiedServerManager:
 
             with (
                 patch("litvar_link.server_manager.log_server_startup") as mock_log,
-                patch("litvar_link.server_manager.app"),
+                patch("litvar_link.app.create_app"),
                 patch("litvar_link.server_manager.create_litvar_mcp"),
             ):
                 await manager.start_unified_server(
@@ -136,7 +136,7 @@ class TestUnifiedServerManager:
 
             with (
                 patch("litvar_link.server_manager.log_server_startup") as mock_log,
-                patch("litvar_link.server_manager.app"),
+                patch("litvar_link.app.create_app"),
                 patch("litvar_link.server_manager.create_litvar_mcp"),
             ):
                 await manager.start_unified_server()
@@ -156,7 +156,7 @@ class TestUnifiedServerManager:
 
             with (
                 patch("litvar_link.server_manager.log_server_startup") as mock_log,
-                patch("litvar_link.server_manager.app") as mock_app,
+                patch("litvar_link.app.create_app") as mock_app,
             ):
                 await manager.start_http_only_server()
 
@@ -169,7 +169,7 @@ class TestUnifiedServerManager:
                 )
 
                 # Should NOT mount MCP
-                mock_app.mount.assert_not_called()
+                mock_app.return_value.mount.assert_not_called()
 
                 # Check server creation and start
                 mock_server_class.assert_called_once()
@@ -193,7 +193,7 @@ class TestUnifiedServerManager:
 
             with (
                 patch("litvar_link.server_manager.log_server_startup") as mock_log,
-                patch("litvar_link.server_manager.app"),
+                patch("litvar_link.app.create_app"),
             ):
                 await manager.start_http_only_server(
                     host="192.168.1.100",
@@ -226,7 +226,7 @@ class TestUnifiedServerManager:
 
             with (
                 patch("litvar_link.server_manager.log_server_startup") as mock_log,
-                patch("litvar_link.server_manager.app"),
+                patch("litvar_link.app.create_app"),
             ):
                 await manager.start_http_only_server()
 
@@ -329,7 +329,7 @@ class TestUnifiedServerManager:
             mock_server = AsyncMock()
             mock_server_class.return_value = mock_server
 
-            with patch("litvar_link.server_manager.app") as mock_app:
+            with patch("litvar_link.app.create_app") as mock_app:
                 await manager.start_http_only_server(
                     host="test.local",
                     port=3000,
@@ -340,7 +340,7 @@ class TestUnifiedServerManager:
                 config_arg = mock_server_class.call_args[0][0]
 
                 # Verify all config properties
-                assert config_arg.app is mock_app
+                assert config_arg.app is mock_app.return_value
                 assert config_arg.host == "test.local"
                 assert config_arg.port == 3000
                 assert config_arg.reload is True
@@ -362,6 +362,8 @@ class TestUnifiedServerManager:
                 patch("litvar_link.server_manager.settings") as mock_settings,
             ):
                 mock_settings.mcp_path = "/mcp"
+                mock_settings.allowed_hosts = ["localhost"]
+                mock_settings.allowed_origins = []
                 mock_http_app = Mock()
                 mock_create_mcp.return_value.http_app.return_value = mock_http_app
 
@@ -376,6 +378,9 @@ class TestUnifiedServerManager:
                     path="/mcp",
                     stateless_http=True,
                     json_response=True,
+                    host_origin_protection=True,
+                    allowed_hosts=["localhost"],
+                    allowed_origins=[],
                 )
                 # The MCP app's lifespan is chained into a fresh app, which is what
                 # gets mounted (so FastMCP's session manager starts; see e5e3f83).

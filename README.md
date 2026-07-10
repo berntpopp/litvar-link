@@ -213,6 +213,16 @@ python server.py
 # MCP: http://localhost:8000/mcp
 ```
 
+### Host and Origin Guard
+
+`LITVAR_LINK_ALLOWED_HOSTS` is a JSON list of exact Host values and defaults to
+`["localhost","127.0.0.1","::1"]`; production adds
+`litvar-link.genefoundry.org`. Write IPv6 entries bare, without brackets.
+Wildcard patterns are rejected. `LITVAR_LINK_ALLOWED_ORIGINS` defaults to `[]`
+and is the browser-origin admission gate: include every origin that
+`LITVAR_LINK_CORS_ORIGINS` is intended to serve. Requests without an Origin
+header remain valid.
+
 ## 🛠️ CLI Usage
 
 The CLI provides convenient access to LitVar2 functionality:

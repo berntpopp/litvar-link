@@ -8,14 +8,16 @@ services:
       LITVAR_LINK_LOG_LEVEL: INFO
       LITVAR_LINK_LOG_FORMAT: json
       LITVAR_LINK_RELOAD: "false"
-      GUNICORN_WORKERS: 4
-      GUNICORN_LOG_LEVEL: warning
+      LITVAR_LINK_ALLOWED_HOSTS: '["localhost","127.0.0.1","::1","litvar-link.genefoundry.org"]'
+      LITVAR_LINK_ALLOWED_ORIGINS: '["https://litvar-link.genefoundry.org"]'
+      LITVAR_LINK_CORS_ORIGINS: '["https://litvar-link.genefoundry.org"]'
     
     # Remove development volume mounts
     volumes: []
     
-    # Use the default production command (Gunicorn)
-    command: ["gunicorn", "-c", "gunicorn_conf.py", "litvar_link.app:app"]
+    # Serve REST + MCP through one guarded async application. Scale with
+    # container replicas so each process owns exactly one shared MCP lifespan.
+    command: ["litvar-link", "serve", "unified", "--host", "0.0.0.0", "--port", "8000"]
 
     # Behind the reverse proxy the container is expose-only. `!reset` (not []) is
     # required: Compose MERGES list fields across -f overlays, so a plain
@@ -25,8 +27,8 @@ services:
 
     # Hardened runtime (Container & Deployment Hardening Standard v1, rules 7-14).
     # LitVar-Link is a stateless live LitVar2 proxy with no persistent state, so
-    # the only writable path is an ephemeral tmpfs scratch (gunicorn worker
-    # heartbeats / TMPDIR); the root filesystem is read-only.
+    # the only writable path is an ephemeral TMPDIR scratch; the root filesystem
+    # is read-only.
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m,mode=1777
@@ -57,7 +59,7 @@ services:
     
     # Enhanced health check for production
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/"]
+      test: ["CMD", "curl", "-f", "-H", "Host: localhost", "http://localhost:8000/api/health/"]
       interval: 20s
       timeout: 5s
       retries: 5
