@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import uvicorn
 
 from .api.client import LitVar2Client
-from .app import app
 from .config import get_api_config, get_cache_config, settings
 from .logging_config import log_server_startup
 from .mcp.facade import create_litvar_mcp
 from .services.variant_service import VariantService
 
 if TYPE_CHECKING:
+    from fastapi import FastAPI
     from structlog.typing import FilteringBoundLogger
 
 
@@ -46,6 +46,41 @@ def _make_service_factory(
     return factory, aclose
 
 
+def create_http_app(extra_lifespan: Any = None) -> FastAPI:
+    """Create the REST host behind the strict outer request guard."""
+    from fastmcp.server.http import HostOriginGuardMiddleware
+
+    from .app import create_app
+
+    application = create_app(extra_lifespan=extra_lifespan)
+    application.add_middleware(
+        HostOriginGuardMiddleware,
+        allowed_hosts=settings.allowed_hosts,
+        allowed_origins=settings.allowed_origins,
+        mode="strict",
+    )
+    return application
+
+
+def create_unified_app(
+    logger: FilteringBoundLogger | None = None,
+) -> tuple[FastAPI, Callable[[], Awaitable[None]]]:
+    """Create the guarded REST host and mount the native-guarded MCP app."""
+    service_factory, close_services = _make_service_factory(logger)
+    mcp = create_litvar_mcp(service_factory=service_factory)
+    mcp_http_app = mcp.http_app(
+        path=settings.mcp_path,
+        stateless_http=True,
+        json_response=True,
+        host_origin_protection=True,
+        allowed_hosts=settings.allowed_hosts,
+        allowed_origins=settings.allowed_origins,
+    )
+    application = create_http_app(extra_lifespan=mcp_http_app.lifespan)
+    application.mount("/", mcp_http_app)
+    return application, close_services
+
+
 class UnifiedServerManager:
     """Manages unified server with multiple transport protocols."""
 
@@ -73,36 +108,7 @@ class UnifiedServerManager:
         if self.logger:
             log_server_startup(self.logger, "unified", host, port)
 
-        # Mount the explicit MCP facade as a stateless streamable-HTTP ASGI app.
-        # Build a fresh app whose lifespan also runs the MCP app's lifespan,
-        # otherwise FastMCP's StreamableHTTPSessionManager task group is never
-        # started and every /mcp request 500s. Mount the same instance.
-        #
-        # Bake the MCP path (``/mcp``) into the ASGI sub-app via ``http_app(path=...)``
-        # and mount that sub-app at the project root, mirroring the fleet-canonical
-        # pattern (see gtex-link). Mounting the sub-app at ``settings.mcp_path``
-        # instead would expose MCP at ``/mcp/`` and make ``POST /mcp`` redirect
-        # (307) to ``/mcp/`` — inconsistent with the rest of the fleet, which
-        # serves ``/mcp`` directly. The FastAPI app's own routes (``/`` and
-        # ``/api/...``) are registered by ``create_app`` before this mount, so
-        # they keep precedence over the catch-all root mount.
-        from .app import create_app
-
-        service_factory, close_services = _make_service_factory(self.logger)
-        mcp = create_litvar_mcp(service_factory=service_factory)
-        # host_origin_protection defaults to True since fastmcp 3.4.3, which 421s
-        # every request whose Host is not localhost -- including legitimate proxied
-        # traffic from the genefoundry-router. The reverse proxy (NPM) already
-        # validates the Host via server_name + TLS SNI, so disable the redundant
-        # app-layer guard here to keep the public /mcp reachable.
-        mcp_http_app = mcp.http_app(
-            path=settings.mcp_path,
-            stateless_http=True,
-            json_response=True,
-            host_origin_protection=False,
-        )
-        application = create_app(extra_lifespan=mcp_http_app.lifespan)
-        application.mount("/", mcp_http_app)
+        application, close_services = create_unified_app(self.logger)
 
         config = uvicorn.Config(
             app=application,
@@ -136,7 +142,7 @@ class UnifiedServerManager:
             log_server_startup(self.logger, "http", host, port)
 
         config = uvicorn.Config(
-            app=app,
+            app=create_http_app(),
             host=host,
             port=port,
             reload=reload,

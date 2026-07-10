@@ -60,6 +60,6 @@ USER app
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -fsS http://localhost:8000/api/health/ || exit 1
+    CMD curl -fsS -H 'Host: localhost' http://localhost:8000/api/health/ || exit 1
 
-CMD ["gunicorn", "-c", "gunicorn_conf.py", "litvar_link.app:app"]
+CMD ["litvar-link", "serve", "unified", "--host", "0.0.0.0", "--port", "8000"]

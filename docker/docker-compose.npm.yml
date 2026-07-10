@@ -28,18 +28,18 @@ services:
       LITVAR_LINK_LOG_LEVEL: INFO
       LITVAR_LINK_HOST: 0.0.0.0
       LITVAR_LINK_RELOAD: "false"
-      GUNICORN_WORKERS: 4
-      GUNICORN_LOG_LEVEL: warning
+      LITVAR_LINK_ALLOWED_HOSTS: '["localhost","127.0.0.1","::1","litvar-link.genefoundry.org"]'
+      LITVAR_LINK_ALLOWED_ORIGINS: '["https://litvar-link.genefoundry.org"]'
+      LITVAR_LINK_CORS_ORIGINS: '["https://litvar-link.genefoundry.org"]'
 
-    # Run the unified CLI server so the MCP facade is mounted at /mcp. The base
-    # command (`uvicorn litvar_link.app:app`) and the image CMD (gunicorn on the
-    # same app:app) serve REST only — create_app() does not mount MCP; the mount
-    # lives in UnifiedServerManager.start_unified_server (serve unified).
+    # Run the unified CLI server so the MCP facade is mounted at /mcp. The image
+    # default is the same guarded unified server; keep the command
+    # explicit here so the NPM deployment contract remains visible in Compose.
     command: ["litvar-link", "serve", "unified", "--host", "0.0.0.0", "--port", "8000"]
 
     # Enhanced health check for NPM routing
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/"]
+      test: ["CMD", "curl", "-f", "-H", "Host: localhost", "http://localhost:8000/api/health/"]
       interval: 30s
       timeout: 10s
       retries: 3
