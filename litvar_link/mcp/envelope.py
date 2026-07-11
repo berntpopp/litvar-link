@@ -44,11 +44,17 @@ _BASE_META: dict[str, Any] = {"unsafe_for_clinical_use": True}
 
 def provenance_meta(
     *,
-    tool_name: str,
+    tool_name: str | None,
     request_id: str,
     elapsed_ms: int,
 ) -> dict[str, Any]:
-    """Build the envelope ``_meta`` provenance block (Rules §4: MUST fields)."""
+    """Build the envelope ``_meta`` provenance block (Rules §4: MUST fields).
+
+    ``tool_name`` is ``str | None``: the FastMCP-core not-found guard builds a
+    fixed, name-free error envelope for an unknown tool with ``tool_name=None`` so
+    the caller-supplied (untrusted) requested name is never reflected back into
+    ``_meta.tool``.
+    """
     return {
         "tool": tool_name,
         "request_id": request_id,
@@ -88,7 +94,7 @@ def success_envelope(
 
 def error_envelope(
     *,
-    tool_name: str,
+    tool_name: str | None,
     request_id: str,
     elapsed_ms: int,
     error_code: ErrorCode,
