@@ -29,12 +29,16 @@ Layers (spec §3), copied per repo (no shared runtime library exists fleet-wide)
   input-free messages for resource/prompt dispatch failures -- the ONLY layer that
   covers the unknown-PROMPT surface (FastMCP core echoes ``Unknown prompt: '<name>'``
   to the caller even when no prompts are registered).
-* Layer 5 -- validation-log scrub filter: FastMCP's pre-middleware and the MCP SDK
-  session's request-validation logs echo the raw name/URI (with code points) on
-  their own loggers/handlers at ANY level (``Tool cache miss for <name>``,
-  ``Handler called: ... <name/uri>``, ``Failed to validate request: <uri>``). The
-  filter neutralizes those records at the source logger (and its non-propagating
-  Rich handlers) so caller input never reaches a log sink.
+* Layer 5 -- validation-log scrub filter: FastMCP's pre-middleware, the MCP SDK
+  session's request-validation logs, AND FastMCP's ``AggregateProvider`` echo the
+  raw name/URI (with code points) on their own loggers/handlers at ANY level
+  (``Tool cache miss for <name>``, ``Handler called: ... <name/uri>``, ``Failed to
+  validate request: <uri>``, and -- on a provider fault during a get_tool/
+  get_resource/get_prompt lookup -- ``Error during get_tool('<name>') from
+  provider ...: <exc>`` whose ``operation`` embeds the requested name/URI verbatim
+  and whose ``<exc>`` may repeat it). The filter neutralizes those records at the
+  source logger (and its non-propagating Rich handlers) so caller input never
+  reaches a log sink.
 
 Layer 4 (arg/params validation) is ``FastMCP(mask_error_details=True)`` on the
 facade (already present). Layer 6 (OTel span redaction) is a no-op here: FastMCP
@@ -290,6 +294,16 @@ _REFLECTION_MARKERS: tuple[str, ...] = (
     "Failed to validate request",
     "Failed to validate notification",
     "Message that failed validation",
+    # AggregateProvider (fastmcp.server.providers.aggregate) logs a WARNING with
+    # the message ALREADY formatted via an f-string: the ``operation`` embeds the
+    # caller-requested name/URI verbatim (``get_tool('<name>')`` /
+    # ``get_resource('<uri>')`` / ``get_prompt('<name>')``) and ``{result}`` is
+    # ``str(exc)`` of a provider fault (which may echo the same name/URI + code
+    # points). The leak is in ``record.msg`` (not ``args``), so the marker branch
+    # -- which replaces the WHOLE msg -- is what closes it; clearing args alone
+    # would not. ``Duplicate`` covers the sibling collision warning (``{key!r}``).
+    "Error during ",
+    "Duplicate ",
 )
 _SCRUBBED_MESSAGE = "MCP request detail omitted (caller input redacted)."
 
@@ -307,6 +321,7 @@ _SOURCE_LOGGERS: tuple[str, ...] = (
     "fastmcp",
     "fastmcp.server.server",
     "fastmcp.server.mixins.mcp_operations",
+    "fastmcp.server.providers.aggregate",  # provider-fault warning echoes name/URI
     "mcp",
     "mcp.server.lowlevel.server",
 )

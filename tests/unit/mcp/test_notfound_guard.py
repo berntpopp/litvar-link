@@ -26,6 +26,7 @@ in the real fleet and cannot be scrubbed by the server, so they are excluded.
 
 from __future__ import annotations
 
+import contextlib
 import io
 import json
 import logging
@@ -34,11 +35,13 @@ from typing import Any
 import anyio
 import pytest
 from fastmcp import Client
+from fastmcp.server.providers.base import Provider
 from mcp.shared.memory import create_client_server_memory_streams
 from mcp.shared.message import SessionMessage
 from mcp.types import JSONRPCMessage, JSONRPCNotification, JSONRPCRequest
 
 from litvar_link.mcp.facade import create_litvar_mcp
+from litvar_link.mcp.notfound_guard import _SCRUBBED_MESSAGE
 from litvar_link.mcp.untrusted_content import FORBIDDEN_CODEPOINTS
 
 # The exact fleet-standard hostile corpus (bidi override U+202E, zero-width
@@ -355,3 +358,96 @@ async def test_hostile_resource_uri_full_forbidden_set_no_leak(label: str, ch: s
     response, logs = await _raw_request("resources/read", {"uri": f"litvar://{ch}evil-no-such"})
     _assert_no_leak(response, ch)
     _assert_no_leak(logs, ch)
+
+
+# ---------------------------------------------------------------------------
+# (e) AggregateProvider fault -- Layer 5 on fastmcp.server.providers.aggregate
+# ---------------------------------------------------------------------------
+# FastMCP is itself an AggregateProvider: get_tool / get_resource / get_prompt
+# gather from every registered provider. If a provider RAISES a non-NotFoundError
+# during a lookup, the aggregate logs a WARNING on
+# ``fastmcp.server.providers.aggregate`` whose message is ALREADY formatted via an
+# f-string: ``Error during get_tool('<name>') from provider <p>: <exc>``. The
+# caller-requested name/URI is embedded in the ``operation`` verbatim (and again in
+# ``<exc>`` when the fault echoes it), with any forbidden code points. The leak is
+# in ``record.msg`` (args is empty), so the Layer-5 marker branch must replace the
+# WHOLE message -- clearing args alone would NOT close it.
+_AGG_LOGGER = "fastmcp.server.providers.aggregate"
+
+
+class _FaultingProvider(Provider):
+    """Provider whose lookups raise a non-NotFoundError echoing the requested id."""
+
+    async def get_tool(self, name: str, version: Any = None) -> Any:
+        raise RuntimeError(f"provider backend failure resolving {name}")
+
+    async def get_resource(self, uri: str, version: Any = None) -> Any:
+        raise RuntimeError(f"provider backend failure resolving {uri}")
+
+    async def get_prompt(self, name: str, version: Any = None) -> Any:
+        raise RuntimeError(f"provider backend failure resolving {name}")
+
+
+def _capture_one_logger(name: str) -> tuple[io.StringIO, Any]:
+    """Capture DEBUG+ records emitted on a single logger (its own filters run first,
+    so a captured record is one that already passed the installed scrub filter)."""
+    buf = io.StringIO()
+    handler = logging.StreamHandler(buf)
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(logging.Formatter("%(name)s:%(levelname)s:%(message)s"))
+    logger = logging.getLogger(name)
+    logger.addHandler(handler)
+    prev = logger.level
+    logger.setLevel(logging.DEBUG)
+
+    def detach() -> None:
+        logger.removeHandler(handler)
+        logger.setLevel(prev)
+
+    return buf, detach
+
+
+@pytest.mark.parametrize(
+    ("operation", "arg"),
+    [
+        ("get_tool", HOSTILE_TOOL_NAME),
+        ("get_prompt", HOSTILE_PROMPT_NAME),
+    ],
+)
+async def test_aggregate_provider_fault_log_scrubbed(operation: str, arg: str) -> None:
+    """A provider fault during a hostile-name lookup must not reflect the name (nor
+    its code points) into the ``fastmcp.server.providers.aggregate`` WARNING record.
+
+    Asserts the record captured on that logger is the fixed redaction message (so a
+    marker-matched record DID fire and WAS scrubbed) and carries no hostile leak."""
+    mcp = _make_mcp()
+    mcp.add_provider(_FaultingProvider())
+    buf, detach = _capture_one_logger(_AGG_LOGGER)
+    try:
+        with contextlib.suppress(Exception):
+            await getattr(mcp, operation)(arg)
+    finally:
+        detach()
+    captured = buf.getvalue()
+    # The scrubbed record was emitted (proves the marker matched, not a no-op test)
+    # and carries no caller-supplied name / forbidden code point / prose.
+    assert _SCRUBBED_MESSAGE in captured
+    _assert_no_leak(captured)
+
+
+@pytest.mark.parametrize(("label", "ch"), list(_FORBIDDEN_SAMPLE.items()))
+async def test_aggregate_provider_fault_full_forbidden_set(label: str, ch: str) -> None:
+    """Every forbidden class, embedded in the looked-up tool name that a faulting
+    provider echoes, is scrubbed from the aggregate WARNING record."""
+    name = f"evil{ch}__IGNORE_ALL_PREVIOUS__no_such_tool"
+    mcp = _make_mcp()
+    mcp.add_provider(_FaultingProvider())
+    buf, detach = _capture_one_logger(_AGG_LOGGER)
+    try:
+        with contextlib.suppress(Exception):
+            await mcp.get_tool(name)
+    finally:
+        detach()
+    captured = buf.getvalue()
+    assert _SCRUBBED_MESSAGE in captured
+    _assert_no_leak(captured, ch)

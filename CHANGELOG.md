@@ -33,8 +33,11 @@ an agent's tool-result context. Research use only; not clinical decision support
 - **Framework validation logs are scrubbed.** A logging filter neutralizes the
   FastMCP-core / MCP-SDK records that echo the caller name/URI at ANY level
   (`Tool cache miss for <name>`, `Handler called: ... <name/uri>`, `Failed to
-  validate request: <uri>`), attached to the source loggers (incl. root and the
-  non-propagating `fastmcp` Rich handlers). See `litvar_link/mcp/notfound_guard.py`.
+  validate request: <uri>`, and the `AggregateProvider` provider-fault warning
+  `Error during get_tool('<name>') from provider ...: <exc>` -- whose `operation`
+  embeds the requested name/URI verbatim), attached to the source loggers (incl.
+  root, `fastmcp.server.providers.aggregate`, and the non-propagating `fastmcp`
+  Rich handlers). See `litvar_link/mcp/notfound_guard.py`.
 
 All error messages are fixed server-authored constants -- no requested name/URI,
 `str(exc)`, or upstream detail is ever interpolated (sanitation strips code points
