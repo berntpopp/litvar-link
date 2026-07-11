@@ -6,6 +6,40 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [5.0.1] - 2026-07-11
+
+Security patch (non-breaking). Closes the **FastMCP-core not-found reflection**
+surface (Response-Envelope Standard v1.1 §Error-message sanitation fast-follow):
+FastMCP core and the MCP SDK reflect the caller's OWN requested tool name /
+resource URI / prompt name -- with any control/zero-width/bidi/NUL code points --
+back to the caller and to logs BEFORE this repo's error boundary runs. A
+caller self-reflection surface (Low-Medium): the bytes are supplied by, and
+reflected to, the same caller, but they also land in shared operator logs and in
+an agent's tool-result context. Research use only; not clinical decision support.
+
+### Fixed
+
+- **Unknown tool name is no longer echoed.** A new `NotFoundGuard` middleware
+  preflights the tool registry (`get_tool` returns `None` for an unknown/disabled
+  tool) and returns a fixed, name-free `not_found` envelope (`_meta.tool` is
+  `null`) before core dispatch, instead of FastMCP's `Unknown tool: '<name>'`
+  which echoed the caller-supplied name into the TextContent mirror and logs.
+- **Unknown resource URI is no longer echoed.** `on_read_resource` re-raises a
+  fixed, URI-free `ResourceError` for any read failure; a protocol-handler
+  backstop covers the raw dispatch path.
+- **Unknown prompt name is no longer echoed.** The protocol-handler backstop
+  wraps the raw `prompts/get` handler so FastMCP core's `Unknown prompt: '<name>'`
+  never reaches the JSON-RPC error frame (the only layer covering this surface).
+- **Framework validation logs are scrubbed.** A logging filter neutralizes the
+  FastMCP-core / MCP-SDK records that echo the caller name/URI at ANY level
+  (`Tool cache miss for <name>`, `Handler called: ... <name/uri>`, `Failed to
+  validate request: <uri>`), attached to the source loggers (incl. root and the
+  non-propagating `fastmcp` Rich handlers). See `litvar_link/mcp/notfound_guard.py`.
+
+All error messages are fixed server-authored constants -- no requested name/URI,
+`str(exc)`, or upstream detail is ever interpolated (sanitation strips code points
+but not injection prose). No success schema or error-envelope shape changed.
+
 ## [5.0.0] - 2026-07-11
 
 Adopts **Response-Envelope Standard v1.1 untrusted-content fencing**
