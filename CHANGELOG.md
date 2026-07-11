@@ -66,6 +66,31 @@ clinical decision support.
   object count N exceeds ceiling M`) instead of the generic, masked
   `internal` code.
 
+### Security
+
+- **Upstream error bodies are no longer echoed to the model.** A caller can
+  influence the query LitVar2 reflects into a 4xx response body; that body
+  (`raise_for_status_code` puts a preview of it into `LitVarAPIError`) was
+  previously surfaced verbatim in the tool error-envelope `message` (both
+  `structured_content` and the `TextContent` mirror), so injection prose and
+  zero-width/BOM/bidi controls reached the model. The MCP boundary now returns
+  a fixed, upstream-body-free message for these errors (the actionable guidance
+  still travels in `recovery_action`); the raw body is deliberately not logged
+  either, preserving the `4.0.0`/`3.0.2` no-PII-in-logs invariant. Our own
+  developer-authored validation/rate-limit/timeout messages are still surfaced.
+- **All caller-visible error messages are stripped of control/zero-width/bidi
+  code points** (the same set the untrusted-text fence removes) as a defensive
+  backstop.
+
+### Fixed
+
+- **Empty-string `match` is now the typed `untrusted_text` object, not a bare
+  `""`.** Previously an empty `match` bypassed fencing and was emitted as a
+  bare string by both full-mode tools, contradicting the declared
+  `anyOf[null, UntrustedText]` schema and being skipped by the limit collector.
+  Any present `str` value (including `""`) is now fenced; an absent or `null`
+  `match` is left as `null` (the schema's null branch).
+
 ## [4.0.0] - 2026-07-10
 
 ### Security

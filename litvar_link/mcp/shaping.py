@@ -45,14 +45,18 @@ def apply_limit(rows: list[Any], *, limit: int) -> dict[str, Any]:
 def fence_match_field(row: dict[str, Any]) -> dict[str, Any]:
     """Fence a row's upstream ``match`` HTML search-snippet as ``untrusted_text``.
 
-    A no-op copy when ``match`` is absent/``None``/empty -- the field is
-    optional and most rows never populate it. The fenced object is an OPAQUE
-    typed leaf: no sibling field duplicates the raw or cleaned prose, and the
-    fence does not strip HTML markup (a presentation concern, not a security
-    boundary) -- only control/zero-width/bidi code points are removed.
+    A no-op copy when ``match`` is absent or ``None`` (the declared schema
+    permits ``null``). Any ``str`` value -- INCLUDING the empty string -- is
+    fenced into the typed object, so a present ``match`` is *always* the
+    ``untrusted_text`` object on the wire and never a bare string: emitting a
+    bare ``""`` would contradict the declared ``anyOf[null, UntrustedText]``
+    schema and be skipped by the limit collector. The fenced object is an
+    OPAQUE typed leaf: no sibling field duplicates the raw or cleaned prose,
+    and the fence does not strip HTML markup (a presentation concern, not a
+    security boundary) -- only control/zero-width/bidi code points are removed.
     """
     match = row.get("match")
-    if not isinstance(match, str) or not match:
+    if not isinstance(match, str):
         return dict(row)
     shaped = dict(row)
     variant_id = str(row.get("id") or row.get("_id") or row.get("rsid") or "unknown")

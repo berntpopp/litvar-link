@@ -38,13 +38,22 @@ from litvar_link.exceptions import (
 )
 from litvar_link.exceptions import ValidationError as LitVarValidationError
 from litvar_link.mcp.envelope import ErrorCode, error_envelope, success_envelope
-from litvar_link.mcp.untrusted_content import UntrustedTextLimitError
+from litvar_link.mcp.untrusted_content import FORBIDDEN_CODEPOINTS, UntrustedTextLimitError
 
 logger = logging.getLogger(__name__)
 
 _HTTP_NOT_FOUND = 404
 _HTTP_CLIENT_ERROR = 400
 _MAX_MESSAGE_CHARS = 240
+
+# Fixed, upstream-body-free messages for errors whose exception text embeds the
+# raw (caller/attacker-influenceable) LitVar2 response body. The actionable
+# guidance travels separately in ``recovery_action``.
+_SAFE_UPSTREAM_MESSAGE: dict[ErrorCode, str] = {
+    "not_found": "LitVar2 has no record for the requested identifier.",
+    "invalid_input": "LitVar2 rejected the request as invalid.",
+    "upstream_unavailable": "The LitVar2 upstream returned an error or is unavailable.",
+}
 
 
 class ToolValidationError(Exception):
@@ -121,21 +130,54 @@ def _classify(exc: Exception) -> tuple[ErrorCode, bool, str]:
     )
 
 
+def _sanitize_message(text: str) -> str:
+    """Strip forbidden control/zero-width/bidi code points and length-cap.
+
+    Applied to every caller-visible message so a hostile upstream or input can
+    never smuggle bidi-override or zero-width characters into the error frame
+    (the same code-point set the untrusted-text fence removes).
+    """
+    clean = "".join(char for char in text if ord(char) not in FORBIDDEN_CODEPOINTS)
+    return clean[:_MAX_MESSAGE_CHARS]
+
+
+def _carries_upstream_body(exc: Exception) -> bool:
+    """True when the exception's text embeds the raw LitVar2 response body.
+
+    Only the base ``LitVarAPIError`` (raised by ``raise_for_status_code`` with a
+    preview of the upstream 4xx body) carries attacker-influenceable upstream
+    prose. Its ``ValidationError`` / ``RateLimitError`` / ``ServiceUnavailableError``
+    subclasses are constructed with our own fixed strings, so their (safe)
+    messages are surfaced verbatim (sanitized).
+    """
+    return isinstance(exc, LitVarAPIError) and not isinstance(
+        exc, LitVarValidationError | RateLimitError | ServiceUnavailableError
+    )
+
+
 def _safe_message(exc: Exception, *, error_code: ErrorCode, tool_name: str, request_id: str) -> str:
     """Return a message safe to surface to LLM callers.
 
-    Validation/upstream errors carry developer- or LitVar2-authored text (no
-    secrets), so it is surfaced verbatim (length-capped). Internal errors are
-    fully opaque -- only the tool name + a request id, never exception detail --
-    matching the prior masking behavior.
+    - ``internal`` errors are fully opaque (tool name + request id only).
+    - Errors whose exception text embeds the raw upstream response body
+      (base ``LitVarAPIError``) NEVER echo that body -- a caller-controlled query
+      can make LitVar2 reflect hostile prose (incl. control/zero-width/bidi)
+      into a 4xx body. A fixed, upstream-body-free message is returned instead;
+      the raw body is deliberately NOT logged either, to preserve the M3
+      no-PII-in-logs invariant.
+    - Our own validation/rate-limit/timeout messages are developer-authored (no
+      secrets, no upstream body) and are surfaced verbatim, but still sanitized
+      of forbidden code points defensively.
     """
     if error_code == "internal":
         return (
             f"Internal error in {tool_name} (request_id={request_id}). "
             "Retry later or call get_server_capabilities."
         )
+    if _carries_upstream_body(exc):
+        return _SAFE_UPSTREAM_MESSAGE.get(error_code, "LitVar2 upstream returned an error.")
     text = str(exc) or exc.__class__.__name__
-    return text[:_MAX_MESSAGE_CHARS]
+    return _sanitize_message(text)
 
 
 async def run_tool(
