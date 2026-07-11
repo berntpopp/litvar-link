@@ -157,7 +157,19 @@ class TestShaping:
         assert compact["rsid"] == "rs1"
 
     def test_full_row_passthrough(self) -> None:
+        full = {"_id": "x", "gene": ["CFH"]}
+        assert shape_variant_row(full, mode="full") == full
+
+    def test_full_row_fences_match_as_untrusted_text(self) -> None:
         full = {"_id": "x", "match": "keep"}
+        shaped = shape_variant_row(full, mode="full")
+        assert shaped["match"]["kind"] == "untrusted_text"
+        assert shaped["match"]["text"] == "keep"
+        assert shaped["match"]["provenance"]["source"] == "litvar"
+        assert shaped["match"]["provenance"]["record_id"] == "x"
+
+    def test_full_row_without_match_is_unchanged(self) -> None:
+        full = {"_id": "x", "match": None}
         assert shape_variant_row(full, mode="full") == full
 
     def test_recommended_citation_from_pmid(self) -> None:

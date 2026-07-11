@@ -38,6 +38,7 @@ from litvar_link.exceptions import (
 )
 from litvar_link.exceptions import ValidationError as LitVarValidationError
 from litvar_link.mcp.envelope import ErrorCode, error_envelope, success_envelope
+from litvar_link.mcp.untrusted_content import UntrustedTextLimitError
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,29 @@ _MAX_MESSAGE_CHARS = 240
 
 class ToolValidationError(Exception):
     """Visible, user-recoverable validation failure (maps to ``invalid_input``)."""
+
+
+def _classify_api_error(exc: LitVarAPIError) -> tuple[ErrorCode, bool, str]:
+    """Classify a (non-rate-limit, non-unavailable) ``LitVarAPIError`` by status."""
+    status = exc.status_code
+    if status == _HTTP_NOT_FOUND:
+        return (
+            "not_found",
+            False,
+            "Confirm the identifier; call search_genetic_variants or resolve_rsid "
+            "to resolve free text into a valid id first.",
+        )
+    if status is not None and status >= _HTTP_CLIENT_ERROR:
+        return (
+            "invalid_input",
+            False,
+            "Fix the offending argument per the message and retry with corrected input.",
+        )
+    return (
+        "upstream_unavailable",
+        True,
+        "Retry after a short backoff; call get_server_capabilities if it persists.",
+    )
 
 
 def _classify(exc: Exception) -> tuple[ErrorCode, bool, str]:
@@ -63,6 +87,13 @@ def _classify(exc: Exception) -> tuple[ErrorCode, bool, str]:
             False,
             "Fix the offending argument per the message and retry with corrected input.",
         )
+    if isinstance(exc, UntrustedTextLimitError):
+        return (
+            "response_limit_exceeded",
+            False,
+            "The response exceeded a Response-Envelope v1.1 untrusted-content "
+            "ceiling (object count or byte size). Lower `limit` and retry.",
+        )
     if isinstance(exc, RateLimitError):
         return (
             "rate_limited",
@@ -76,25 +107,7 @@ def _classify(exc: Exception) -> tuple[ErrorCode, bool, str]:
             "Retry after a short backoff; call get_server_capabilities if it persists.",
         )
     if isinstance(exc, LitVarAPIError):
-        status = exc.status_code
-        if status == _HTTP_NOT_FOUND:
-            return (
-                "not_found",
-                False,
-                "Confirm the identifier; call search_genetic_variants or resolve_rsid "
-                "to resolve free text into a valid id first.",
-            )
-        if status is not None and status >= _HTTP_CLIENT_ERROR:
-            return (
-                "invalid_input",
-                False,
-                "Fix the offending argument per the message and retry with corrected input.",
-            )
-        return (
-            "upstream_unavailable",
-            True,
-            "Retry after a short backoff; call get_server_capabilities if it persists.",
-        )
+        return _classify_api_error(exc)
     if isinstance(exc, TimeoutError):
         return (
             "upstream_unavailable",
