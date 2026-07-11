@@ -6,6 +6,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-07-10
+
+### Security
+
+- Enforce exact configurable Host and Origin allowlists across every HTTP
+  route, with safe loopback defaults, wildcard rejection, explicit production
+  proxy hosts and browser origins, and native FastMCP protection in depth.
+  FastMCP is upgraded to 3.4.4.
+
+### Changed (BREAKING)
+
+- Host and Origin admission is now default-deny outside the configured
+  loopback values. Non-loopback and reverse-proxy deployments must list their
+  exact public names in `LITVAR_LINK_ALLOWED_HOSTS`; browser deployments must
+  couple `LITVAR_LINK_ALLOWED_ORIGINS` with the matching CORS origins.
+
 ## [3.0.3] - 2026-07-07
 
 Release-merge of the 3.0.2 security hardening (see below) with the consolidated
