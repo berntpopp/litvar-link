@@ -6,6 +6,66 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-07-11
+
+Adopts **Response-Envelope Standard v1.1 untrusted-content fencing**
+(`genefoundry-router` `docs/RESPONSE-ENVELOPE-STANDARD-v1.1.md`). Defense in
+depth: upstream free text is now typed as data at the MCP boundary so hosts
+never confuse retrieved content with instructions. Research use only; not
+clinical decision support.
+
+### BREAKING
+
+- **`search_genetic_variants` full-mode `/results/*/match` is now a typed
+  `untrusted_text` object**, not a bare string. LitVar2's autocomplete
+  `match` field carries an HTML-highlighted search snippet built from
+  upstream free text (`AutocompleteVariantItem.match`,
+  `litvar_link/models/endpoint_specific.py:55`); it was previously passed
+  through unfenced in `response_mode="full"` (`existing_sanitization:
+  compact allowlist drops it; full-mode HTML snippet unstripped`). Every
+  populated `match` is now normalized (NFC), stripped of control/zero-width/
+  bidi-override code points, and wrapped as `{kind: "untrusted_text", text,
+  provenance: {source, record_id, retrieved_at}, raw_sha256}` via the new
+  `litvar_link/mcp/untrusted_content.py` (copied verbatim from the released
+  PubTator reference fence). `provenance.source` is `"litvar"`;
+  `provenance.record_id` is the LitVar variant id (`_id`/`id`, falling back
+  to `rsid`). `raw_sha256` is the SHA-256 of the pre-normalization raw UTF-8
+  bytes. The fence does **not** strip HTML markup -- that is a presentation
+  concern, not a security boundary; only control/zero-width/bidi code
+  points are removed. `response_mode="compact"` is unaffected -- it already
+  dropped `match` and continues to.
+- **`get_variant_summary` full-mode `/result/match` is now fenced the same
+  way** (a missed-surface fix beyond the original inventory pointer):
+  `VariantDetails` (the model this tool actually returns; `record.match`
+  reaches it via inheritance from `Variant`,
+  `litvar_link/models/variants.py:98`) permits the same upstream `match`
+  field, even though the "variant details" endpoint does not normally
+  populate it. Fenced defensively so an unexpected non-null value can never
+  pass through unfenced.
+- **`kind` is now declared in the array-ITEM output schema**, not only
+  advertised structurally: `search_genetic_variants`'s `output_schema`
+  documents `results[].match` as the `untrusted_text` object (`kind` const)
+  via a new `SEARCH_GENETIC_VARIANTS_OUTPUT_SCHEMA`; `get_variant_summary`
+  documents `result.match` likewise. `additionalProperties: true` is
+  preserved throughout so `full` mode's raw-upstream-passthrough contract for
+  every other field is unaffected.
+- A response-level object-count ceiling is now enforced by aggregating
+  **every** fenced object across the **whole** response (not per-record)
+  into one `enforce_untrusted_text_limits` call:
+  `search_genetic_variants` passes `max_objects=100` (its own `limit`
+  maximum, not the generic 128 default); `get_variant_summary` uses the
+  128 default (single-record tool). Exceeding either ceiling raises a typed
+  `UntrustedTextLimitError`, per the standard's explicit-error requirement --
+  expected to never fire in practice since `apply_limit` already truncates
+  `search_genetic_variants` output to 100 rows before this check runs.
+- **New closed `error_code` value `response_limit_exceeded`** (in addition to
+  the existing `invalid_input` / `not_found` / `ambiguous_query` /
+  `upstream_unavailable` / `rate_limited` / `internal` set): a
+  `UntrustedTextLimitError` reaching the MCP boundary is now classified to
+  this typed, non-masked code (verbatim diagnostic message, e.g. `untrusted
+  object count N exceeds ceiling M`) instead of the generic, masked
+  `internal` code.
+
 ## [4.0.0] - 2026-07-10
 
 ### Security
