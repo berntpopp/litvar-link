@@ -12,7 +12,7 @@ Guard rules (per hop, incl. auto-followed redirects):
 - host MUST be in the EXACT allowlist (no suffix/substring match),
 - method MUST be ``GET`` (the LitVar2 client is read-only / GET-only).
 
-The allowlist is DERIVED from the configured base URL host(s) at client-build
+The allowlist is DERIVED from the configured base URL origin(s) at client-build
 time -- never hardcoded -- so an operator base-URL override stays enforced.
 
 Both guard exceptions subclass :class:`LitVarAPIError` so the client's retry loop
@@ -22,6 +22,7 @@ transport error and be retried).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
@@ -43,63 +44,79 @@ class DisallowedURLError(LitVarAPIError):
     ``message`` -- a host in the message reaches the logs via chained-exception
     rendering (``raise ... from e`` + ``logger.exception``) or ANY ``str(exc)``
     surface (e.g. the REST ``_api_error_handler``). The offending value is kept
-    ONLY in the non-logged ``detail`` attribute for in-process debugging;
-    ``detail`` MUST never be logged or surfaced to a caller.
+    No attacker-controlled destination detail is retained on the exception.
     """
 
-    def __init__(self, message: str, *, detail: str | None = None) -> None:
-        super().__init__(message)
-        # Non-logged internal debug detail: it can carry the attacker-controlled
-        # host/scheme. NEVER put this in a log record or a caller-visible response.
-        self.detail = detail
+    def __init__(self, *_: object, **__: object) -> None:
+        super().__init__("outbound URL rejected")
 
 
 class ResponseTooLargeError(LitVarAPIError):
     """A response body exceeded the configured byte cap. NON-RETRYABLE."""
 
+    def __init__(self, *_: object, **__: object) -> None:
+        super().__init__("outbound response rejected")
 
-def build_host_allowlist(*base_urls: str) -> frozenset[str]:
-    """Return the lowercased set of hosts extracted from ``base_urls``.
+
+@dataclass(frozen=True)
+class AllowedOrigin:
+    """Normalized HTTPS origin that an outbound request may target."""
+
+    host: str
+    port: int
+
+
+def build_allowed_origins(*base_urls: str) -> frozenset[AllowedOrigin]:
+    """Return normalized configured origins extracted from ``base_urls``.
 
     Hostless / unparseable inputs are ignored so a misconfigured extra never
     silently widens the allowlist.
     """
-    hosts: set[str] = set()
+    origins: set[AllowedOrigin] = set()
     for url in base_urls:
-        host = urlsplit(url).hostname
+        parsed = urlsplit(url)
+        host = parsed.hostname
         if host:
-            hosts.add(host.lower())
-    return frozenset(hosts)
+            origins.add(AllowedOrigin(host.lower(), parsed.port or 443))
+    return frozenset(origins)
+
+
+def build_host_allowlist(*base_urls: str) -> frozenset[str]:
+    """Compatibility helper for callers that only need configured host names."""
+    return frozenset(origin.host for origin in build_allowed_origins(*base_urls))
 
 
 def make_url_guard(
-    allowed_hosts: frozenset[str],
+    allowed_origins: frozenset[AllowedOrigin] | frozenset[str],
 ) -> Callable[[httpx.Request], Awaitable[None]]:
     """Build an httpx request event-hook validating each outgoing request/hop."""
 
+    normalized_origins = frozenset(
+        AllowedOrigin(origin, 443) if isinstance(origin, str) else origin
+        for origin in allowed_origins
+    )
+
     async def _guard(request: httpx.Request) -> None:
-        # Every message is FIXED and host/scheme/method-free (each of those is
-        # caller-influenced on an auto-followed redirect); the offending value
-        # goes ONLY into the non-logged ``detail`` attribute, never the message.
+        # Every message is fixed and host/scheme/method-free.
         method = request.method.upper()
         if method not in _ALLOWED_METHODS:
-            raise DisallowedURLError("method not permitted", detail=f"method={method!r}")
+            raise DisallowedURLError()
         url = request.url
         if url.scheme != "https":
-            raise DisallowedURLError(
-                "non-https scheme not permitted", detail=f"scheme={url.scheme!r}"
-            )
+            raise DisallowedURLError()
         # Reject ANY userinfo, incl. empty-username/password forms. Checking only
         # ``url.username or url.password`` MISSES a userinfo whose creds both parse
         # empty (e.g. ``https://:@host/`` -> both decode to ``''`` but the raw
         # ``userinfo`` is ``b':'``): a smuggled-credential authority on an
         # otherwise-allowlisted host would slip through. Inspect the raw
         # ``userinfo`` bytes so any ``@``-before-host authority is rejected.
-        if url.userinfo or url.username or url.password:
-            raise DisallowedURLError("userinfo in URL not permitted")
+        authority = str(url).split("://", 1)[-1].split("/", 1)[0]
+        if url.userinfo or "@" in authority:
+            raise DisallowedURLError()
         host = (url.host or "").lower()
-        if host not in allowed_hosts:
-            raise DisallowedURLError("host not allowlisted", detail=f"host={host!r}")
+        origin = AllowedOrigin(host, url.port or 443)
+        if origin not in normalized_origins:
+            raise DisallowedURLError()
 
     return _guard
 
@@ -121,9 +138,7 @@ def make_response_cap(
         if declared is not None:
             try:
                 if int(declared) > max_bytes:
-                    raise ResponseTooLargeError(
-                        f"declared Content-Length {declared} exceeds cap {max_bytes}",
-                    )
+                    raise ResponseTooLargeError()
             except ValueError:
                 pass  # malformed header -> fall through to streamed enforcement
         total = 0
@@ -131,7 +146,7 @@ def make_response_cap(
         async for chunk in response.aiter_bytes():
             total += len(chunk)
             if total > max_bytes:
-                raise ResponseTooLargeError(f"response body exceeded cap {max_bytes} bytes")
+                raise ResponseTooLargeError()
             chunks.append(chunk)
         # Materialize the capped body so the normal buffered .text/.json() reads
         # keep working after we consumed the stream to enforce the cap.

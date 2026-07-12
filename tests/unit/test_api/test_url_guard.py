@@ -19,8 +19,10 @@ import respx
 
 from litvar_link.api.client import LitVar2Client
 from litvar_link.api.url_guard import (
+    AllowedOrigin,
     DisallowedURLError,
     ResponseTooLargeError,
+    build_allowed_origins,
     build_host_allowlist,
     make_response_cap,
     make_url_guard,
@@ -68,6 +70,19 @@ def test_build_host_allowlist_lowercases_and_dedupes() -> None:
 
 def test_build_host_allowlist_skips_hostless_urls() -> None:
     assert build_host_allowlist("not-a-url", "") == frozenset()
+
+
+def test_allowed_origins_normalize_host_and_default_port() -> None:
+    assert build_allowed_origins("https://WWW.NCBI.NLM.NIH.GOV:443/x") == frozenset(
+        {AllowedOrigin("www.ncbi.nlm.nih.gov", 443)}
+    )
+
+
+@pytest.mark.asyncio
+async def test_same_host_nonconfigured_port_is_rejected() -> None:
+    guard = make_url_guard(frozenset({AllowedOrigin("www.ncbi.nlm.nih.gov", 443)}))
+    with pytest.raises(DisallowedURLError, match="outbound URL rejected"):
+        await guard(httpx.Request("GET", "https://www.ncbi.nlm.nih.gov:8443/x"))
 
 
 # --------------------------------------------------------------------------- #
@@ -278,6 +293,19 @@ async def test_end_to_end_cross_host_redirect_blocked_and_not_retried(
     assert route.call_count == 1  # blocked on the first hop, never retried
 
 
+@pytest.mark.asyncio
+@respx.mock
+async def test_redirect_limit_maps_to_non_retryable_policy_error(api_config: APIConfig) -> None:
+    route = respx.get(_AUTOCOMPLETE).mock(
+        return_value=httpx.Response(302, headers={"Location": _AUTOCOMPLETE}),
+    )
+    async with LitVar2Client(config=api_config) as client:
+        with pytest.raises(UpstreamPolicyError) as exc_info:
+            await client.search_variants("CFH")
+    assert route.call_count == 6
+    assert str(exc_info.value).endswith("LitVar2 request blocked by the outbound URL/size policy.")
+
+
 # --------------------------------------------------------------------------- #
 # F-07 re-gate: host-free guard message, non-retryable mapping, userinfo bypass #
 # --------------------------------------------------------------------------- #
@@ -301,8 +329,7 @@ async def test_guard_message_is_host_free() -> None:
     assert attacker not in repr(exc)
     assert attacker not in exc.message
     assert attacker not in "".join(str(a) for a in exc.args)
-    # The host is preserved ONLY in the non-logged detail attr (never surfaced).
-    assert exc.detail is not None and attacker in exc.detail
+    assert str(exc) == "LitVar2 API Error: outbound URL rejected"
 
 
 @pytest.mark.asyncio
@@ -393,4 +420,4 @@ async def test_empty_credential_userinfo_on_allowlisted_host_is_rejected() -> No
     target = "https://:@www.ncbi.nlm.nih.gov/x"  # allowlisted host, userinfo=b':'
     with pytest.raises(DisallowedURLError) as exc_info:
         await guard(httpx.Request("GET", target))
-    assert exc_info.value.message == "userinfo in URL not permitted"
+    assert exc_info.value.message == "outbound URL rejected"
