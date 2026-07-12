@@ -9,11 +9,20 @@ from fastmcp.tools.tool import ToolResult
 from pydantic import Field
 
 from litvar_link.exceptions import ValidationError
+from litvar_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from litvar_link.mcp.errors import ToolValidationError, run_tool
 from litvar_link.validation import validate_rsid
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
+
+# The resolved rsID record is wrapped under ``result`` (structured, no free text).
+RESOLVE_RSID_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {"result": {"type": "object", "additionalProperties": True}},
+    "required": ["result"],
+    "additionalProperties": True,
+}
 
 
 def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
@@ -23,6 +32,8 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
         name="resolve_rsid",
         title="Resolve RSID",
         tags={"variant"},
+        output_schema=RESOLVE_RSID_OUTPUT_SCHEMA,
+        annotations=READ_ONLY_OPEN_WORLD,
     )
     async def resolve_rsid(
         variant_id: Annotated[str, Field(description="dbSNP rsID, e.g. rs1061170.")],

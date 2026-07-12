@@ -9,11 +9,38 @@ from fastmcp.tools.tool import ToolResult
 from pydantic import Field
 
 from litvar_link.exceptions import ValidationError
+from litvar_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from litvar_link.mcp.errors import ToolValidationError, run_tool
 from litvar_link.mcp.shaping import DEFAULT_LIMIT, apply_limit, recommended_citation
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
+
+# Structured rows only (PMID + citation) -- no upstream free text, so no fence.
+GET_VARIANT_LITERATURE_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "results": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "pmid": {"type": "string"},
+                    "recommended_citation": {"type": "string"},
+                },
+                "required": ["pmid", "recommended_citation"],
+                "additionalProperties": False,
+            },
+        },
+        "returned": {"type": "integer"},
+        "total": {"type": "integer"},
+        "truncated": {"type": "boolean"},
+        "variant_id": {"type": "string"},
+        "cached": {"type": "boolean"},
+    },
+    "required": ["results", "returned", "total", "truncated"],
+    "additionalProperties": True,
+}
 
 
 def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
@@ -23,6 +50,8 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
         name="get_variant_literature",
         title="Get Variant Literature",
         tags={"variant", "literature"},
+        output_schema=GET_VARIANT_LITERATURE_OUTPUT_SCHEMA,
+        annotations=READ_ONLY_OPEN_WORLD,
     )
     async def get_variant_literature(
         variant_id: Annotated[

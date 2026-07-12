@@ -9,6 +9,7 @@ from fastmcp.tools.tool import ToolResult
 from pydantic import Field
 
 from litvar_link.exceptions import ValidationError
+from litvar_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from litvar_link.mcp.errors import ToolValidationError, run_tool
 from litvar_link.mcp.shaping import (
     collect_fenced_matches,
@@ -53,6 +54,7 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
         title="Get Variant Summary",
         tags={"variant"},
         output_schema=GET_VARIANT_SUMMARY_OUTPUT_SCHEMA,
+        annotations=READ_ONLY_OPEN_WORLD,
     )
     async def get_variant_summary(
         variant_id: Annotated[str, Field(description="LitVar2 variant id or RSID/HGVS.")],

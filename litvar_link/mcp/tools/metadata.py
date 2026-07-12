@@ -7,11 +7,20 @@ from typing import TYPE_CHECKING, Any
 
 from fastmcp.tools.tool import ToolResult
 
+from litvar_link.mcp.annotations import READ_ONLY_CLOSED_WORLD
 from litvar_link.mcp.capabilities import server_capabilities
 from litvar_link.mcp.errors import run_tool
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
+
+# Static discovery payload wrapped under ``result``.
+GET_SERVER_CAPABILITIES_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {"result": {"type": "object", "additionalProperties": True}},
+    "required": ["result"],
+    "additionalProperties": True,
+}
 
 
 def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
@@ -21,7 +30,12 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
     (capabilities are static).
     """
 
-    @mcp.tool(name="get_server_capabilities", title="Get LitVar-Link Capabilities")
+    @mcp.tool(
+        name="get_server_capabilities",
+        title="Get LitVar-Link Capabilities",
+        output_schema=GET_SERVER_CAPABILITIES_OUTPUT_SCHEMA,
+        annotations=READ_ONLY_CLOSED_WORLD,
+    )
     async def get_server_capabilities() -> dict[str, Any] | ToolResult:
         """Discover tools, response modes, limits, the citation contract, and the
         research-use-only notice so a cold client can self-orient."""

@@ -9,6 +9,7 @@ from fastmcp.tools.tool import ToolResult
 from pydantic import Field
 
 from litvar_link.exceptions import ValidationError
+from litvar_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from litvar_link.mcp.errors import ToolValidationError, run_tool
 from litvar_link.mcp.shaping import (
     DEFAULT_LIMIT,
@@ -63,6 +64,7 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
         title="Search Genetic Variants",
         tags={"variant"},
         output_schema=SEARCH_GENETIC_VARIANTS_OUTPUT_SCHEMA,
+        annotations=READ_ONLY_OPEN_WORLD,
     )
     async def search_genetic_variants(
         query: Annotated[
