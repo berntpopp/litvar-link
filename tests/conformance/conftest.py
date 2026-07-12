@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterable
+from collections.abc import Awaitable, Callable, Iterable
 
 import httpx
 import pytest
@@ -17,7 +17,9 @@ from litvar_link.config import APIConfig
 
 
 class _HttpPolicyAdapter:
-    async def _production_session(self) -> tuple[httpx.AsyncClient, object]:
+    async def _production_session(
+        self,
+    ) -> tuple[httpx.AsyncClient, Callable[[], Awaitable[None]]]:
         client = LitVar2Client(APIConfig(base_url="https://allowed.example/"))
         return client.client, client.close
 
