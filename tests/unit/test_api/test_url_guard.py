@@ -293,6 +293,19 @@ async def test_end_to_end_cross_host_redirect_blocked_and_not_retried(
     assert route.call_count == 1  # blocked on the first hop, never retried
 
 
+@pytest.mark.asyncio
+@respx.mock
+async def test_redirect_limit_maps_to_non_retryable_policy_error(api_config: APIConfig) -> None:
+    route = respx.get(_AUTOCOMPLETE).mock(
+        return_value=httpx.Response(302, headers={"Location": _AUTOCOMPLETE}),
+    )
+    async with LitVar2Client(config=api_config) as client:
+        with pytest.raises(UpstreamPolicyError) as exc_info:
+            await client.search_variants("CFH")
+    assert route.call_count == 6
+    assert str(exc_info.value).endswith("LitVar2 request blocked by the outbound URL/size policy.")
+
+
 # --------------------------------------------------------------------------- #
 # F-07 re-gate: host-free guard message, non-retryable mapping, userinfo bypass #
 # --------------------------------------------------------------------------- #

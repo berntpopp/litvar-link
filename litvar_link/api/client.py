@@ -149,7 +149,7 @@ class LitVar2Client:
             try:
                 response = await self._send_request_once(method, url, params, data)
                 return self._handle_response(response, url, method, start_time)
-            except (DisallowedURLError, ResponseTooLargeError) as exc:
+            except (DisallowedURLError, ResponseTooLargeError, httpx.TooManyRedirects) as exc:
                 # Deterministic outbound URL/size POLICY violation on some hop
                 # (F-07): NON-RETRYABLE. Map to UpstreamPolicyError so the MCP
                 # layer classifies it retryable=False (a bare, status-less
