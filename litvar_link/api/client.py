@@ -19,7 +19,7 @@ from litvar_link.api.retry import (
 from litvar_link.api.url_guard import (
     DisallowedURLError,
     ResponseTooLargeError,
-    build_host_allowlist,
+    build_allowed_origins,
     make_response_cap,
     make_url_guard,
 )
@@ -92,7 +92,7 @@ class LitVar2Client:
         # Initialize HTTP client. Redirects stay enabled but every hop is
         # validated by a request event-hook against an allowlist DERIVED from the
         # configured base URL host, and the response body is capped fail-closed.
-        allowed_hosts = build_host_allowlist(config.base_url)
+        allowed_origins = build_allowed_origins(config.base_url)
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(config.timeout),
             headers={
@@ -102,7 +102,7 @@ class LitVar2Client:
             follow_redirects=True,
             max_redirects=5,
             event_hooks={
-                "request": [make_url_guard(allowed_hosts)],
+                "request": [make_url_guard(allowed_origins)],
                 "response": [make_response_cap(config.max_response_bytes)],
             },
         )
