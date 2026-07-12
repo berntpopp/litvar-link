@@ -36,7 +36,22 @@ _ALLOWED_METHODS = frozenset({"GET"})
 
 
 class DisallowedURLError(LitVarAPIError):
-    """An outbound request/redirect targeted a non-allowlisted URL. NON-RETRYABLE."""
+    """An outbound request/redirect targeted a non-allowlisted URL. NON-RETRYABLE.
+
+    HOST-FREE MESSAGE: the caller/attacker-controlled offending value (redirect
+    host, scheme, or method) is NEVER interpolated into the exception
+    ``message`` -- a host in the message reaches the logs via chained-exception
+    rendering (``raise ... from e`` + ``logger.exception``) or ANY ``str(exc)``
+    surface (e.g. the REST ``_api_error_handler``). The offending value is kept
+    ONLY in the non-logged ``detail`` attribute for in-process debugging;
+    ``detail`` MUST never be logged or surfaced to a caller.
+    """
+
+    def __init__(self, message: str, *, detail: str | None = None) -> None:
+        super().__init__(message)
+        # Non-logged internal debug detail: it can carry the attacker-controlled
+        # host/scheme. NEVER put this in a log record or a caller-visible response.
+        self.detail = detail
 
 
 class ResponseTooLargeError(LitVarAPIError):
@@ -63,16 +78,28 @@ def make_url_guard(
     """Build an httpx request event-hook validating each outgoing request/hop."""
 
     async def _guard(request: httpx.Request) -> None:
-        if request.method.upper() not in _ALLOWED_METHODS:
-            raise DisallowedURLError(f"method not permitted: {request.method}")
+        # Every message is FIXED and host/scheme/method-free (each of those is
+        # caller-influenced on an auto-followed redirect); the offending value
+        # goes ONLY into the non-logged ``detail`` attribute, never the message.
+        method = request.method.upper()
+        if method not in _ALLOWED_METHODS:
+            raise DisallowedURLError("method not permitted", detail=f"method={method!r}")
         url = request.url
         if url.scheme != "https":
-            raise DisallowedURLError(f"non-https scheme not permitted: {url.scheme}")
-        if url.username or url.password:
+            raise DisallowedURLError(
+                "non-https scheme not permitted", detail=f"scheme={url.scheme!r}"
+            )
+        # Reject ANY userinfo, incl. empty-username/password forms. Checking only
+        # ``url.username or url.password`` MISSES a userinfo whose creds both parse
+        # empty (e.g. ``https://:@host/`` -> both decode to ``''`` but the raw
+        # ``userinfo`` is ``b':'``): a smuggled-credential authority on an
+        # otherwise-allowlisted host would slip through. Inspect the raw
+        # ``userinfo`` bytes so any ``@``-before-host authority is rejected.
+        if url.userinfo or url.username or url.password:
             raise DisallowedURLError("userinfo in URL not permitted")
         host = (url.host or "").lower()
         if host not in allowed_hosts:
-            raise DisallowedURLError(f"host not allowlisted: {host}")
+            raise DisallowedURLError("host not allowlisted", detail=f"host={host!r}")
 
     return _guard
 

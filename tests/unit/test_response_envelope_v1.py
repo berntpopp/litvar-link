@@ -95,6 +95,31 @@ async def test_error_envelope_is_flat_and_returned_not_raised() -> None:
     assert payload["_meta"]["unsafe_for_clinical_use"] is True
 
 
+async def test_upstream_policy_error_is_non_retryable() -> None:
+    """A mapped outbound URL/size POLICY violation classifies NON-RETRYABLE (F-07).
+
+    A disallowed redirect / oversized response is deterministic, not transient.
+    A bare status-less ``LitVarAPIError`` maps to a *retryable*
+    ``upstream_unavailable``; ``UpstreamPolicyError`` must NOT inherit that -- it
+    is checked ahead of the generic branch and classified ``retryable=False``
+    with a fixed, host-free message.
+    """
+    from litvar_link.exceptions import UpstreamPolicyError
+
+    async def body() -> dict[str, Any]:
+        raise UpstreamPolicyError("LitVar2 request blocked by the outbound URL/size policy.")
+
+    result = await run_tool("search_genetic_variants", body)
+
+    assert isinstance(result, ToolResult)
+    assert result.is_error is True
+    payload = result.structured_content or {}
+    assert payload["success"] is False
+    assert payload["retryable"] is False
+    assert payload["error_code"] != "upstream_unavailable"
+    assert isinstance(payload["message"], str) and payload["message"]
+
+
 async def test_unexpected_error_is_returned_as_a_masked_internal_envelope() -> None:
     """Any other exception is classified ``internal`` and its detail is
     sanitized out of the in-band ``message`` (tool name + request id only, no

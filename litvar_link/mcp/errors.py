@@ -35,6 +35,7 @@ from litvar_link.exceptions import (
     LitVarAPIError,
     RateLimitError,
     ServiceUnavailableError,
+    UpstreamPolicyError,
 )
 from litvar_link.exceptions import ValidationError as LitVarValidationError
 from litvar_link.mcp.envelope import ErrorCode, error_envelope, success_envelope
@@ -114,6 +115,18 @@ def _classify(exc: Exception) -> tuple[ErrorCode, bool, str]:
             "upstream_unavailable",
             True,
             "Retry after a short backoff; call get_server_capabilities if it persists.",
+        )
+    if isinstance(exc, UpstreamPolicyError):
+        # A deterministic outbound URL/size policy block (F-07): NON-RETRYABLE.
+        # Checked BEFORE the generic ``LitVarAPIError`` branch (which it
+        # subclasses) so it never falls through to the retryable, status-less
+        # ``upstream_unavailable`` mapping. ``internal`` yields a fixed, opaque,
+        # host-free caller message via ``_safe_message``.
+        return (
+            "internal",
+            False,
+            "This request was blocked by an outbound URL/size policy; it is "
+            "deterministic and will not succeed on retry.",
         )
     if isinstance(exc, LitVarAPIError):
         return _classify_api_error(exc)

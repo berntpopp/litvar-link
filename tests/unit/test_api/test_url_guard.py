@@ -10,6 +10,7 @@ violation is NOT retried by the client's retry loop.
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -25,7 +26,7 @@ from litvar_link.api.url_guard import (
     make_url_guard,
 )
 from litvar_link.config import APIConfig
-from litvar_link.exceptions import LitVarAPIError
+from litvar_link.exceptions import LitVarAPIError, UpstreamPolicyError
 
 _ALLOWED = frozenset({"www.ncbi.nlm.nih.gov"})
 _BASE = "https://www.ncbi.nlm.nih.gov"
@@ -193,6 +194,8 @@ def test_guard_exceptions_are_litvar_api_errors() -> None:
 
 @pytest.mark.asyncio
 async def test_disallowed_url_error_is_not_retried(api_config: APIConfig) -> None:
+    # A guard violation is mapped to the deterministic, NON-RETRYABLE
+    # UpstreamPolicyError at the client boundary (F-07) and must fail fast.
     async with LitVar2Client(config=api_config) as client:
         with (
             patch.object(
@@ -200,7 +203,7 @@ async def test_disallowed_url_error_is_not_retried(api_config: APIConfig) -> Non
                 "request",
                 AsyncMock(side_effect=DisallowedURLError("host not allowlisted")),
             ) as mock_request,
-            pytest.raises(DisallowedURLError),
+            pytest.raises(UpstreamPolicyError),
         ):
             await client.search_variants("test")
         assert mock_request.call_count == 1  # fail-fast, no retries
@@ -215,7 +218,7 @@ async def test_response_too_large_error_is_not_retried(api_config: APIConfig) ->
                 "request",
                 AsyncMock(side_effect=ResponseTooLargeError("too big")),
             ) as mock_request,
-            pytest.raises(ResponseTooLargeError),
+            pytest.raises(UpstreamPolicyError),
         ):
             await client.search_variants("test")
         assert mock_request.call_count == 1
@@ -264,10 +267,130 @@ async def test_end_to_end_happy_path_through_client(api_config: APIConfig) -> No
 async def test_end_to_end_cross_host_redirect_blocked_and_not_retried(
     api_config: APIConfig,
 ) -> None:
+    # The guard fires on the cross-host hop; the client maps the deterministic
+    # violation to the NON-RETRYABLE UpstreamPolicyError (F-07) and never retries.
     route = respx.get(_AUTOCOMPLETE).mock(
         return_value=httpx.Response(302, headers={"Location": "https://evil.example.com/x"}),
     )
     async with LitVar2Client(config=api_config) as client:
-        with pytest.raises(DisallowedURLError):
+        with pytest.raises(UpstreamPolicyError):
             await client.search_variants("CFH")
     assert route.call_count == 1  # blocked on the first hop, never retried
+
+
+# --------------------------------------------------------------------------- #
+# F-07 re-gate: host-free guard message, non-retryable mapping, userinfo bypass #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.asyncio
+async def test_guard_message_is_host_free() -> None:
+    """The guard's exception message MUST NOT carry the attacker-controlled host.
+
+    A host in the message reaches logs via chained-exception rendering
+    (``raise ... from e`` + ``logger.exception``) or any ``str(exc)`` surface
+    (e.g. the REST ``_api_error_handler``). The message is FIXED/host-free; the
+    offending host may live ONLY in the non-logged ``.detail`` attribute.
+    """
+    attacker = "evil-guard-host.example"
+    guard = make_url_guard(_ALLOWED)
+    with pytest.raises(DisallowedURLError) as exc_info:
+        await guard(httpx.Request("GET", f"https://{attacker}/steal"))
+    exc = exc_info.value
+    assert attacker not in str(exc)
+    assert attacker not in repr(exc)
+    assert attacker not in exc.message
+    assert attacker not in "".join(str(a) for a in exc.args)
+    # The host is preserved ONLY in the non-logged detail attr (never surfaced).
+    assert exc.detail is not None and attacker in exc.detail
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_cross_host_redirect_leaves_no_host_in_logs(
+    api_config: APIConfig, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A cross-host redirect leaves NO attacker host in any log record (F-07).
+
+    Reproduces the REST leak vector: the app's ``LitVarAPIError`` handler does
+    ``logger.exception("LitVar2 API error", error=str(exc))`` on the raised error
+    (rendering its ``__cause__``/``__context__`` chain). We drive the client to a
+    cross-host redirect, reproduce that ``logger.exception``, and assert the
+    attacker host appears in neither the log records, the caller-visible message,
+    nor the raised exception's cause/context chain.
+    """
+    attacker = "evil-redirect-sink.example"
+    respx.get(_AUTOCOMPLETE).mock(
+        return_value=httpx.Response(302, headers={"Location": f"https://{attacker}/steal"}),
+    )
+    route_logger = logging.getLogger("litvar_link.api.error_handlers")
+
+    raised: UpstreamPolicyError | None = None
+    async with LitVar2Client(config=api_config) as client:
+        with caplog.at_level(logging.DEBUG):
+            try:
+                await client.search_variants("CFH")
+            except UpstreamPolicyError as exc:
+                raised = exc
+                # Exact reproduction of the _api_error_handler chained log.
+                route_logger.exception("LitVar2 API error: %s", str(exc))
+
+    assert raised is not None
+    # (a) No log record (message OR rendered exc chain) names the attacker host.
+    assert attacker not in caplog.text
+    # No caller-visible message names it either.
+    assert attacker not in str(raised)
+    # The full cause/context chain is host-free -- so ANY chained
+    # logger.exception up the stack can never render it.
+    seen: set[int] = set()
+    node: BaseException | None = raised
+    while node is not None and id(node) not in seen:
+        seen.add(id(node))
+        assert attacker not in str(node)
+        assert attacker not in "".join(str(a) for a in node.args)
+        node = node.__cause__ or node.__context__
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_cross_host_redirect_maps_to_non_retryable_policy_error(
+    api_config: APIConfig,
+) -> None:
+    """A cross-host redirect surfaces as the NON-RETRYABLE ``UpstreamPolicyError``.
+
+    A bare status-less ``LitVarAPIError`` maps to a *retryable*
+    ``upstream_unavailable`` in the MCP layer; a deterministic policy block must
+    NOT, so the client raises the dedicated ``UpstreamPolicyError`` type.
+    """
+    route = respx.get(_AUTOCOMPLETE).mock(
+        return_value=httpx.Response(302, headers={"Location": "https://evil.example.com/x"}),
+    )
+    async with LitVar2Client(config=api_config) as client:
+        with pytest.raises(UpstreamPolicyError):
+            await client.search_variants("CFH")
+    assert route.call_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("target", ["https://@evil/", "https://x@evil/"])
+async def test_redirect_userinfo_forms_are_rejected(target: str) -> None:
+    """Empty-but-present userinfo (``@host``, ``x@host``) is rejected (F-07)."""
+    guard = make_url_guard(_ALLOWED)
+    with pytest.raises(DisallowedURLError):
+        await guard(httpx.Request("GET", target))
+
+
+@pytest.mark.asyncio
+async def test_empty_credential_userinfo_on_allowlisted_host_is_rejected() -> None:
+    """A userinfo whose creds BOTH parse empty (``https://:@host/``) is rejected
+    even when the host is ALLOWLISTED (F-07 empty-userinfo bypass).
+
+    ``url.username or url.password`` MISSES this form (both decode to ``''``),
+    so the guard inspects the raw ``userinfo``. The host here is allowlisted, so
+    ONLY the userinfo branch -- not the host branch -- can reject it.
+    """
+    guard = make_url_guard(_ALLOWED)
+    target = "https://:@www.ncbi.nlm.nih.gov/x"  # allowlisted host, userinfo=b':'
+    with pytest.raises(DisallowedURLError) as exc_info:
+        await guard(httpx.Request("GET", target))
+    assert exc_info.value.message == "userinfo in URL not permitted"

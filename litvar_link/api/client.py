@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from typing import TYPE_CHECKING, Any, Self, cast
-from urllib.parse import quote, urljoin
+from urllib.parse import quote, urljoin, urlsplit
 
 import httpx
 
@@ -17,6 +17,8 @@ from litvar_link.api.retry import (
     raise_for_status_code,
 )
 from litvar_link.api.url_guard import (
+    DisallowedURLError,
+    ResponseTooLargeError,
     build_host_allowlist,
     make_response_cap,
     make_url_guard,
@@ -25,6 +27,7 @@ from litvar_link.exceptions import (
     LitVarAPIError,
     RateLimitError,
     ServiceUnavailableError,
+    UpstreamPolicyError,
 )
 from litvar_link.logging_config import log_api_request, log_error_with_context
 from litvar_link.validation import (
@@ -146,6 +149,25 @@ class LitVar2Client:
             try:
                 response = await self._send_request_once(method, url, params, data)
                 return self._handle_response(response, url, method, start_time)
+            except (DisallowedURLError, ResponseTooLargeError) as exc:
+                # Deterministic outbound URL/size POLICY violation on some hop
+                # (F-07): NON-RETRYABLE. Map to UpstreamPolicyError so the MCP
+                # layer classifies it retryable=False (a bare, status-less
+                # LitVarAPIError maps to a transient/retryable upstream fault).
+                # Chain with ``from None`` (NEVER ``from exc``) so no
+                # __cause__/__context__ can carry the attacker-controlled host up
+                # the stack into a chained ``logger.exception`` (e.g. the REST
+                # ``_api_error_handler``). Log ONLY the exception type and the
+                # (allowlisted, host-free) original request path.
+                if self.logger:
+                    self.logger.warning(
+                        "Outbound request blocked by URL/size policy",
+                        error_type=type(exc).__name__,
+                        path=urlsplit(url).path,
+                    )
+                raise UpstreamPolicyError(
+                    "LitVar2 request blocked by the outbound URL/size policy.",
+                ) from None
             except (LitVarAPIError, RateLimitError, ServiceUnavailableError):
                 raise
             except httpx.TimeoutException as exc:

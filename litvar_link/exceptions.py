@@ -81,6 +81,21 @@ class CacheError(LitVarAPIError):
     """Exception raised for cache-related errors."""
 
 
+class UpstreamPolicyError(LitVarAPIError):
+    """A response/redirect violated an outbound URL/size policy (F-07).
+
+    DETERMINISTIC and NON-RETRYABLE: a disallowed redirect (cross-host,
+    http-downgrade, userinfo) or an oversized response body recurs identically
+    on retry. It is a dedicated ``LitVarAPIError`` subclass so the MCP error
+    mapping classifies it ``retryable=False`` -- unlike a bare, status-less
+    ``LitVarAPIError``, which that mapping treats as a transient (retryable)
+    upstream fault.
+
+    The message MUST stay FIXED and host-free: the offending redirect host is
+    caller-influenced and must never reach a log record or the caller response.
+    """
+
+
 class ServiceUnavailableError(LitVarAPIError):
     """Exception raised when the LitVar2 service is unavailable."""
 
