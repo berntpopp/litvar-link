@@ -8,21 +8,28 @@ from collections.abc import Iterable
 import httpx
 import pytest
 
+from litvar_link.api.client import LitVar2Client
 from litvar_link.api.url_guard import (
     DisallowedURLError,
     ResponseTooLargeError,
-    build_allowed_origins,
-    make_response_cap,
-    make_url_guard,
 )
+from litvar_link.config import APIConfig
 
 
 class _HttpPolicyAdapter:
-    def __init__(self) -> None:
-        self._guard = make_url_guard(build_allowed_origins("https://allowed.example/"))
+    async def _production_session(self) -> tuple[httpx.AsyncClient, object]:
+        client = LitVar2Client(APIConfig(base_url="https://allowed.example/"))
+        return client.client, client.close
 
     def allow(self, url: str) -> object:
-        return asyncio.run(self._guard(httpx.Request("GET", url)))
+        async def check() -> None:
+            session, close = await self._production_session()
+            try:
+                await session.event_hooks["request"][0](httpx.Request("GET", url))
+            finally:
+                await close()
+
+        return asyncio.run(check())
 
     def request(self, url: str, redirects: list[str], max_redirects: int) -> None:
         async def send() -> None:
@@ -36,23 +43,30 @@ class _HttpPolicyAdapter:
                     return httpx.Response(302, headers={"Location": location})
                 return httpx.Response(200, json={})
 
-            async with httpx.AsyncClient(
-                transport=httpx.MockTransport(handler),
-                follow_redirects=True,
-                max_redirects=max_redirects,
-                event_hooks={"request": [self._guard]},
-            ) as client:
+            session, close = await self._production_session()
+            try:
+                if not session.follow_redirects or session.max_redirects != max_redirects:
+                    raise DisallowedURLError()
+                session._transport = httpx.MockTransport(handler)
                 try:
-                    await client.get(url)
+                    await session.get(url)
                 except httpx.TooManyRedirects as exc:
                     raise DisallowedURLError() from exc
+            finally:
+                await close()
 
         asyncio.run(send())
 
     def read_decoded(self, chunks: Iterable[bytes], cap: int) -> None:
         async def read() -> None:
+            client = LitVar2Client(
+                APIConfig(base_url="https://allowed.example/", max_response_bytes=cap)
+            )
             response = httpx.Response(200, content=b"".join(chunks))
-            await make_response_cap(cap)(response)
+            try:
+                await client.client.event_hooks["response"][0](response)
+            finally:
+                await client.close()
 
         asyncio.run(read())
 
