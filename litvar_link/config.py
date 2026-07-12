@@ -49,6 +49,15 @@ class APIConfigModel(BaseModel):
         default="LitVar-Link/0.1.0",
         description="User agent string for API requests",
     )
+    max_response_bytes: int = Field(
+        default=25 * 1024 * 1024,
+        gt=0,
+        description=(
+            "Fail-closed cap on an upstream response body in bytes (default "
+            "25 MiB). Large genes (e.g. BRCA1/TP53) return a few MB, so this is "
+            "sized generously; a body past the cap raises rather than truncates."
+        ),
+    )
     endpoints: dict[str, str] = Field(
         default={
             "autocomplete": "variant/autocomplete/",

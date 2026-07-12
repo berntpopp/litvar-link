@@ -16,6 +16,11 @@ from litvar_link.api.retry import (
     backoff_delay,
     raise_for_status_code,
 )
+from litvar_link.api.url_guard import (
+    build_host_allowlist,
+    make_response_cap,
+    make_url_guard,
+)
 from litvar_link.exceptions import (
     LitVarAPIError,
     RateLimitError,
@@ -81,7 +86,10 @@ class LitVar2Client:
             burst=config.burst_size,
         )
 
-        # Initialize HTTP client
+        # Initialize HTTP client. Redirects stay enabled but every hop is
+        # validated by a request event-hook against an allowlist DERIVED from the
+        # configured base URL host, and the response body is capped fail-closed.
+        allowed_hosts = build_host_allowlist(config.base_url)
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(config.timeout),
             headers={
@@ -89,6 +97,11 @@ class LitVar2Client:
                 "Accept": "application/json",
             },
             follow_redirects=True,
+            max_redirects=5,
+            event_hooks={
+                "request": [make_url_guard(allowed_hosts)],
+                "response": [make_response_cap(config.max_response_bytes)],
+            },
         )
 
     async def close(self) -> None:
