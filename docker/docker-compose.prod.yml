@@ -3,6 +3,11 @@
 
 services:
   litvar-link:
+    build: !reset null
+    image: ${LITVAR_LINK_IMAGE:?set a verified digest-addressed image}
+    pull_policy: missing
+    container_name: !reset null
+    env_file: !reset []
     # Production-specific environment variables
     environment:
       LITVAR_LINK_LOG_LEVEL: INFO
@@ -11,59 +16,54 @@ services:
       LITVAR_LINK_ALLOWED_HOSTS: '["localhost","127.0.0.1","::1","litvar-link.genefoundry.org"]'
       LITVAR_LINK_ALLOWED_ORIGINS: '["https://litvar-link.genefoundry.org"]'
       LITVAR_LINK_CORS_ORIGINS: '["https://litvar-link.genefoundry.org"]'
+      GF_HEALTHCHECK_HOST: localhost
     
     # Remove development volume mounts
-    volumes: []
+    volumes: !override []
     
-    # Serve REST + MCP through one guarded async application. Scale with
-    # container replicas so each process owns exactly one shared MCP lifespan.
-    command: ["litvar-link", "serve", "unified", "--host", "0.0.0.0", "--port", "8000"]
+    command: !reset null
 
     # Behind the reverse proxy the container is expose-only. `!reset` (not []) is
     # required: Compose MERGES list fields across -f overlays, so a plain
     # `ports: []` would NOT drop the base file's "${LITVAR_LINK_PORT:-8000}:8000"
     # mapping — it would stay published on the host's public IP.
     ports: !reset []
+    expose:
+      - "8000"
 
     # Hardened runtime (Container & Deployment Hardening Standard v1, rules 7-14).
     # LitVar-Link is a stateless live LitVar2 proxy with no persistent state, so
     # the only writable path is an ephemeral TMPDIR scratch; the root filesystem
     # is read-only.
     read_only: true
-    tmpfs:
+    tmpfs: !override
       - /tmp:rw,noexec,nosuid,size=64m,mode=1777
-    security_opt:
+    security_opt: !override
       - no-new-privileges:true
-    cap_drop:
+    cap_drop: !override
       - ALL
-    pids_limit: 256
     init: true
 
     # Production resource limits
-    deploy:
+    deploy: !override
       resources:
         limits:
           memory: 1G
           cpus: '1.0'
           pids: 256
-        reservations:
-          memory: 512M
-          cpus: '0.5'
-      
-      # Production restart policy
-      restart_policy:
-        condition: any
-        delay: 5s
-        max_attempts: 3
-        window: 120s
+    restart: on-failure
     
     # Enhanced health check for production
     healthcheck:
-      test: ["CMD", "curl", "-f", "-H", "Host: localhost", "http://localhost:8000/api/health/"]
-      interval: 20s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      test:
+        - CMD
+        - sh
+        - -c
+        - 'curl -f -H "Host: $${GF_HEALTHCHECK_HOST}" http://localhost:8000/health'
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     
     # Production logging with rotation
     logging:
