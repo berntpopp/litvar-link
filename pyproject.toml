@@ -74,12 +74,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/litvar-link/litvar-link"
-Documentation = "https://litvar-link.readthedocs.io"
-Repository = "https://github.com/litvar-link/litvar-link"
-"Bug Tracker" = "https://github.com/litvar-link/litvar-link/issues"
-Changelog = "https://github.com/litvar-link/litvar-link/blob/main/CHANGELOG.md"
-
+Homepage = "https://github.com/berntpopp/litvar-link"
+Repository = "https://github.com/berntpopp/litvar-link"
+"Bug Tracker" = "https://github.com/berntpopp/litvar-link/issues"
+Changelog = "https://github.com/berntpopp/litvar-link/blob/main/CHANGELOG.md"
 [project.scripts]
 litvar-link = "litvar_link.cli:app"
 litvar-link-mcp = "mcp_server:main"
