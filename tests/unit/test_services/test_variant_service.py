@@ -775,8 +775,11 @@ class TestVariantService:
         # Mock client to raise exception
         mock_client.get_variant_details.side_effect = Exception("Details API error")
 
+        # A CANONICAL id, so the call goes straight to get_variant_details. A
+        # non-canonical id is now resolved via autocomplete first (issue #66 D1),
+        # which would never reach the details call this test is exercising.
         with pytest.raises(Exception, match="Details API error"):
-            await service.get_variant_summary("test_variant_id")
+            await service.get_variant_summary("litvar@rs1061170##")
 
     @pytest.mark.asyncio
     async def test_batch_variant_lookup_exception_handling(

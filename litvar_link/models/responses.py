@@ -55,6 +55,10 @@ class VariantDetailsResponse(BaseResponse):
     """Response model for variant details."""
 
     variant: VariantDetailsItem = Field(description="Detailed variant information")
+    resolved_variant_id: str | None = Field(
+        default=None,
+        description="The canonical LitVar id that actually answered the request",
+    )
     cached: bool = Field(
         default=False,
         description="Whether results were served from cache",

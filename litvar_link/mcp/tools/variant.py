@@ -21,7 +21,20 @@ from litvar_link.mcp.untrusted_content import enforce_untrusted_text_limits
 if TYPE_CHECKING:
     from fastmcp import FastMCP
 
-_COMPACT_FIELDS = ("id", "rsid", "gene", "name", "pmids_count")
+# High-signal fields for compact mode. Includes the clinically meaningful ones a
+# curator actually asks this tool for (ClinGen ids, genomic position, reported
+# significance) -- the old projection dropped all three.
+_COMPACT_FIELDS = (
+    "id",
+    "rsid",
+    "gene",
+    "name",
+    "hgvs",
+    "pmids_count",
+    "clingen_ids",
+    "data_chromosome_base_position",
+    "data_clinical_significance",
+)
 
 _MATCH_SCHEMA, _MATCH_DEFS = untrusted_text_field_schema()
 
@@ -82,6 +95,12 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
                 # Single-record tool: the default 128-object ceiling bounds
                 # this (at most one fenced field), per the fleet convention.
                 enforce_untrusted_text_limits(collect_fenced_matches([variant]))
-            return {"result": variant, "cached": data.get("cached", False)}
+            return {
+                "result": variant,
+                # Free text / an rsID is resolved via autocomplete, so the caller
+                # MUST be told which LitVar record actually answered.
+                "resolved_variant_id": data.get("resolved_variant_id"),
+                "cached": data.get("cached", False),
+            }
 
         return await run_tool("get_variant_summary", body)

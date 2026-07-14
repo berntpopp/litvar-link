@@ -63,32 +63,60 @@ class AutocompleteVariantItem(BaseModel):
 
 
 class VariantDetailsItem(BaseModel):
-    """Model for variant details endpoint response."""
+    """Model for variant details endpoint response.
+
+    Every field except ``id`` carries a default. That is deliberate: this model
+    is the *only* thing standing between an upstream schema change and a dead
+    tool. It previously required all 16 fields, so the day LitVar2 omitted any
+    one of them ``get_variant_summary`` would have raised a pydantic
+    ``ValidationError`` -- which the MCP error boundary classifies ``internal``,
+    i.e. an opaque "retry later" for a request that can never succeed. Absent
+    upstream data must read as ABSENT (``None``/``[]``), never as a crash, and
+    never as a *negative finding* (see ``data_clinical_significance``: ``None``
+    means "LitVar2 said nothing", which is NOT the same as "no clinical
+    significance").
+    """
 
     model_config = {"populate_by_name": True}
 
     id: str = Field(alias="_id", description="Unique variant identifier")
-    concept: str = Field(description="Type of entity (usually 'variant')")
-    rsid: str = Field(description="Reference SNP ID")
-    clingen_ids: list[str] = Field(description="Associated ClinGen identifiers")
-    gene: list[str] = Field(description="Associated gene symbols")
-    name: str = Field(description="Variant name")
-    hgvs: str = Field(description="HGVS notation")
-    flag_gene_variant: bool = Field(description="True if this is a gene-level variant")
+    concept: str | None = Field(default=None, description="Type of entity (usually 'variant')")
+    rsid: str | None = Field(default=None, description="Reference SNP ID")
+    clingen_ids: list[str] = Field(
+        default_factory=list,
+        description="Associated ClinGen identifiers",
+    )
+    gene: list[str] = Field(default_factory=list, description="Associated gene symbols")
+    name: str | None = Field(default=None, description="Variant name")
+    hgvs: str | None = Field(default=None, description="HGVS notation")
+    flag_gene_variant: bool = Field(
+        default=False,
+        description="True if this is a gene-level variant",
+    )
     flag_clingen_variant: bool = Field(
+        default=False,
         description="True if this variant is in ClinGen database",
     )
-    flag_rsid_variant: bool = Field(description="True if this variant has an RSID")
-    data_species: list[str] = Field(description="Species information")
-    data_snp_id: list[str] = Field(description="SNP database identifiers")
-    data_tax_id: list[str] = Field(description="Taxonomy identifiers")
-    data_allele: list[str] = Field(description="Allele information")
-    data_snp_class: list[str] = Field(description="SNP classification")
+    flag_rsid_variant: bool = Field(default=False, description="True if this variant has an RSID")
+    data_species: list[str] = Field(default_factory=list, description="Species information")
+    data_snp_id: list[str] = Field(default_factory=list, description="SNP database identifiers")
+    data_tax_id: list[str] = Field(default_factory=list, description="Taxonomy identifiers")
+    data_allele: list[str] = Field(default_factory=list, description="Allele information")
+    data_snp_class: list[str] = Field(default_factory=list, description="SNP classification")
     data_chromosome_base_position: list[str] = Field(
+        default_factory=list,
         description="Chromosomal positions",
     )
-    data_clinical_significance: list[str] = Field(
-        description="Clinical significance categories",
+    data_clinical_significance: list[str] | None = Field(
+        default=None,
+        description="Clinical significance categories, or None when LitVar2 supplies none",
+    )
+    # Upstream does not normally populate ``match`` on this endpoint, but the row
+    # shape allows it. Modelled (not dropped) so an unexpected value still flows
+    # through the v1.1 untrusted-text fence rather than vanishing.
+    match: str | None = Field(
+        default=None,
+        description="Search match description with HTML highlighting",
     )
 
 

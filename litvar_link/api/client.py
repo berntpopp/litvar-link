@@ -45,6 +45,9 @@ if TYPE_CHECKING:
     from litvar_link.config import APIConfig
 
 
+_HTTP_NOT_FOUND = 404
+
+
 def _format_endpoint(template: str, **segments: str) -> str:
     """Substitute path segments into an endpoint template, percent-encoding each.
 
@@ -313,12 +316,24 @@ class LitVar2Client:
 
         Returns:
             Variant details dictionary
+
+        Raises:
+            LitVarAPIError: If LitVar2 returns anything other than a variant object
         """
         endpoint = _format_endpoint(
             self.config.endpoints["variant_details"],
             variant_id=variant_id,
         )
-        return cast("dict[str, Any]", await self._make_request("GET", endpoint))
+        payload = await self._make_request("GET", endpoint)
+        # VALIDATE, do not ``cast``. A bare cast here is a lie to the type checker
+        # (LitVar2 can answer with an empty body or a list), and it was a cast of
+        # exactly this kind -- ``cast("Any", ...)`` in the service -- that let the
+        # get_variant_summary model mismatch reach production as an `internal`
+        # error on every single call (issue #66 D1).
+        if not isinstance(payload, dict):
+            msg = "Variant not found: LitVar2 returned no variant record"
+            raise LitVarAPIError(msg, status_code=_HTTP_NOT_FOUND)
+        return payload
 
     async def get_variant_publications(self, variant_id: str) -> list[str]:
         """Get publications associated with a variant.

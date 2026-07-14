@@ -11,10 +11,10 @@ from litvar_link.models import (
     GeneVariantsResponse,
     PublicationResponse,
     SensorResponse,
-    VariantDetails,
     VariantDetailsResponse,
     VariantSearchResponse,
 )
+from litvar_link.models.endpoint_specific import VariantDetailsItem
 from litvar_link.services.cache_hits import hits_before, was_cache_hit
 from litvar_link.utils.caching import create_service_cache_decorator
 from litvar_link.validation import (
@@ -267,17 +267,16 @@ class VariantService:
             raise
 
     async def get_variant_summary(self, variant_id: str) -> VariantDetailsResponse:
-        """Get detailed variant information.
+        """Get detailed variant information for a LitVar id, rsID, or HGVS/free text.
 
-        Args:
-            variant_id: Unique variant identifier
-
-        Returns:
-            Variant details response
+        ``variant_id`` may be a canonical LitVar id, an rsID, or HGVS/free text;
+        non-canonical input is resolved via autocomplete first (the variant/get
+        endpoint only accepts ``litvar@...##`` and 400s on anything else). The
+        resolved id is returned so the caller can see WHICH record answered.
 
         Raises:
-            ValidationError: For invalid input parameters
-            LitVarAPIError: For API-related errors
+            ValidationError: For invalid/unresolvable input
+            LitVarAPIError: For genuine upstream errors (rate limit, outage)
         """
         if not variant_id or not variant_id.strip():
             msg = "Variant ID cannot be empty"
@@ -285,19 +284,40 @@ class VariantService:
 
         variant_id = variant_id.strip()
         try:
+            resolved_id = await self._resolve_to_variant_id(variant_id)
+
             initial_hits = hits_before(self._cached_get_variant_details)
-            variant_data = await self._cached_get_variant_details(variant_id)
+            variant_data = await self._cached_get_variant_details(resolved_id)
             cached = was_cache_hit(self._cached_get_variant_details, before=initial_hits)
 
-            # Parse variant details
-            variant = VariantDetails(**variant_data)
-
+            # Build the model the response actually DECLARES. This used to build a
+            # `VariantDetails` and launder it past mypy with `cast("Any", ...)`;
+            # pydantic rejected it at runtime on EVERY call, so the tool answered
+            # `internal` for its own canonical ids and was dead for ~every input.
+            # The cast is gone: mypy now proves the two types agree, forever.
             return VariantDetailsResponse(
-                # VariantDetails/VariantDetailsItem reconciliation is deferred to P3.
-                variant=cast("Any", variant),
+                variant=VariantDetailsItem(**variant_data),
+                resolved_variant_id=resolved_id,
                 cached=cached,
             )
 
+        except ValidationError:
+            raise  # already a clean, user-recoverable message
+        except LitVarAPIError as e:
+            if _is_variant_not_found(e):
+                msg = (
+                    f"LitVar2 has no variant record for {variant_id!r} (variant not found). "
+                    "Use search_genetic_variants to find a valid variant id."
+                )
+                raise ValidationError(msg, field="variant_id") from e
+            if self.logger:
+                log_error_with_context(
+                    self.logger,
+                    e,
+                    "get_variant_summary",
+                    {"variant_id": variant_id},
+                )
+            raise
         except Exception as e:
             if self.logger:
                 log_error_with_context(
