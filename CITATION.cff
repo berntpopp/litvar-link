@@ -1,0 +1,34 @@
+# CITATION.cff — GENERATED. Do not edit.
+# Source: genefoundry-router/fleet-metadata.yaml + this repo's pyproject.toml.
+# Regenerate: `make citation-write` in genefoundry-router.
+# See genefoundry-router/docs/REPO-METADATA-STANDARD-v1.md.
+cff-version: 1.2.0
+message: If you use this software, please cite it as below.
+title: litvar-link
+abstract: 'MCP server for NCBI LitVar2: search the biomedical literature by genetic variant — the index
+  linking variants to the publications that mention them, as typed tools for LLM agents.'
+type: software
+authors:
+- family-names: Popp
+  given-names: Bernt
+  email: bernt.popp@charite.de
+  affiliation: Charité – Universitätsmedizin Berlin
+version: 5.0.5
+license: MIT
+repository-code: https://github.com/berntpopp/litvar-link
+url: https://genefoundry.org
+keywords:
+- bioinformatics
+- claude
+- fastmcp
+- genefoundry
+- genomics
+- literature-mining
+- litvar
+- llm-tools
+- mcp
+- mcp-server
+- model-context-protocol
+- pubmed
+- variant-interpretation
+date-released: '2026-07-14'
