@@ -4,6 +4,76 @@ All notable changes to litvar-link are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0] - 2026-07-15
+
+Closes the 2026-07-14 live MCP audit ([#66](https://github.com/berntpopp/litvar-link/issues/66)).
+The behaviour gate now reports **CONFORMANT (42 pass, 0 fail, 0 UNGATED)**; it was
+12 fail / 5 UNGATED.
+
+### Fixed
+
+- **`get_variant_summary` was a dead tool.** It answered `error_code: internal`
+  for its own canonical id (the one `search_genetic_variants` hands back) and
+  `invalid_input` for a bare rsID — every input form it advertised. The response
+  model declared `VariantDetailsItem` while the service built a `VariantDetails`
+  and laundered it past mypy with `cast("Any", ...)`; pydantic rejected it at
+  runtime on every call. It now works for canonical ids, rsIDs and HGVS/protein
+  names, and echoes `resolved_variant_id` so the caller can see which record
+  answered.
+- **Fabricated `total`.** `total` was set to the page size, so `truncated` could
+  never be true: `search_genetic_variants {"query":"BRCA1"}` reported
+  `returned:25, total:25, truncated:false` — telling an agent it had seen every
+  BRCA1 variant when it had seen 0.2% of them.
+- **A confidently false clinical statement.** `search_gene_variants` reported
+  `pathogenic_count: 0, uncertain_count: 13264` for BRCA1. LitVar2's gene endpoint
+  carries no clinical significance at all, and the absent field was being recoded
+  as "uncertain" and counted. Absent is now UNKNOWN, and the counts are not
+  emitted when nothing is classified. (Second instance: the buckets matched
+  `"likely pathogenic"` with a space while LitVar2 emits `"likely-pathogenic"`.)
+- **`not_found` for every argument error, on all six tools.** A typo'd argument
+  name returned "The requested tool is not available", which makes a model strike
+  the tool from its list permanently. The fleet's not-found guard had lost its
+  registry-proven-unresolved gate, so it masked every known tool's real error.
+  Argument errors are now actionable `invalid_input` frames naming the offending
+  and the valid parameters; a genuinely unknown tool still gets the fixed,
+  name-free `not_found`.
+- **A typo'd gene symbol reported a false outage.** LitVar2 answers an unknown
+  gene with HTTP 200 and an empty body; that raised, was retried 3× (~8.7s) and
+  reported as a retryable `upstream_unavailable`. It is now an empty result.
+- `limit=0` / `limit=-5` silently returned one row; they are now rejected.
+
+### Added
+
+- `_meta.pagination.{total_count, has_more, next_cursor}` on every collection
+  tool, with the REAL upstream total where LitVar2 supplies one (13,264 variants
+  for BRCA1; 885 PMIDs for rs1061170) and `null` where it genuinely does not.
+- A working opaque `cursor` on `search_gene_variants` and `get_variant_literature`.
+  13,164 of BRCA1's variants and 785 of rs1061170's PMIDs were previously
+  unreachable through the MCP surface. An invalid cursor is an `invalid_input`
+  error, never a silent first page.
+- `examples`, bounds (`ge`/`le`), `maxLength` and a `pattern` on the input
+  schemas (Tool-Schema Documentation Standard v1). Without `examples` the
+  behaviour gate could not construct a valid call and reported all five data
+  tools as UNGATED.
+- The vendored Behaviour Conformance v1 gate (`tests/conformance/behaviour.py`),
+  run against the real container in CI.
+
+### Changed
+
+- **BREAKING:** the fabricated top-level `total` and `truncated` fields are gone.
+  Pagination lives in `_meta.pagination` (Response-Envelope Standard v1 §5).
+- **BREAKING:** `search_gene_variants` no longer emits `pathogenic_count` /
+  `benign_count` / `uncertain_count` when LitVar2 classifies nothing (it never
+  does on that endpoint). It emits `classifications_available: false`,
+  `unclassified_count`, and a note that this is not evidence of absent
+  pathogenicity.
+- **BREAKING:** `error_code: response_limit_exceeded` is retired — it was outside
+  the closed six-code enum, so a client branching on `error_code` could not handle
+  it. It maps to `invalid_input`.
+- **BREAKING:** `outputSchema` is no longer published (Tool-Surface Budget v1 B3).
+  It was 52% of the advertised surface, is optional in the MCP spec, and no model
+  reads it. `structuredContent` is unaffected. Surface: 2,170t → 1,631t.
+
 ## [5.0.5] - 2026-07-14
 
 ### Changed

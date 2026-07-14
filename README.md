@@ -74,9 +74,11 @@ the GeneFoundry Tool-Naming Standard v1; behind the
 mounts under the namespace token `litvar`, so tools surface as `litvar_<tool>` (e.g.
 `litvar_search_genetic_variants`). The gateway adds the namespace at mount time.
 
-Data tools take a `response_mode` (`compact` default, or `full`); list-returning tools take
-a `limit` and mark over-limit results `truncated: true` with a total count rather than
-silently dropping data.
+Data tools take a `response_mode` (`compact` default, or `full`). List-returning tools take a
+`limit` and report `_meta.pagination.{total_count, has_more, next_cursor}`: `total_count` is
+LitVar2's REAL total where it supplies one (BRCA1 has 13,264 variants), and `null` where it
+genuinely does not (the autocomplete endpoint publishes no count). `search_gene_variants` and
+`get_variant_literature` carry an opaque `cursor` that pages through the whole set.
 
 ## Data & provenance
 
