@@ -24,14 +24,43 @@ LITVAR_LINK_TRANSPORT_MODE=unified        # stdio | http | unified
 LITVAR_LINK_MCP_PATH=/mcp
 ```
 
+### Host and Origin guard
+
+```bash
+LITVAR_LINK_ALLOWED_HOSTS=["localhost","127.0.0.1","::1"]
+LITVAR_LINK_ALLOWED_ORIGINS=[]
+```
+
+These two are the request-admission gate on every HTTP route, and they are
+**not** the same thing as CORS (below).
+
+- `LITVAR_LINK_ALLOWED_HOSTS` is a JSON list of **exact** Host values and
+  defaults to `["localhost","127.0.0.1","::1"]`. Production must add the public
+  reverse-proxy hostname — for the hosted fleet instance,
+  `litvar-link.genefoundry.org`.
+- Write IPv6 entries **bare, without brackets** (`::1`, not `[::1]`).
+- **Wildcard patterns are rejected.** There is no `*.example.org` form.
+- `LITVAR_LINK_ALLOWED_ORIGINS` defaults to `[]` and is the browser-origin
+  admission gate: it must include every origin that `LITVAR_LINK_CORS_ORIGINS`
+  is intended to serve. Requests **without** an `Origin` header (i.e. non-browser
+  clients such as MCP hosts and `curl`) remain valid.
+
 ### CORS
+
+CORS controls the response headers a browser sees. Admission is still decided by
+the Host/Origin guard above; an origin listed here but absent from
+`LITVAR_LINK_ALLOWED_ORIGINS` will be rejected before CORS is ever applied.
 
 ```bash
 LITVAR_LINK_CORS_ORIGINS=["http://localhost:3000","http://127.0.0.1:3000"]
-LITVAR_LINK_CORS_ALLOW_CREDENTIALS=true
+LITVAR_LINK_CORS_ALLOW_CREDENTIALS=false
 LITVAR_LINK_CORS_ALLOW_METHODS=["GET","POST","PUT","DELETE","OPTIONS"]
 LITVAR_LINK_CORS_ALLOW_HEADERS=["*"]
 ```
+
+`LITVAR_LINK_CORS_ALLOW_CREDENTIALS` is **off by default**: this backend is
+unauthenticated (no cookies, no session), so credentials are meaningless here and
+unsafe when paired with a permissive origin.
 
 ### Logging
 
