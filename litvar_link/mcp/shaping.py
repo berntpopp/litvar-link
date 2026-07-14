@@ -93,9 +93,7 @@ def paginate(
     sliced = rows[offset : offset + capped]
     if has_more is None:
         has_more = (offset + len(sliced)) < len(rows)
-    next_cursor = (
-        encode_cursor(offset + len(sliced)) if (cursors and has_more and sliced) else None
-    )
+    next_cursor = encode_cursor(offset + len(sliced)) if (cursors and has_more and sliced) else None
     return {
         "results": sliced,
         "returned": len(sliced),

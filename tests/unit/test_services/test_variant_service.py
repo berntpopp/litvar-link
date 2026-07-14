@@ -823,24 +823,6 @@ class TestVariantService:
         assert len(errors) == 1
         assert "Network error" in str(errors[0])
 
-    def test_cache_key_generation(self, service: VariantService) -> None:
-        """Test cache key generation logic."""
-        # Test the private method directly
-        key1 = service._generate_cache_key("search", query="BRCA1", limit=10)
-        key2 = service._generate_cache_key("search", query="BRCA1", limit=10)
-        key3 = service._generate_cache_key("search", query="CFH", limit=10)
-
-        # Same parameters should generate same key
-        assert key1 == key2
-
-        # Different parameters should generate different keys
-        assert key1 != key3
-
-        # Keys should contain operation and parameters
-        assert "search" in key1
-        assert "query:BRCA1" in key1
-        assert "limit:10" in key1
-
     def test_cache_config_handling(
         self,
         mock_client: AsyncMock,

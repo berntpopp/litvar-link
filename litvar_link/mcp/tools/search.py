@@ -14,6 +14,7 @@ from litvar_link.mcp.errors import ToolValidationError, run_tool
 from litvar_link.mcp.shaping import (
     DEFAULT_LIMIT,
     MAX_LIMIT,
+    ResponseMode,
     collect_fenced_matches,
     paginate,
     shape_variant_row,
@@ -52,6 +53,48 @@ SEARCH_GENETIC_VARIANTS_OUTPUT_SCHEMA: dict[str, Any] = {
     "additionalProperties": True,
     "$defs": _MATCH_DEFS,
 }
+
+
+async def _search_body(
+    service: Any,
+    *,
+    query: str,
+    limit: int,
+    response_mode: ResponseMode,
+) -> dict[str, Any]:
+    """Run the search and shape it. Extracted to keep the tool inside the LOC budget."""
+    try:
+        clean_query = validate_query(query)
+        clean_limit = validate_limit(limit)
+    except ValidationError as exc:
+        raise ToolValidationError(str(exc)) from exc
+
+    response = await service.search_variants(query=clean_query, limit=clean_limit)
+    rows = [shape_variant_row(v.model_dump(), mode=response_mode) for v in response.variants]
+
+    # total_count=None: LitVar's autocomplete supplies NO count, and the honest
+    # answer to "how many are there?" is "upstream does not say". Inventing one
+    # (it used to emit len(page)) is what told an agent it had seen every BRCA1
+    # variant. `has_more` comes from an over-fetch, so it is a FACT. This endpoint
+    # is a ranked suggest with no cursor, so next_cursor stays null.
+    shaped = paginate(
+        rows,
+        limit=clean_limit,
+        total_count=None,
+        has_more=response.has_more,
+        cursors=False,
+    )
+    if response_mode == "full":
+        # Aggregate every fenced object across the WHOLE response (all rows, not
+        # per-record) into one enforce call. max_objects = MAX_LIMIT: the tool's
+        # own real result cap (not the generic 128 default), since this tool can
+        # never return more than MAX_LIMIT rows in one response.
+        enforce_untrusted_text_limits(
+            collect_fenced_matches(shaped["results"]), max_objects=MAX_LIMIT
+        )
+    shaped["query"] = clean_query
+    shaped["cached"] = response.cached
+    return shaped
 
 
 def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
@@ -101,42 +144,11 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
         """
 
         async def body() -> dict[str, Any]:
-            try:
-                clean_query = validate_query(query)
-                clean_limit = validate_limit(limit)
-            except ValidationError as exc:
-                raise ToolValidationError(str(exc)) from exc
-            response = await service_factory().search_variants(
-                query=clean_query,
-                limit=clean_limit,
+            return await _search_body(
+                service_factory(),
+                query=query,
+                limit=limit,
+                response_mode=response_mode,
             )
-            rows = [
-                shape_variant_row(v.model_dump(), mode=response_mode) for v in response.variants
-            ]
-            # total_count=None: LitVar's autocomplete supplies NO count, and the
-            # honest answer to "how many are there?" is "upstream does not say".
-            # Inventing one (it used to emit len(page)) is what told an agent it
-            # had seen every BRCA1 variant. `has_more` comes from an over-fetch,
-            # so it is a fact. This endpoint is a ranked suggest with no cursor,
-            # so next_cursor stays null -- see the docstring for the full list.
-            shaped = paginate(
-                rows,
-                limit=clean_limit,
-                total_count=None,
-                has_more=response.has_more,
-                cursors=False,
-            )
-            if response_mode == "full":
-                # Aggregate every fenced object across the WHOLE response (all
-                # rows, not per-record) into one enforce call. max_objects =
-                # MAX_LIMIT: the tool's own real result cap (not the generic
-                # 128 default), since this tool can never return more than
-                # MAX_LIMIT rows in one response.
-                enforce_untrusted_text_limits(
-                    collect_fenced_matches(shaped["results"]), max_objects=MAX_LIMIT
-                )
-            shaped["query"] = clean_query
-            shaped["cached"] = response.cached
-            return shaped
 
         return await run_tool("search_genetic_variants", body)

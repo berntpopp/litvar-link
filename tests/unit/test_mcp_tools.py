@@ -288,9 +288,7 @@ async def test_gene_tool_omits_counts_when_upstream_classifies_nothing() -> None
     svc = _service()
     svc.search_gene_variants = AsyncMock(
         return_value=SimpleNamespace(
-            variants=[
-                SimpleNamespace(model_dump=lambda: {"id": "litvar@rs1##", "pmids_count": 3})
-            ],
+            variants=[SimpleNamespace(model_dump=lambda: {"id": "litvar@rs1##", "pmids_count": 3})],
             pathogenic_count=0,
             benign_count=0,
             uncertain_count=0,

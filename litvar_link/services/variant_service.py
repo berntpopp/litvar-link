@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from litvar_link.exceptions import LitVarAPIError, ValidationError
 from litvar_link.logging_config import log_error_with_context
@@ -16,6 +16,8 @@ from litvar_link.models import (
 )
 from litvar_link.models.endpoint_specific import VariantDetailsItem
 from litvar_link.services.cache_hits import hits_before, was_cache_hit
+from litvar_link.services.identifiers import _is_canonical_variant_id, _is_variant_not_found
+from litvar_link.services.significance import _count_clinical_significance
 from litvar_link.utils.caching import create_service_cache_decorator
 from litvar_link.validation import (
     MAX_LIMIT,
@@ -33,92 +35,6 @@ if TYPE_CHECKING:
     from litvar_link.models.endpoint_specific import AutocompleteVariantItem
 
 _ModelT = TypeVar("_ModelT")
-
-_PATHOGENIC = frozenset({"pathogenic", "likely pathogenic"})
-_BENIGN = frozenset({"benign", "likely benign"})
-
-
-class SignificanceCounts(NamedTuple):
-    """Clinical-significance tally that keeps ABSENT distinct from UNCERTAIN.
-
-    ``unclassified`` (LitVar2 said nothing) is NOT ``uncertain`` (LitVar2 said
-    "uncertain"). Collapsing the two produces a confidently false clinical
-    statement -- see ``_count_clinical_significance``.
-    """
-
-    pathogenic: int
-    benign: int
-    uncertain: int
-    unclassified: int
-
-    @property
-    def classified(self) -> int:
-        """Variants for which LitVar2 supplied ANY clinical significance."""
-        return self.pathogenic + self.benign + self.uncertain
-
-
-def _normalize_significance(value: str) -> str:
-    """Fold LitVar2's significance tokens to a canonical form.
-
-    Upstream writes ``likely-pathogenic`` / ``risk-factor`` (HYPHENS); the buckets
-    were written with spaces (``"likely pathogenic"``), so a genuinely pathogenic
-    variant never matched and fell through to "uncertain". A second, quieter
-    instance of the same defect as the absent-field recoding below.
-    """
-    return value.strip().lower().replace("-", " ").replace("_", " ")
-
-# Canonical LitVar variant ids look like "litvar@rs113993960##". The publications
-# endpoint only accepts this form, so non-canonical input (rsID/HGVS/free text)
-# must be resolved via autocomplete first.
-_CANONICAL_ID_PREFIX = "litvar@"
-
-# Upstream returns 400 with body {"detail": "Variant not found: ..."} for an id
-# that does not exist. That is a user-recoverable "not found", not an outage.
-_NOT_FOUND_STATUS = (400, 404)
-
-
-def _is_canonical_variant_id(value: str) -> bool:
-    """True for an already-canonical LitVar id like ``litvar@rs113993960##``."""
-    return value.startswith(_CANONICAL_ID_PREFIX)
-
-
-def _is_variant_not_found(exc: LitVarAPIError) -> bool:
-    """True when an upstream 4xx clearly means 'this variant id does not exist'."""
-    return exc.status_code in _NOT_FOUND_STATUS and "not found" in str(exc).lower()
-
-
-def _count_clinical_significance(variants: list[Any]) -> SignificanceCounts:
-    """Tally clinical significance, keeping ABSENT strictly apart from UNCERTAIN.
-
-    The old version counted a variant with NO ``data_clinical_significance`` as
-    ``uncertain``. LitVar2's gene endpoint never carries that field at all, so
-    every variant in every gene was bucketed "uncertain" and then COUNTED,
-    yielding the confidently false:
-
-        13,264 BRCA1 variants -- 0 pathogenic, 0 benign, 13,264 uncertain
-
-    BRCA1 has thousands of established pathogenic variants. A curator would have
-    believed that. In clinical genetics "uncertain" means VUS -- a positive
-    assertion that the evidence was weighed and found inconclusive. It is NOT a
-    synonym for "nobody told us". A field that is absent upstream must be
-    reported as UNKNOWN, never counted as a negative finding.
-    """
-    pathogenic = benign = uncertain = unclassified = 0
-    for variant in variants:
-        sigs = getattr(variant, "data_clinical_significance", None)
-        if not sigs:
-            unclassified += 1
-            continue
-        normalized = {_normalize_significance(sig) for sig in sigs}
-        if normalized & _PATHOGENIC:
-            pathogenic += 1
-        elif normalized & _BENIGN:
-            benign += 1
-        else:
-            # Present, but neither a pathogenic nor a benign call (e.g. "risk
-            # factor", "association", "uncertain significance").
-            uncertain += 1
-    return SignificanceCounts(pathogenic, benign, uncertain, unclassified)
 
 
 class VariantService:
@@ -146,21 +62,6 @@ class VariantService:
 
         # Apply caching decorators to methods
         self._setup_cached_methods()
-
-    def _generate_cache_key(self, operation: str, **kwargs: Any) -> str:
-        """Generate cache key for operation.
-
-        Args:
-            operation: Operation name
-            **kwargs: Parameters for cache key
-
-        Returns:
-            Cache key string
-        """
-        parts = [operation]
-        for key, value in sorted(kwargs.items()):
-            parts.append(f"{key}:{value}")
-        return ":".join(parts)
 
     @property
     def cache_stats(self) -> dict[str, Any]:
@@ -255,6 +156,24 @@ class VariantService:
                     )
         return parsed
 
+    @staticmethod
+    def _page_has_more(fetched: int, limit: int) -> bool:
+        """Did the OVER-FETCH prove more rows exist beyond this page?
+
+        The old code inferred ``has_more = len(variants) == limit``, which is the
+        "total == page size" lie: it cannot tell "the page is full and that is all
+        there is" from "the page is full and thousands more exist" (issue #66 D2).
+        Fetching one row past the page turns that guess into a fact.
+
+        LitVar2 rejects ``limit > 100``, so at the ceiling we cannot over-fetch and
+        a full page is reported as "more may exist" -- conservative by design.
+        Over-claiming completeness is the harm; under-claiming it is merely a
+        wasted call.
+        """
+        if limit < MAX_LIMIT:
+            return fetched > limit
+        return fetched >= MAX_LIMIT
+
     async def search_variants(
         self,
         query: str,
@@ -279,24 +198,15 @@ class VariantService:
         try:
             start_time = time.time()
 
-            # OVER-FETCH one row past the page so `has_more` is a FACT, not a
-            # guess. The old code inferred `has_more = len(variants) == limit`,
-            # which is exactly the "total == page size" lie: it cannot tell "the
-            # page is full and that is all there is" from "the page is full and
-            # thousands more exist" (issue #66 D2). LitVar2 rejects limit > 100,
-            # so at the ceiling a full page is treated as "more may exist" --
-            # conservative by design: over-claiming completeness is the harm.
-            fetch_limit = min(limit + 1, MAX_LIMIT)
-
             initial_hits = hits_before(self._cached_search_variants)
-            variant_data = await self._cached_search_variants(query, fetch_limit)
+            variant_data = await self._cached_search_variants(query, min(limit + 1, MAX_LIMIT))
             cached = was_cache_hit(self._cached_search_variants, before=initial_hits)
 
             # Parse variants using the endpoint-specific model
             from litvar_link.models.endpoint_specific import AutocompleteVariantItem
 
             fetched = self._parse_items(variant_data, AutocompleteVariantItem)
-            has_more = len(fetched) > limit if limit < MAX_LIMIT else len(fetched) >= MAX_LIMIT
+            has_more = self._page_has_more(len(fetched), limit)
             variants = fetched[:limit]
 
             search_time = (time.time() - start_time) * 1000
@@ -339,23 +249,7 @@ class VariantService:
 
         variant_id = variant_id.strip()
         try:
-            resolved_id = await self._resolve_to_variant_id(variant_id)
-
-            initial_hits = hits_before(self._cached_get_variant_details)
-            variant_data = await self._cached_get_variant_details(resolved_id)
-            cached = was_cache_hit(self._cached_get_variant_details, before=initial_hits)
-
-            # Build the model the response actually DECLARES. This used to build a
-            # `VariantDetails` and launder it past mypy with `cast("Any", ...)`;
-            # pydantic rejected it at runtime on EVERY call, so the tool answered
-            # `internal` for its own canonical ids and was dead for ~every input.
-            # The cast is gone: mypy now proves the two types agree, forever.
-            return VariantDetailsResponse(
-                variant=VariantDetailsItem(**variant_data),
-                resolved_variant_id=resolved_id,
-                cached=cached,
-            )
-
+            return await self._fetch_variant_details(variant_id)
         except ValidationError:
             raise  # already a clean, user-recoverable message
         except LitVarAPIError as e:
@@ -365,23 +259,37 @@ class VariantService:
                     "Use search_genetic_variants to find a valid variant id."
                 )
                 raise ValidationError(msg, field="variant_id") from e
-            if self.logger:
-                log_error_with_context(
-                    self.logger,
-                    e,
-                    "get_variant_summary",
-                    {"variant_id": variant_id},
-                )
+            self._log_summary_error(e, variant_id)
             raise
         except Exception as e:
-            if self.logger:
-                log_error_with_context(
-                    self.logger,
-                    e,
-                    "get_variant_summary",
-                    {"variant_id": variant_id},
-                )
+            self._log_summary_error(e, variant_id)
             raise
+
+    def _log_summary_error(self, exc: Exception, variant_id: str) -> None:
+        """Log an unexpected variant-details error with context (no-op if no logger)."""
+        if self.logger:
+            log_error_with_context(
+                self.logger, exc, "get_variant_summary", {"variant_id": variant_id}
+            )
+
+    async def _fetch_variant_details(self, variant_id: str) -> VariantDetailsResponse:
+        """Resolve the id, fetch the record, and build the DECLARED response model."""
+        resolved_id = await self._resolve_to_variant_id(variant_id)
+
+        initial_hits = hits_before(self._cached_get_variant_details)
+        variant_data = await self._cached_get_variant_details(resolved_id)
+        cached = was_cache_hit(self._cached_get_variant_details, before=initial_hits)
+
+        # Build the model the response actually DECLARES. This used to build a
+        # `VariantDetails` and launder it past mypy with `cast("Any", ...)`;
+        # pydantic rejected it at runtime on EVERY call, so the tool answered
+        # `internal` for its own canonical ids and was dead for ~every input.
+        # The cast is gone: mypy now proves the two types agree, forever.
+        return VariantDetailsResponse(
+            variant=VariantDetailsItem(**variant_data),
+            resolved_variant_id=resolved_id,
+            cached=cached,
+        )
 
     async def _resolve_to_variant_id(self, raw: str) -> str:
         """Resolve free-text / rsID / HGVS to a canonical LitVar id.

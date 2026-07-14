@@ -58,9 +58,11 @@ import mcp.types
 from fastmcp import FastMCP
 from fastmcp.exceptions import NotFoundError as FastMCPNotFoundError
 from fastmcp.exceptions import ResourceError
+from fastmcp.exceptions import ValidationError as FastMCPValidationError
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 from fastmcp.tools.tool import ToolResult
 
+from litvar_link.mcp.argument_errors import argument_error_result
 from litvar_link.mcp.envelope import error_envelope
 
 logger = logging.getLogger(__name__)
@@ -113,14 +115,22 @@ class NotFoundGuard(Middleware):
         context: MiddlewareContext[Any],
         call_next: CallNext[Any, ToolResult],
     ) -> ToolResult:
-        """Preflight the tool NAME; an unknown name never reaches core dispatch.
+        """Preflight the tool NAME, then classify a KNOWN tool's argument errors.
 
         ``get_tool`` returns ``None`` (it does not raise) for an unknown or
         disabled tool, so an unknown name is caught here and answered with a
-        fixed, name-free envelope. Otherwise defer to the tool body.
+        fixed, name-free envelope.
+
+        A tool that DOES resolve is a different story: FastMCP raises
+        ``fastmcp.exceptions.ValidationError`` when its arguments fail to
+        validate, and that exception must become an actionable ``invalid_input``
+        -- NEVER a ``not_found``. Masking a known tool's argument error as
+        "the tool is not available" is what made an agent strike all six tools
+        off its list over a typo (issue #66 D4).
         """
         fctx = getattr(context, "fastmcp_context", None)
         name = getattr(getattr(context, "message", None), "name", None)
+        tool: Any = object()
         if fctx is not None and isinstance(name, str):
             try:
                 tool = await fctx.fastmcp.get_tool(name)
@@ -129,7 +139,21 @@ class NotFoundGuard(Middleware):
             if tool is None:
                 logger.warning("mcp_unknown_tool")
                 return unknown_tool_result()
-        return await call_next(context)
+
+        try:
+            return await call_next(context)
+        except FastMCPValidationError as exc:
+            # The tool RESOLVED (we just proved it above), so this is a real
+            # argument error on a real tool. Answer with a message the model can
+            # act on, built only from our own schema (never from caller values).
+            schema = getattr(tool, "parameters", None)
+            logger.warning("mcp_argument_error tool=%s", name if isinstance(name, str) else "?")
+            return argument_error_result(
+                str(name),
+                schema if isinstance(schema, dict) else {},
+                exc,
+                request_id=uuid.uuid4().hex[:12],
+            )
 
     async def on_read_resource(
         self,
@@ -181,9 +205,8 @@ def _is_structured_envelope(call_result: mcp.types.CallToolResult) -> bool:
     return isinstance(obj, dict) and "error_code" in obj
 
 
-def _fixed_tool_not_found_result() -> mcp.types.ServerResult:
-    """A fixed, input-free ServerResult for an unknown/failed tool dispatch."""
-    envelope = unknown_tool_envelope()
+def _server_result(envelope: dict[str, Any]) -> mcp.types.ServerResult:
+    """Wrap a fixed envelope as an isError CallToolResult on the wire."""
     return mcp.types.ServerResult(
         mcp.types.CallToolResult(
             content=[mcp.types.TextContent(type="text", text=json.dumps(envelope))],
@@ -193,7 +216,57 @@ def _fixed_tool_not_found_result() -> mcp.types.ServerResult:
     )
 
 
-def _wrap_call_tool_handler(handlers: dict[Any, Any]) -> None:
+def _fixed_tool_not_found_result() -> mcp.types.ServerResult:
+    """A fixed, input-free ServerResult for an UNRESOLVED tool dispatch."""
+    return _server_result(unknown_tool_envelope())
+
+
+def _fixed_internal_result() -> mcp.types.ServerResult:
+    """A fixed, input-free ServerResult for a KNOWN tool's raw dispatch failure.
+
+    Deliberately NOT ``not_found``: the tool demonstrably exists (the registry
+    just resolved it), and telling the model otherwise is the defect this guard
+    exists to prevent, not to cause.
+    """
+    return _server_result(
+        error_envelope(
+            tool_name=None,
+            request_id=uuid.uuid4().hex[:12],
+            elapsed_ms=0,
+            error_code="internal",
+            message="The tool failed to produce a valid result.",
+            retryable=False,
+            recovery_action=(
+                "This is a server-side fault, not an argument error. Retry later; "
+                "call get_server_capabilities if it persists."
+            ),
+        )
+    )
+
+
+async def _is_unresolved(mcp_server: FastMCP, name: Any) -> bool:
+    """Is this tool name REGISTRY-PROVEN-UNRESOLVED?
+
+    This is the gate the spec requires -- "gated on a registry-proven-unresolved
+    check **so a known tool's real error is never masked as not_found**"
+    (RESPONSE-ENVELOPE-STANDARD-v1.1) -- and it is exactly what litvar-link's
+    implementation had lost. Without it the backstop below rewrote EVERY
+    non-envelope error of a KNOWN tool into "the requested tool is not
+    available", including every argument-validation failure on all six tools.
+
+    Fail CLOSED for masking: if the registry cannot answer, treat the tool as
+    RESOLVED (return False) so a real error is passed through rather than
+    replaced with a lie about the tool's existence.
+    """
+    if not isinstance(name, str):
+        return False
+    try:
+        return await mcp_server.get_tool(name) is None
+    except Exception:
+        return False
+
+
+def _wrap_call_tool_handler(handlers: dict[Any, Any], mcp_server: FastMCP) -> None:
     """Replace the raw CallTool handler's name-echoing ``isError`` return path."""
     call_tool = handlers.get(mcp.types.CallToolRequest)
     if call_tool is None:
@@ -204,6 +277,7 @@ def _wrap_call_tool_handler(handlers: dict[Any, Any]) -> None:
         *,
         _orig: Any = call_tool,
     ) -> mcp.types.ServerResult:
+        name = getattr(getattr(request, "params", None), "name", None)
         try:
             result = cast(mcp.types.ServerResult, await _orig(request))
         except FastMCPNotFoundError:
@@ -212,18 +286,23 @@ def _wrap_call_tool_handler(handlers: dict[Any, Any]) -> None:
             logger.warning("mcp_protocol_error kind=tool")
             return _fixed_tool_not_found_result()
         # FastMCP *returns* an isError CallToolResult with a raw plain-text
-        # message ("Unknown tool: '<name>'") for an unknown tool; replace any
-        # isError result that is NOT one of our structured envelopes. A masked
-        # runtime ToolError is a FastMCPError (raised, not returned) and does
-        # not pass through here, so this only catches the name-echoing return.
+        # message ("Unknown tool: '<name>'") for an unknown tool. Replace such a
+        # result ONLY when the name is registry-proven-unresolved; a KNOWN tool's
+        # raw error is a real failure and must never be dressed up as not_found.
         root = getattr(result, "root", None)
         if (
             isinstance(root, mcp.types.CallToolResult)
             and root.isError
             and not _is_structured_envelope(root)
         ):
-            logger.warning("mcp_protocol_error kind=tool")
-            return _fixed_tool_not_found_result()
+            if await _is_unresolved(mcp_server, name):
+                logger.warning("mcp_protocol_error kind=tool")
+                return _fixed_tool_not_found_result()
+            # A known tool failed below the envelope boundary (e.g. output-schema
+            # validation -- a bug in OUR schema, not in the caller's arguments).
+            # Report it honestly and opaquely: `internal`, with no reflected name.
+            logger.warning("mcp_protocol_error kind=known_tool_raw_error")
+            return _fixed_internal_result()
         return result
 
     handlers[mcp.types.CallToolRequest] = wrapped_call_tool
@@ -265,7 +344,7 @@ def install_protocol_error_handler(mcp_server: FastMCP) -> None:
     -- so it never shadows the ``import mcp.types`` module used below.)
     """
     handlers = mcp_server._mcp_server.request_handlers
-    _wrap_call_tool_handler(handlers)
+    _wrap_call_tool_handler(handlers, mcp_server)
     _wrap_component_handler(
         handlers, mcp.types.ReadResourceRequest, _UNKNOWN_RESOURCE_MESSAGE, "resource"
     )

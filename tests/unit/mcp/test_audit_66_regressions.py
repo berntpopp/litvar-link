@@ -254,7 +254,9 @@ async def test_d2_gene_search_reports_the_real_total_and_has_more() -> None:
 async def test_d2_literature_reports_the_real_total() -> None:
     """D2: get_variant_literature knows the true PMID count -- it must publish it."""
     async with build_client() as client:
-        _, env = await call(client, "get_variant_literature", {"variant_id": "rs1061170", "limit": 25})
+        _, env = await call(
+            client, "get_variant_literature", {"variant_id": "rs1061170", "limit": 25}
+        )
 
     pagination = env["_meta"]["pagination"]
     assert pagination["total_count"] == 120
@@ -292,7 +294,7 @@ def test_d3_significance_tokens_are_normalized() -> None:
     "likely pathogenic" (a SPACE), so a real pathogenic variant was silently
     bucketed "uncertain" even where the field WAS present.
     """
-    from litvar_link.services.variant_service import _count_clinical_significance
+    from litvar_link.services.significance import _count_clinical_significance
 
     rows = [
         GeneVariantItem(
@@ -374,7 +376,7 @@ async def test_d4_a_genuinely_unknown_tool_still_returns_a_name_free_not_found()
 
 
 @pytest.mark.asyncio
-async def test_d4_error_messages_never_echo_a_caller_supplied_VALUE() -> None:
+async def test_d4_error_messages_never_echo_a_caller_supplied_value() -> None:
     """Actionable must not mean "reflect the caller's payload back at them".
 
     Sanitation strips code points, not prose, so a caller-supplied VALUE must

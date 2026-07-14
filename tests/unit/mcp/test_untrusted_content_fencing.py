@@ -154,7 +154,9 @@ async def test_full_mode_at_the_tool_real_cap_does_not_raise() -> None:
     ]
     svc = AsyncMock()
     svc.search_variants = AsyncMock(
-        return_value=SimpleNamespace(variants=variants, total_count=100, has_more=False, cached=False)
+        return_value=SimpleNamespace(
+            variants=variants, total_count=100, has_more=False, cached=False
+        )
     )
     mcp = create_litvar_mcp(service_factory=lambda: svc)
     result = await mcp.call_tool(
