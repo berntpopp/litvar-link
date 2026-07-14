@@ -11,7 +11,13 @@ from pydantic import Field
 from litvar_link.exceptions import ValidationError
 from litvar_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from litvar_link.mcp.errors import ToolValidationError, run_tool
-from litvar_link.mcp.shaping import DEFAULT_LIMIT, apply_limit, recommended_citation
+from litvar_link.mcp.shaping import (
+    DEFAULT_LIMIT,
+    MAX_LIMIT,
+    decode_cursor,
+    paginate,
+    recommended_citation,
+)
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -33,12 +39,10 @@ GET_VARIANT_LITERATURE_OUTPUT_SCHEMA: dict[str, Any] = {
             },
         },
         "returned": {"type": "integer"},
-        "total": {"type": "integer"},
-        "truncated": {"type": "boolean"},
         "variant_id": {"type": "string"},
         "cached": {"type": "boolean"},
     },
-    "required": ["results", "returned", "total", "truncated"],
+    "required": ["results", "returned"],
     "additionalProperties": True,
 }
 
@@ -56,12 +60,33 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
     async def get_variant_literature(
         variant_id: Annotated[
             str,
-            Field(description="LitVar id (litvar@rs...##), rsID, or HGVS/free text."),
+            Field(
+                description=(
+                    "LitVar id (litvar@rs...##), rsID, or HGVS/free text. "
+                    "Non-canonical input is resolved via autocomplete."
+                ),
+                examples=["rs1061170", "litvar@rs1061170##"],
+            ),
         ],
         limit: Annotated[
             int,
-            Field(description=f"Max publications (default {DEFAULT_LIMIT}, max 100)."),
+            Field(
+                description=f"Max publications per page (default {DEFAULT_LIMIT}, max {MAX_LIMIT}).",
+                ge=1,
+                le=MAX_LIMIT,
+                examples=[25],
+            ),
         ] = DEFAULT_LIMIT,
+        cursor: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Opaque pagination cursor from a previous call's "
+                    "`_meta.pagination.next_cursor`. Omit for the first page."
+                ),
+                examples=["bzoyNQ"],
+            ),
+        ] = None,
     ) -> dict[str, Any] | ToolResult:
         """Return PMIDs for a variant; each row carries a recommended_citation.
 
@@ -69,6 +94,9 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
         input is auto-resolved to the LitVar id via autocomplete. An unresolvable
         variant returns a recoverable "not found" message (use
         search_genetic_variants), not an internal error.
+
+        `_meta.pagination.total_count` is the variant's TRUE publication count;
+        page through it with `_meta.pagination.next_cursor`.
 
         Research use only; not clinical decision support.
         """
@@ -78,6 +106,7 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
                 msg = "variant_id cannot be empty"
                 raise ToolValidationError(msg)
             try:
+                offset = decode_cursor(cursor)
                 resp = await service_factory().get_variant_literature(variant_id.strip())
             except ValidationError as exc:
                 raise ToolValidationError(str(exc)) from exc
@@ -89,7 +118,10 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
                 for pub in resp.publications
                 if pub.pmid
             ]
-            shaped = apply_limit(rows, limit=limit)
+            # The upstream call returns EVERY pmid, so total_count is the real
+            # figure and the cursor can reach all of them (885 for rs1061170;
+            # 785 of them used to be permanently unreachable).
+            shaped = paginate(rows, limit=limit, offset=offset, total_count=len(rows))
             shaped["variant_id"] = variant_id.strip()
             shaped["cached"] = resp.cached
             return shaped

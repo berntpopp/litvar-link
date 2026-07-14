@@ -7,13 +7,20 @@ from typing import Any
 import pytest
 from fastmcp.tools.tool import ToolResult
 
-from litvar_link.exceptions import LitVarAPIError, RateLimitError, ServiceUnavailableError
+from litvar_link.exceptions import (
+    LitVarAPIError,
+    RateLimitError,
+    ServiceUnavailableError,
+    ValidationError,
+)
 from litvar_link.mcp.capabilities import INSTRUCTIONS, server_capabilities
 from litvar_link.mcp.errors import ToolValidationError, run_tool
 from litvar_link.mcp.shaping import (
     DEFAULT_LIMIT,
     MAX_LIMIT,
-    apply_limit,
+    decode_cursor,
+    encode_cursor,
+    paginate,
     recommended_citation,
     shape_variant_row,
 )
@@ -129,18 +136,63 @@ class TestErrors:
 
 
 class TestShaping:
-    def test_apply_limit_truncates_with_markers(self) -> None:
+    def test_paginate_reports_the_real_total_not_the_page_size(self) -> None:
         rows = list(range(10))
-        out = apply_limit(rows, limit=3)
+        out = paginate(rows, limit=3, total_count=len(rows))
         assert out["results"] == [0, 1, 2]
-        assert out["truncated"] is True
-        assert out["total"] == 10
         assert out["returned"] == 3
+        pagination = out["_meta"]["pagination"]
+        assert pagination["total_count"] == 10, "the REAL total, never the page size"
+        assert pagination["has_more"] is True
+        assert pagination["next_cursor"] is not None
+        # The fabricated fields are gone entirely, not merely corrected.
+        assert "total" not in out
+        assert "truncated" not in out
 
-    def test_apply_limit_no_truncation(self) -> None:
-        out = apply_limit([1, 2], limit=5)
-        assert out["truncated"] is False
-        assert out["total"] == 2
+    def test_paginate_last_page_has_no_cursor(self) -> None:
+        out = paginate([1, 2], limit=5, total_count=2)
+        pagination = out["_meta"]["pagination"]
+        assert pagination["has_more"] is False
+        assert pagination["next_cursor"] is None
+        assert pagination["total_count"] == 2
+
+    def test_paginate_cursor_round_trips_to_the_next_page(self) -> None:
+        rows = list(range(10))
+        page1 = paginate(rows, limit=4, total_count=len(rows))
+        cursor = page1["_meta"]["pagination"]["next_cursor"]
+
+        page2 = paginate(rows, limit=4, offset=decode_cursor(cursor), total_count=len(rows))
+        assert page2["results"] == [4, 5, 6, 7]
+        assert page2["_meta"]["pagination"]["has_more"] is True
+
+        page3 = paginate(
+            rows,
+            limit=4,
+            offset=decode_cursor(page2["_meta"]["pagination"]["next_cursor"]),
+            total_count=len(rows),
+        )
+        assert page3["results"] == [8, 9]
+        assert page3["_meta"]["pagination"]["has_more"] is False
+        assert page3["_meta"]["pagination"]["next_cursor"] is None
+
+    def test_paginate_total_count_may_be_unknown(self) -> None:
+        """LitVar's autocomplete supplies no count. `None` is the honest answer."""
+        out = paginate([1, 2], limit=2, total_count=None, has_more=True, cursors=False)
+        pagination = out["_meta"]["pagination"]
+        assert pagination["total_count"] is None
+        assert pagination["has_more"] is True
+
+    def test_cursor_round_trip(self) -> None:
+        assert decode_cursor(encode_cursor(0)) == 0
+        assert decode_cursor(encode_cursor(4242)) == 4242
+        assert decode_cursor(None) == 0
+        assert decode_cursor("") == 0
+
+    @pytest.mark.parametrize("bad", ["!!!", "not-a-cursor", "eyJhIjoxfQ", "bzot", "bzotNQ"])
+    def test_an_invalid_cursor_is_an_error_not_a_silent_first_page(self, bad: str) -> None:
+        """Silently restarting at row 0 would make a paging agent loop forever."""
+        with pytest.raises(ValidationError):
+            decode_cursor(bad)
 
     def test_compact_row_drops_heavy_fields(self) -> None:
         full = {

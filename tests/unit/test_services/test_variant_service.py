@@ -85,7 +85,9 @@ class TestVariantService:
         assert result.search_time_ms > 0
 
         # Verify client was called correctly
-        mock_client.search_variants.assert_called_once_with("CFH", limit=10)
+        # limit+1: the service OVER-FETCHES one row past the page so `has_more`
+        # is a fact rather than the old `len(rows) == limit` guess (issue #66 D2).
+        mock_client.search_variants.assert_called_once_with("CFH", limit=11)
 
     @pytest.mark.asyncio
     async def test_search_variants_caching(
@@ -878,7 +880,9 @@ class TestVariantService:
         assert result.query == "CFH"
 
         # Verify client was called with trimmed query
-        mock_client.search_variants.assert_called_with("CFH", limit=10)
+        # limit+1: the service OVER-FETCHES one row past the page so `has_more`
+        # is a fact rather than the old `len(rows) == limit` guess (issue #66 D2).
+        mock_client.search_variants.assert_called_with("CFH", limit=11)
 
     @pytest.mark.asyncio
     async def test_service_without_logger(

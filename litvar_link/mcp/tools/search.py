@@ -14,13 +14,13 @@ from litvar_link.mcp.errors import ToolValidationError, run_tool
 from litvar_link.mcp.shaping import (
     DEFAULT_LIMIT,
     MAX_LIMIT,
-    apply_limit,
     collect_fenced_matches,
+    paginate,
     shape_variant_row,
     untrusted_text_field_schema,
 )
 from litvar_link.mcp.untrusted_content import enforce_untrusted_text_limits
-from litvar_link.validation import validate_limit, validate_query
+from litvar_link.validation import MAX_QUERY_LENGTH, validate_limit, validate_query
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -45,12 +45,10 @@ SEARCH_GENETIC_VARIANTS_OUTPUT_SCHEMA: dict[str, Any] = {
             },
         },
         "returned": {"type": "integer"},
-        "total": {"type": "integer"},
-        "truncated": {"type": "boolean"},
         "query": {"type": "string"},
         "cached": {"type": "boolean"},
     },
-    "required": ["results", "returned", "total", "truncated"],
+    "required": ["results", "returned"],
     "additionalProperties": True,
     "$defs": _MATCH_DEFS,
 }
@@ -69,18 +67,35 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
     async def search_genetic_variants(
         query: Annotated[
             str,
-            Field(description="Gene symbol, variant name, RSID, or HGVS text."),
+            Field(
+                description="Gene symbol, variant name, RSID, or HGVS text.",
+                max_length=MAX_QUERY_LENGTH,
+                examples=["BRCA1"],
+            ),
         ],
         limit: Annotated[
             int,
-            Field(description=f"Max results (default {DEFAULT_LIMIT}, max 100)."),
+            Field(
+                description=f"Max results (default {DEFAULT_LIMIT}, max {MAX_LIMIT}).",
+                ge=1,
+                le=MAX_LIMIT,
+                examples=[25],
+            ),
         ] = DEFAULT_LIMIT,
         response_mode: Annotated[
             Literal["compact", "full"],
             Field(description="compact (high-signal fields) or full (raw payload)."),
         ] = "compact",
     ) -> dict[str, Any] | ToolResult:
-        """Resolve free-text/gene/RSID/HGVS into LitVar2 variant rows.
+        """Resolve free-text/gene/RSID/HGVS into LitVar2 variant rows, ranked by
+        publication count.
+
+        This is a RANKED SUGGEST over LitVar2's autocomplete, not a complete
+        listing: it returns at most 100 rows and LitVar2 supplies no total, so
+        `_meta.pagination.total_count` is null and there is no cursor. When
+        `has_more` is true, more matches exist than are shown. For the COMPLETE
+        set of variants in a gene (BRCA1 has 13,264), use `search_gene_variants`,
+        which paginates through all of them.
 
         Research use only; not clinical decision support.
         """
@@ -98,7 +113,19 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
             rows = [
                 shape_variant_row(v.model_dump(), mode=response_mode) for v in response.variants
             ]
-            shaped = apply_limit(rows, limit=clean_limit)
+            # total_count=None: LitVar's autocomplete supplies NO count, and the
+            # honest answer to "how many are there?" is "upstream does not say".
+            # Inventing one (it used to emit len(page)) is what told an agent it
+            # had seen every BRCA1 variant. `has_more` comes from an over-fetch,
+            # so it is a fact. This endpoint is a ranked suggest with no cursor,
+            # so next_cursor stays null -- see the docstring for the full list.
+            shaped = paginate(
+                rows,
+                limit=clean_limit,
+                total_count=None,
+                has_more=response.has_more,
+                cursors=False,
+            )
             if response_mode == "full":
                 # Aggregate every fenced object across the WHOLE response (all
                 # rows, not per-record) into one enforce call. max_objects =

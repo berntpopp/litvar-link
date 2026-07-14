@@ -18,6 +18,7 @@ from litvar_link.models.endpoint_specific import VariantDetailsItem
 from litvar_link.services.cache_hits import hits_before, was_cache_hit
 from litvar_link.utils.caching import create_service_cache_decorator
 from litvar_link.validation import (
+    MAX_LIMIT,
     validate_gene_name,
     validate_limit,
     validate_query,
@@ -235,14 +236,25 @@ class VariantService:
         try:
             start_time = time.time()
 
+            # OVER-FETCH one row past the page so `has_more` is a FACT, not a
+            # guess. The old code inferred `has_more = len(variants) == limit`,
+            # which is exactly the "total == page size" lie: it cannot tell "the
+            # page is full and that is all there is" from "the page is full and
+            # thousands more exist" (issue #66 D2). LitVar2 rejects limit > 100,
+            # so at the ceiling a full page is treated as "more may exist" --
+            # conservative by design: over-claiming completeness is the harm.
+            fetch_limit = min(limit + 1, MAX_LIMIT)
+
             initial_hits = hits_before(self._cached_search_variants)
-            variant_data = await self._cached_search_variants(query, limit)
+            variant_data = await self._cached_search_variants(query, fetch_limit)
             cached = was_cache_hit(self._cached_search_variants, before=initial_hits)
 
             # Parse variants using the endpoint-specific model
             from litvar_link.models.endpoint_specific import AutocompleteVariantItem
 
-            variants = self._parse_items(variant_data, AutocompleteVariantItem)
+            fetched = self._parse_items(variant_data, AutocompleteVariantItem)
+            has_more = len(fetched) > limit if limit < MAX_LIMIT else len(fetched) >= MAX_LIMIT
+            variants = fetched[:limit]
 
             search_time = (time.time() - start_time) * 1000
 
@@ -251,7 +263,7 @@ class VariantService:
                 total_count=len(variants),
                 query=query,
                 limit=limit,
-                has_more=len(variants) == limit,
+                has_more=has_more,
                 search_time_ms=search_time,
                 cached=cached,
             )

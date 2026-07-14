@@ -71,6 +71,7 @@ def _search_service_with_hostile_match() -> AsyncMock:
                 )
             ],
             total_count=1,
+            has_more=False,
             cached=False,
         )
     )
@@ -153,7 +154,7 @@ async def test_full_mode_at_the_tool_real_cap_does_not_raise() -> None:
     ]
     svc = AsyncMock()
     svc.search_variants = AsyncMock(
-        return_value=SimpleNamespace(variants=variants, total_count=100, cached=False)
+        return_value=SimpleNamespace(variants=variants, total_count=100, has_more=False, cached=False)
     )
     mcp = create_litvar_mcp(service_factory=lambda: svc)
     result = await mcp.call_tool(
@@ -363,6 +364,7 @@ async def test_full_mode_empty_match_is_the_typed_object_not_a_bare_string() -> 
                 )
             ],
             total_count=1,
+            has_more=False,
             cached=False,
         )
     )

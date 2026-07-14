@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import base64
 from typing import Any, Literal
 
+from litvar_link.exceptions import ValidationError
 from litvar_link.mcp.untrusted_content import UntrustedText, fence_untrusted_text
 
 ResponseMode = Literal["compact", "full"]
 
 DEFAULT_LIMIT = 25
 MAX_LIMIT = 100
+
+# Opaque, stateless cursor: base64url("o:<offset>"). Opaque so the wire format
+# stays ours to change; stateless so no server-side page state can expire.
+_CURSOR_PREFIX = "o:"
 
 # Fields kept in compact variant rows (high-signal only).
 _COMPACT_VARIANT_FIELDS = ("_id", "id", "rsid", "gene", "name", "pmids_count")
@@ -26,19 +32,80 @@ _COMPACT_VARIANT_FIELDS = ("_id", "id", "rsid", "gene", "name", "pmids_count")
 _UNTRUSTED_TEXT_SOURCE = "litvar"
 
 
-def apply_limit(rows: list[Any], *, limit: int) -> dict[str, Any]:
-    """Truncate ``rows`` to ``limit`` with explicit truncation markers.
+def encode_cursor(offset: int) -> str:
+    """Encode a row offset as an opaque, stateless pagination cursor."""
+    raw = f"{_CURSOR_PREFIX}{offset}".encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
-    Returns ``{results, returned, total, truncated}`` rather than silently
-    dropping rows (per Anthropic tool-design guidance).
+
+def decode_cursor(cursor: str | None) -> int:
+    """Decode an opaque cursor to a row offset. ``None``/empty means "first page".
+
+    An invalid or corrupt cursor is an EXECUTION ERROR, never a silent first page
+    (Response-Envelope Standard v1 §5): silently restarting at row 0 would make a
+    paging agent loop forever over the same page and believe it was advancing.
+    """
+    if not cursor:
+        return 0
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        raw = base64.urlsafe_b64decode(padded.encode()).decode()
+    except (ValueError, UnicodeDecodeError) as exc:
+        msg = "Invalid cursor. Omit `cursor` to start from the first page."
+        raise ValidationError(msg, field="cursor") from exc
+    if not raw.startswith(_CURSOR_PREFIX):
+        msg = "Invalid cursor. Omit `cursor` to start from the first page."
+        raise ValidationError(msg, field="cursor")
+    try:
+        offset = int(raw[len(_CURSOR_PREFIX) :])
+    except ValueError as exc:
+        msg = "Invalid cursor. Omit `cursor` to start from the first page."
+        raise ValidationError(msg, field="cursor") from exc
+    if offset < 0:
+        msg = "Invalid cursor. Omit `cursor` to start from the first page."
+        raise ValidationError(msg, field="cursor")
+    return offset
+
+
+def paginate(
+    rows: list[Any],
+    *,
+    limit: int,
+    offset: int = 0,
+    total_count: int | None,
+    has_more: bool | None = None,
+    cursors: bool = True,
+) -> dict[str, Any]:
+    """Slice ``rows`` into a page and emit an HONEST `_meta.pagination` block.
+
+    Replaces the old ``apply_limit``, which set ``total = len(rows)`` -- i.e. the
+    PAGE SIZE -- so ``truncated`` could never be true. An agent read
+    ``returned:25, total:25, truncated:false`` and concluded it had seen every
+    BRCA1 variant LitVar knows; it had seen 0.2% of them (issue #66 D2).
+
+    ``total_count`` is the REAL upstream total, or ``None`` where the upstream
+    genuinely supplies no count (LitVar's autocomplete). ``None`` is the honest
+    answer -- inventing a number is what caused the defect. ``has_more`` may be
+    passed explicitly where the caller knows it better than this slice does
+    (e.g. an over-fetched suggest page).
     """
     capped = max(1, min(limit, MAX_LIMIT))
-    sliced = rows[:capped]
+    sliced = rows[offset : offset + capped]
+    if has_more is None:
+        has_more = (offset + len(sliced)) < len(rows)
+    next_cursor = (
+        encode_cursor(offset + len(sliced)) if (cursors and has_more and sliced) else None
+    )
     return {
         "results": sliced,
         "returned": len(sliced),
-        "total": len(rows),
-        "truncated": len(rows) > len(sliced),
+        "_meta": {
+            "pagination": {
+                "total_count": total_count,
+                "has_more": has_more,
+                "next_cursor": next_cursor,
+            }
+        },
     }
 
 

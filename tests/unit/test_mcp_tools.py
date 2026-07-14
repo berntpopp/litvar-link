@@ -67,6 +67,7 @@ async def test_search_tool_invokes_service_and_shapes() -> None:
                 )
             ],
             total_count=1,
+            has_more=False,
             cached=False,
         )
     )
@@ -82,6 +83,12 @@ async def test_search_tool_invokes_service_and_shapes() -> None:
     assert payload["_meta"]["tool"] == "search_genetic_variants"
     assert payload["_meta"]["unsafe_for_clinical_use"] is True
     assert payload["_meta"]["request_id"]
+    # Autocomplete supplies no count: null is honest, a fabricated total is not.
+    assert payload["_meta"]["pagination"] == {
+        "total_count": None,
+        "has_more": False,
+        "next_cursor": None,
+    }
 
 
 @pytest.mark.asyncio
