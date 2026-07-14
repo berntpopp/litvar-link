@@ -14,14 +14,6 @@ from litvar_link.mcp.errors import run_tool
 if TYPE_CHECKING:
     from fastmcp import FastMCP
 
-# Static discovery payload wrapped under ``result``.
-GET_SERVER_CAPABILITIES_OUTPUT_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {"result": {"type": "object", "additionalProperties": True}},
-    "required": ["result"],
-    "additionalProperties": True,
-}
-
 
 def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
     """Register the get_server_capabilities discovery tool.
@@ -33,7 +25,7 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
     @mcp.tool(
         name="get_server_capabilities",
         title="Get LitVar-Link Capabilities",
-        output_schema=GET_SERVER_CAPABILITIES_OUTPUT_SCHEMA,
+        output_schema=None,  # Tool-Surface Budget v1 B3: structuredContent is unaffected.
         annotations=READ_ONLY_CLOSED_WORLD,
     )
     async def get_server_capabilities() -> dict[str, Any] | ToolResult:

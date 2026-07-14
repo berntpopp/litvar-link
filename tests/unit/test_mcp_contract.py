@@ -44,12 +44,37 @@ async def test_every_tool_has_complete_readonly_annotations() -> None:
 
 
 @pytest.mark.asyncio
-async def test_every_tool_exposes_output_schema() -> None:
+async def test_no_tool_publishes_an_output_schema() -> None:
+    """Tool-Surface Budget v1 B3: `outputSchema` is the first thing to cut.
+
+    It was 52% of this server's advertised surface, it is OPTIONAL in the MCP
+    spec, and no model reads it. Suppressing it does NOT cost us
+    `structuredContent` -- every tool returns a dict envelope, and FastMCP still
+    emits structuredContent for those (asserted directly in
+    test_structured_content_survives_output_schema_none below).
+    """
     tools = await _tools()
     for name in _ALL_TOOLS:
-        schema = tools[name].output_schema
-        assert schema, f"{name} missing output_schema"
-        assert schema.get("type") == "object", f"{name} output_schema must be an object"
+        assert tools[name].output_schema is None, (
+            f"{name} still advertises an outputSchema; it is 52% of the surface "
+            "and nothing reads it (TOOL-SURFACE-BUDGET-STANDARD B3)"
+        )
+
+
+@pytest.mark.asyncio
+async def test_structured_content_survives_output_schema_none() -> None:
+    """The one hard constraint of B3: a tool returning a bare list/scalar WOULD
+    lose structuredContent under output_schema=None. Every litvar tool returns a
+    dict envelope, so none do -- prove it on the real wire rather than assume it.
+    """
+    from fastmcp import Client
+
+    from litvar_link.mcp.facade import create_litvar_mcp
+
+    async with Client(create_litvar_mcp(service_factory=lambda: object())) as client:
+        result = await client.call_tool("get_server_capabilities", {}, raise_on_error=False)
+        assert isinstance(result.structured_content, dict)
+        assert result.structured_content["success"] is True
 
 
 @pytest.mark.asyncio

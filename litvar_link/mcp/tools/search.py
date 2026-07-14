@@ -18,41 +18,12 @@ from litvar_link.mcp.shaping import (
     collect_fenced_matches,
     paginate,
     shape_variant_row,
-    untrusted_text_field_schema,
 )
 from litvar_link.mcp.untrusted_content import enforce_untrusted_text_limits
 from litvar_link.validation import MAX_QUERY_LENGTH, validate_limit, validate_query
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
-
-_MATCH_SCHEMA, _MATCH_DEFS = untrusted_text_field_schema()
-
-# Advertises the ``untrusted_text`` object shape (``kind`` const included) for
-# the full-mode ``results[*].match`` field in the array-ITEM schema itself --
-# a bare permissive array would hide the literal even though the runtime data
-# is fenced (Response-Envelope Standard v1.1). ``additionalProperties: True``
-# on the item and top level preserves ``full`` mode's raw-passthrough contract
-# for every other upstream field.
-SEARCH_GENETIC_VARIANTS_OUTPUT_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "results": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {"match": _MATCH_SCHEMA},
-                "additionalProperties": True,
-            },
-        },
-        "returned": {"type": "integer"},
-        "query": {"type": "string"},
-        "cached": {"type": "boolean"},
-    },
-    "required": ["results", "returned"],
-    "additionalProperties": True,
-    "$defs": _MATCH_DEFS,
-}
 
 
 async def _search_body(
@@ -104,7 +75,7 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
         name="search_genetic_variants",
         title="Search Genetic Variants",
         tags={"variant"},
-        output_schema=SEARCH_GENETIC_VARIANTS_OUTPUT_SCHEMA,
+        output_schema=None,  # Tool-Surface Budget v1 B3: structuredContent is unaffected.
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def search_genetic_variants(

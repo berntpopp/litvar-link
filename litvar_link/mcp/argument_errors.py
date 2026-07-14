@@ -73,17 +73,44 @@ def _dedupe(names: list[str]) -> list[str]:
     return list(seen)[:_MAX_NAMES]
 
 
-def _expected(prop: dict[str, Any]) -> str:
-    """Describe what a property WILL accept, using only our own schema."""
+def _enum_of(prop: dict[str, Any]) -> list[Any] | None:
+    """The declared enum, whether it sits on the property or inside an anyOf branch."""
     values = prop.get("enum")
-    if not isinstance(values, list):
-        for branch in prop.get("anyOf") or []:
-            if isinstance(branch, dict) and isinstance(branch.get("enum"), list):
-                values = branch["enum"]
-                break
-    if isinstance(values, list) and values:
-        allowed = ", ".join(str(v) for v in values[:_MAX_NAMES])
-        return f"must be one of: {allowed}"
+    if isinstance(values, list):
+        return values
+    for branch in prop.get("anyOf") or []:
+        if isinstance(branch, dict) and isinstance(branch.get("enum"), list):
+            return list(branch["enum"])
+    return None
+
+
+def _expected(prop: dict[str, Any]) -> str:
+    """Describe what a property WILL accept, using ONLY our own schema.
+
+    Report the tightest constraint we declared, not merely the JSON type: telling
+    a model that `variant_id` "must be of type string" when it already sent a
+    string is a non-answer. It needs the enum, the pattern, or the bounds.
+    """
+    values = _enum_of(prop)
+    if values:
+        return "must be one of: " + ", ".join(str(v) for v in values[:_MAX_NAMES])
+
+    pattern = prop.get("pattern")
+    if isinstance(pattern, str):
+        return f"must match the pattern {pattern}"
+
+    low, high = prop.get("minimum"), prop.get("maximum")
+    if isinstance(low, int | float) and isinstance(high, int | float):
+        return f"must be between {low} and {high}"
+    if isinstance(low, int | float):
+        return f"must be >= {low}"
+    if isinstance(high, int | float):
+        return f"must be <= {high}"
+
+    max_len = prop.get("maxLength")
+    if isinstance(max_len, int):
+        return f"must be at most {max_len} characters"
+
     declared = prop.get("type")
     if isinstance(declared, str):
         return f"must be of type {declared}"

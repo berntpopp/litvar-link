@@ -317,6 +317,29 @@ def test_d3_significance_tokens_are_normalized() -> None:
     assert counts.unclassified == 1, "an absent field is UNKNOWN, not uncertain"
 
 
+def test_an_empty_upstream_body_is_an_empty_result_not_a_parse_error() -> None:
+    """Audit #7: a typo'd gene told the agent "LitVar is down. Retry."
+
+    LitVar2 answers an unknown gene with HTTP 200 and a ZERO-LENGTH body. Feeding
+    that to a JSON decoder raised, which the client retried 3x (~8.7s) and then
+    classified as a RETRYABLE `upstream_unavailable`. So a non-HGNC gene symbol --
+    a user error that can never succeed -- burned 8s and reported a false outage.
+    """
+    from litvar_link.api.parsing import parse_response_body
+
+    def boom() -> Any:
+        raise AssertionError("an empty body must never reach the JSON decoder")
+
+    assert (
+        parse_response_body(
+            content_type="application/json",
+            response_text="",
+            json_loader=boom,
+        )
+        == []
+    )
+
+
 # --------------------------------------------------------------------------- D4
 
 

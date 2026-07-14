@@ -16,14 +16,6 @@ from litvar_link.validation import validate_rsid
 if TYPE_CHECKING:
     from fastmcp import FastMCP
 
-# The resolved rsID record is wrapped under ``result`` (structured, no free text).
-RESOLVE_RSID_OUTPUT_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {"result": {"type": "object", "additionalProperties": True}},
-    "required": ["result"],
-    "additionalProperties": True,
-}
-
 
 def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
     """Register the resolve_rsid tool."""
@@ -32,11 +24,18 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
         name="resolve_rsid",
         title="Resolve RSID",
         tags={"variant"},
-        output_schema=RESOLVE_RSID_OUTPUT_SCHEMA,
+        output_schema=None,  # Tool-Surface Budget v1 B3: structuredContent is unaffected.
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def resolve_rsid(
-        variant_id: Annotated[str, Field(description="dbSNP rsID, e.g. rs1061170.")],
+        variant_id: Annotated[
+            str,
+            Field(
+                description="dbSNP rsID ('rs' followed by digits), e.g. rs1061170.",
+                pattern=r"^[Rr][Ss]\d+$",
+                examples=["rs1061170"],
+            ),
+        ],
     ) -> dict[str, Any] | ToolResult:
         """Resolve an rsID to its existence/record in LitVar2. Research use only."""
 

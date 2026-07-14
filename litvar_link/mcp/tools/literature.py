@@ -22,30 +22,6 @@ from litvar_link.mcp.shaping import (
 if TYPE_CHECKING:
     from fastmcp import FastMCP
 
-# Structured rows only (PMID + citation) -- no upstream free text, so no fence.
-GET_VARIANT_LITERATURE_OUTPUT_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "results": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "pmid": {"type": "string"},
-                    "recommended_citation": {"type": "string"},
-                },
-                "required": ["pmid", "recommended_citation"],
-                "additionalProperties": False,
-            },
-        },
-        "returned": {"type": "integer"},
-        "variant_id": {"type": "string"},
-        "cached": {"type": "boolean"},
-    },
-    "required": ["results", "returned"],
-    "additionalProperties": True,
-}
-
 
 # Parameter types hoisted to module level: the tool signature stays inside the
 # per-function LOC budget WITHOUT shortening a single description (descriptions
@@ -119,7 +95,7 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
         name="get_variant_literature",
         title="Get Variant Literature",
         tags={"variant", "literature"},
-        output_schema=GET_VARIANT_LITERATURE_OUTPUT_SCHEMA,
+        output_schema=None,  # Tool-Surface Budget v1 B3: structuredContent is unaffected.
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def get_variant_literature(

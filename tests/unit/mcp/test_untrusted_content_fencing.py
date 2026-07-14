@@ -184,9 +184,13 @@ def test_enforce_limits_raises_when_the_whole_response_aggregate_exceeds_cap() -
 
 @pytest.mark.asyncio
 async def test_untrusted_text_limit_error_maps_to_typed_not_masked_error_code() -> None:
-    """``UntrustedTextLimitError`` reaching the MCP boundary is classified as
-    the typed, non-masked ``response_limit_exceeded`` code -- never the
-    generic ``internal`` code, whose message is opaque to the caller.
+    """``UntrustedTextLimitError`` is classified with a NON-masked, actionable code.
+
+    It used to be ``response_limit_exceeded`` -- which is NOT one of the six codes
+    in the closed Response-Envelope v1 enum, so a client branching on error_code
+    could not handle it. It now maps to ``invalid_input``: the caller's own
+    `limit` is what has to change, which is exactly what invalid_input means. The
+    message stays specific (never the opaque ``internal`` one).
     """
 
     async def body() -> dict[str, Any]:
@@ -197,7 +201,7 @@ async def test_untrusted_text_limit_error_maps_to_typed_not_masked_error_code() 
     result = await run_tool("search_genetic_variants", body)
     payload = result.structured_content or {}
     assert payload["success"] is False
-    assert payload["error_code"] == "response_limit_exceeded"
+    assert payload["error_code"] == "invalid_input"  # in the closed six-code enum
     assert payload["retryable"] is False
     assert "untrusted object count" in payload["message"]  # not masked
 
@@ -265,31 +269,39 @@ async def test_get_variant_summary_compact_mode_still_drops_match() -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_tool_output_schema_declares_kind_const_in_array_items() -> None:
-    """A bare permissive ``results`` array would hide the ``untrusted_text``
-    literal even though the runtime data is fenced -- the array ITEM schema
-    itself must declare it (Response-Envelope Standard v1.1)."""
-    mcp = create_litvar_mcp(service_factory=lambda: object())
-    tool = await mcp.get_tool("search_genetic_variants")
-    schema = tool.output_schema
-    assert schema is not None
-    match_schema = schema["properties"]["results"]["items"]["properties"]["match"]
-    typed_variant = match_schema["anyOf"][1]
-    assert typed_variant["properties"]["kind"]["const"] == "untrusted_text"
-    provenance_ref = typed_variant["properties"]["provenance"]["$ref"]
-    assert provenance_ref == "#/$defs/UntrustedTextProvenance"
-    assert provenance_ref.removeprefix("#/$defs/") in schema["$defs"]
+async def test_fenced_match_carries_the_typed_literal_on_the_wire() -> None:
+    """The v1.1 fence lives in the RUNTIME payload, and that is what is asserted.
 
-
-@pytest.mark.asyncio
-async def test_variant_summary_output_schema_declares_kind_const() -> None:
-    mcp = create_litvar_mcp(service_factory=lambda: object())
-    tool = await mcp.get_tool("get_variant_summary")
-    schema = tool.output_schema
-    assert schema is not None
-    match_schema = schema["properties"]["result"]["properties"]["match"]
-    typed_variant = match_schema["anyOf"][1]
-    assert typed_variant["properties"]["kind"]["const"] == "untrusted_text"
+    litvar-link no longer PUBLISHES an outputSchema (Tool-Surface Budget v1 B3 --
+    it was 52% of the surface and no model reads it), so the old assertion that
+    the schema *advertised* the `untrusted_text` literal no longer applies. The
+    substance of v1.1 is unchanged and is checked here where it actually matters:
+    on the emitted structuredContent. See the PR for the standards note.
+    """
+    variants = [
+        SimpleNamespace(
+            model_dump=lambda: {
+                "id": "litvar@rs1##",
+                "rsid": "rs1",
+                "gene": ["CFH"],
+                "name": "p.Y",
+                "pmids_count": 5,
+                "match": HOSTILE,
+            }
+        )
+    ]
+    svc = AsyncMock()
+    svc.search_variants = AsyncMock(
+        return_value=SimpleNamespace(variants=variants, total_count=1, has_more=False, cached=False)
+    )
+    mcp = create_litvar_mcp(service_factory=lambda: svc)
+    result = await mcp.call_tool(
+        "search_genetic_variants", {"query": "CFH", "limit": 5, "response_mode": "full"}
+    )
+    payload: dict[str, Any] = result.structured_content or {}
+    fenced = payload["results"][0]["match"]
+    assert fenced["kind"] == "untrusted_text"
+    assert fenced["provenance"]["source"] == "litvar"
 
 
 def _has_forbidden_codepoint(text: str) -> bool:

@@ -232,14 +232,26 @@ async def test_rsid_tool_invokes_service() -> None:
 
 @pytest.mark.asyncio
 async def test_rsid_tool_invalid_raises() -> None:
-    svc = _service()
-    mcp = FastMCP(name="t")
-    register_all(mcp, service_factory=lambda: svc)
-    tool = await _tool_by_name(mcp, "resolve_rsid")
-    result = await tool.run({"variant_id": "not-an-rsid"})
-    payload = _error_payload(result)
+    """A malformed rsID is now rejected by the SCHEMA (`pattern`), not just the body.
+
+    That is the point of declaring the constraint: a schema-driven client can
+    catch it locally. Driven through the real facade, because the schema-level
+    rejection is turned into the `invalid_input` envelope by the middleware.
+    """
+    from fastmcp import Client
+
+    from litvar_link.mcp.facade import create_litvar_mcp
+
+    async with Client(create_litvar_mcp(service_factory=lambda: _service())) as client:
+        result = await client.call_tool(
+            "resolve_rsid", {"variant_id": "not-an-rsid"}, raise_on_error=False
+        )
+    payload: dict[str, Any] = result.structured_content or {}
+    assert result.is_error is True
     assert payload["error_code"] == "invalid_input"
-    assert "rsid" in payload["message"].lower()
+    # It must name the parameter AND the constraint the model has to satisfy.
+    assert "variant_id" in payload["message"]
+    assert "pattern" in payload["message"]
 
 
 @pytest.mark.asyncio
