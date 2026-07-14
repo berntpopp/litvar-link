@@ -211,6 +211,28 @@ litvar-link/
 - `api/parsing.py` centralizes NDJSON parsing and response-shape
   normalization (LitVar2 returns Python-style dict text in NDJSON).
 
+### Upstream LitVar2 endpoints
+
+The client integrates these LitVar2 endpoints, under
+`LITVAR_LINK_API__BASE_URL` (default
+`https://www.ncbi.nlm.nih.gov/research/litvar2-api/`):
+
+| Endpoint | Used by |
+|----------|---------|
+| `variant/autocomplete/` | variant search (`search_genetic_variants`) |
+| `variant/search/gene/{gene_name}` | gene variants (`search_gene_variants`) |
+| `sensor/{rsid}` | rsID existence check (`resolve_rsid`) |
+
+**The NDJSON quirk.** LitVar2 answers with NDJSON whose lines are *Python-style
+dictionary literals*, not valid JSON (single-quoted keys, `True`/`False`/`None`).
+`api/parsing.py` absorbs this: it is the reason a bare `json.loads` over the
+upstream body fails, and the reason this parsing lives in exactly one module.
+
+**Clinical-significance tallies.** `VariantService` counts pathogenic / benign /
+uncertain variants across a gene's results (`_count_clinical_significance`); a
+variant with no `data_clinical_significance` counts as uncertain. This summarizes
+what LitVar2 reports from the literature and is not a clinical assertion.
+
 ### CLI
 
 - `cli.py` is a `typer.Typer` app; `main()` stays thin and registers the
@@ -247,6 +269,20 @@ without confirming LitVar2's current guidance.
 
 Service methods are wrapped with `async-lru`-style caching; each method has
 its own TTL. A single `cache_hit` helper reports hit/miss uniformly.
+
+The per-method budgets set in `VariantService._setup_cached_methods`:
+
+| Cached method | Key | Max entries | TTL |
+|---------------|-----|------------:|----:|
+| `search_variants` | query + limit | `LITVAR_LINK_CACHE__SIZE` (default 1000) | `LITVAR_LINK_CACHE__TTL` (default 3600 s) |
+| `get_variant_details` | variant id | 500 | 7200 s |
+| `get_variant_publications` | variant id | 500 | 3600 s |
+| `sensor_lookup` | rsID | 1000 | 86400 s (24 h) |
+| `get_variants_by_gene` | gene symbol | 200 | 3600 s |
+
+Only the search cache is configurable; the other four are fixed budgets tuned to
+how stable each upstream record is (an rsID's existence changes far less often
+than a literature list).
 
 ### Exponential-backoff retry
 
