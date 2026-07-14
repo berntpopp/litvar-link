@@ -43,12 +43,16 @@ SEARCH_GENE_VARIANTS_OUTPUT_SCHEMA: dict[str, Any] = {
         },
         "returned": {"type": "integer"},
         "gene": {"type": "string"},
+        "classifications_available": {"type": "boolean"},
+        "unclassified_count": {"type": "integer"},
+        "classified_count": {"type": "integer"},
         "pathogenic_count": {"type": "integer"},
         "benign_count": {"type": "integer"},
         "uncertain_count": {"type": "integer"},
+        "classification_note": {"type": "string"},
         "cached": {"type": "boolean"},
     },
-    "required": ["results", "returned"],
+    "required": ["results", "returned", "classifications_available"],
     "additionalProperties": True,
     "$defs": _MATCH_DEFS,
 }
@@ -98,6 +102,12 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
 
         Page through the whole set with `_meta.pagination.next_cursor`.
 
+        CLINICAL SIGNIFICANCE IS NOT AVAILABLE HERE. LitVar2's gene endpoint
+        returns only `{id, rsid, pmids_count}` per row, so this tool reports
+        `classifications_available: false` and emits NO pathogenic/benign counts.
+        Absence of a classification here is NOT evidence that a variant is benign.
+        Call `get_variant_summary` for a specific variant's reported significance.
+
         Research use only; not clinical decision support.
         """
 
@@ -113,10 +123,29 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
             # upstream figure -- and the cursor can now reach all 13,264 of them.
             shaped = paginate(rows, limit=limit, offset=offset, total_count=len(rows))
             shaped["gene"] = clean
-            shaped["pathogenic_count"] = resp.pathogenic_count
-            shaped["benign_count"] = resp.benign_count
-            shaped["uncertain_count"] = resp.uncertain_count
             shaped["cached"] = resp.cached
+
+            # Emit the significance counts ONLY if LitVar2 actually classified
+            # something. It does not on this endpoint -- the rows carry only
+            # {id, rsid, pmids_count} -- so the old code recoded every absent
+            # field as "uncertain" and COUNTED it, publishing "13,264 BRCA1
+            # variants, 0 pathogenic, 13,264 uncertain". Absent is UNKNOWN, and
+            # an unknown must never be reported as a negative finding.
+            # The counts describe the gene's WHOLE variant set, not just this page.
+            shaped["classifications_available"] = resp.classified_count > 0
+            shaped["unclassified_count"] = resp.unclassified_count
+            if resp.classified_count > 0:
+                shaped["classified_count"] = resp.classified_count
+                shaped["pathogenic_count"] = resp.pathogenic_count
+                shaped["benign_count"] = resp.benign_count
+                shaped["uncertain_count"] = resp.uncertain_count
+            else:
+                shaped["classification_note"] = (
+                    "LitVar2's gene endpoint supplies no clinical significance for these "
+                    "variants, so NONE is reported here -- this is not evidence of absent "
+                    "pathogenicity. Call get_variant_summary for a specific variant's "
+                    "reported significance."
+                )
             return shaped
 
         return await run_tool("search_gene_variants", body)

@@ -450,10 +450,17 @@ class TestVariantService:
 
         result = await service.search_gene_variants("TEST")
 
-        # Verify statistics
+        # Verify statistics.
+        #
+        # NB: this test used to assert `uncertain_count == 2  # var3 + var4 (no
+        # clinical significance)` -- i.e. it RATIFIED issue #66 D3, the recoding
+        # of an absent field into a positive "uncertain" finding. var4 has no
+        # classification at all, so it is UNCLASSIFIED (unknown), not uncertain.
         assert result.pathogenic_count == 1
         assert result.benign_count == 1
-        assert result.uncertain_count == 2  # var3 + var4 (no clinical significance)
+        assert result.uncertain_count == 1  # var3 only: an explicit "uncertain significance"
+        assert result.unclassified_count == 1  # var4: LitVar2 said nothing
+        assert result.classified_count == 3
         assert result.total_publications == 19  # 10 + 5 + 3 + 1
 
     @pytest.mark.asyncio

@@ -133,15 +133,30 @@ class GeneVariantsResponse(BaseResponse):
     variants: list[GeneVariantItem] = Field(description="List of variants for the gene")
     total_count: int = Field(description="Total number of variants found")
 
-    # Gene-specific statistics
+    # Gene-specific statistics. These are counts over the CLASSIFIED variants
+    # only: `unclassified_count` (LitVar2 supplied no significance at all) is
+    # kept strictly separate, because folding it into `uncertain_count` reported
+    # "13,264 BRCA1 variants, 0 pathogenic" -- a confidently false clinical
+    # statement (issue #66 D3).
     pathogenic_count: int = Field(
         default=0,
-        description="Number of pathogenic variants",
+        description="Number of pathogenic variants (among the classified ones)",
     )
-    benign_count: int = Field(default=0, description="Number of benign variants")
+    benign_count: int = Field(
+        default=0,
+        description="Number of benign variants (among the classified ones)",
+    )
     uncertain_count: int = Field(
         default=0,
-        description="Number of variants with uncertain significance",
+        description="Classified, but neither a pathogenic nor a benign call",
+    )
+    unclassified_count: int = Field(
+        default=0,
+        description="Variants for which LitVar2 supplied NO clinical significance (UNKNOWN)",
+    )
+    classified_count: int = Field(
+        default=0,
+        description="Variants for which LitVar2 supplied any clinical significance",
     )
     total_publications: int = Field(
         default=0,

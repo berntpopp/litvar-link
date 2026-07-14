@@ -63,8 +63,18 @@ class FakeLitVar2Client:
     seam has to be the upstream HTTP boundary.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, gene_rows: int = 30) -> None:
         self.detail_calls: list[str] = []
+        self.gene_rows = gene_rows
+
+    async def get_variants_by_gene(self, gene_name: str) -> list[dict[str, Any]]:
+        # The REAL gene-endpoint row shape, verified live against LitVar2: only
+        # {_id, pmids_count, rsid}. `data_clinical_significance` is ABSENT -- not
+        # null, not empty: absent, on all 13,264 BRCA1 rows.
+        return [
+            {"_id": f"litvar@rs{i}##", "pmids_count": 1, "rsid": f"rs{i}"}
+            for i in range(self.gene_rows)
+        ]
 
     async def get_variant_details(self, variant_id: str) -> dict[str, Any]:
         self.detail_calls.append(variant_id)
@@ -86,9 +96,9 @@ class FakeLitVar2Client:
         ]
 
 
-def real_service() -> VariantService:
+def real_service(*, gene_rows: int = 30) -> VariantService:
     """The REAL VariantService over a faked upstream client."""
-    return VariantService(cast("Any", FakeLitVar2Client()), CacheConfig())
+    return VariantService(cast("Any", FakeLitVar2Client(gene_rows=gene_rows)), CacheConfig())
 
 
 class FakeService:
@@ -231,7 +241,7 @@ async def test_d2_search_does_not_report_the_page_size_as_the_total() -> None:
 @pytest.mark.asyncio
 async def test_d2_gene_search_reports_the_real_total_and_has_more() -> None:
     """D2: a partial page MUST declare has_more, and total is the REAL upstream total."""
-    async with build_client(FakeService(gene_rows=30)) as client:
+    async with build_client(real_service(gene_rows=30)) as client:
         _, env = await call(client, "search_gene_variants", {"gene_symbol": "BRCA1", "limit": 25})
 
     pagination = env["_meta"]["pagination"]
@@ -263,7 +273,7 @@ async def test_d3_absent_classification_is_never_counted_as_uncertain() -> None:
     that is absent upstream must be reported as unknown, never counted as a
     negative finding. `pathogenic_count: 0` is what a curator would believe.
     """
-    async with build_client(FakeService(gene_rows=30)) as client:
+    async with build_client(real_service(gene_rows=30)) as client:
         _, env = await call(client, "search_gene_variants", {"gene_symbol": "BRCA1"})
 
     assert env.get("success") is True, env

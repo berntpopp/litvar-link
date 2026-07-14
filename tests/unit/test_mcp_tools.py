@@ -260,6 +260,8 @@ async def test_gene_tool_invokes_service_and_shapes() -> None:
             pathogenic_count=1,
             benign_count=0,
             uncertain_count=0,
+            unclassified_count=0,
+            classified_count=1,
             cached=False,
         )
     )
@@ -270,8 +272,45 @@ async def test_gene_tool_invokes_service_and_shapes() -> None:
     payload: dict[str, Any] = result.structured_content or {}
     assert payload["success"] is True
     assert payload["gene"] == "CFH"
-    assert payload["pathogenic_count"] == 1
     assert "match" not in payload["results"][0]
+    # Something WAS classified, so the counts are emitted.
+    assert payload["classifications_available"] is True
+    assert payload["pathogenic_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_gene_tool_omits_counts_when_upstream_classifies_nothing() -> None:
+    """LitVar2's gene endpoint carries no significance -- so report NONE, not zero.
+
+    `pathogenic_count: 0` over 13,264 BRCA1 variants is a false clinical claim
+    (issue #66 D3); silence is the only honest answer.
+    """
+    svc = _service()
+    svc.search_gene_variants = AsyncMock(
+        return_value=SimpleNamespace(
+            variants=[
+                SimpleNamespace(model_dump=lambda: {"id": "litvar@rs1##", "pmids_count": 3})
+            ],
+            pathogenic_count=0,
+            benign_count=0,
+            uncertain_count=0,
+            unclassified_count=1,
+            classified_count=0,
+            cached=False,
+        )
+    )
+    mcp = FastMCP(name="t")
+    register_all(mcp, service_factory=lambda: svc)
+    tool = await _tool_by_name(mcp, "search_gene_variants")
+    result = await tool.run({"gene_symbol": "CFH", "limit": 10, "response_mode": "compact"})
+    payload: dict[str, Any] = result.structured_content or {}
+    assert payload["success"] is True
+    assert payload["classifications_available"] is False
+    assert payload["unclassified_count"] == 1
+    assert "pathogenic_count" not in payload
+    assert "benign_count" not in payload
+    assert "uncertain_count" not in payload
+    assert "not evidence of absent pathogenicity" in payload["classification_note"]
 
 
 @pytest.mark.asyncio

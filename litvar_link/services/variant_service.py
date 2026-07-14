@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar
 
 from litvar_link.exceptions import LitVarAPIError, ValidationError
 from litvar_link.logging_config import log_error_with_context
@@ -34,8 +34,38 @@ if TYPE_CHECKING:
 
 _ModelT = TypeVar("_ModelT")
 
-_PATHOGENIC = ("pathogenic", "likely pathogenic")
-_BENIGN = ("benign", "likely benign")
+_PATHOGENIC = frozenset({"pathogenic", "likely pathogenic"})
+_BENIGN = frozenset({"benign", "likely benign"})
+
+
+class SignificanceCounts(NamedTuple):
+    """Clinical-significance tally that keeps ABSENT distinct from UNCERTAIN.
+
+    ``unclassified`` (LitVar2 said nothing) is NOT ``uncertain`` (LitVar2 said
+    "uncertain"). Collapsing the two produces a confidently false clinical
+    statement -- see ``_count_clinical_significance``.
+    """
+
+    pathogenic: int
+    benign: int
+    uncertain: int
+    unclassified: int
+
+    @property
+    def classified(self) -> int:
+        """Variants for which LitVar2 supplied ANY clinical significance."""
+        return self.pathogenic + self.benign + self.uncertain
+
+
+def _normalize_significance(value: str) -> str:
+    """Fold LitVar2's significance tokens to a canonical form.
+
+    Upstream writes ``likely-pathogenic`` / ``risk-factor`` (HYPHENS); the buckets
+    were written with spaces (``"likely pathogenic"``), so a genuinely pathogenic
+    variant never matched and fell through to "uncertain". A second, quieter
+    instance of the same defect as the absent-field recoding below.
+    """
+    return value.strip().lower().replace("-", " ").replace("_", " ")
 
 # Canonical LitVar variant ids look like "litvar@rs113993960##". The publications
 # endpoint only accepts this form, so non-canonical input (rsID/HGVS/free text)
@@ -57,25 +87,38 @@ def _is_variant_not_found(exc: LitVarAPIError) -> bool:
     return exc.status_code in _NOT_FOUND_STATUS and "not found" in str(exc).lower()
 
 
-def _count_clinical_significance(variants: list[Any]) -> tuple[int, int, int]:
-    """Tally ``(pathogenic, benign, uncertain)`` counts across gene variants.
+def _count_clinical_significance(variants: list[Any]) -> SignificanceCounts:
+    """Tally clinical significance, keeping ABSENT strictly apart from UNCERTAIN.
 
-    A variant with no ``data_clinical_significance`` (or empty) counts as
-    uncertain; otherwise the first matching pathogenic/benign bucket wins, else
-    uncertain.
+    The old version counted a variant with NO ``data_clinical_significance`` as
+    ``uncertain``. LitVar2's gene endpoint never carries that field at all, so
+    every variant in every gene was bucketed "uncertain" and then COUNTED,
+    yielding the confidently false:
+
+        13,264 BRCA1 variants -- 0 pathogenic, 0 benign, 13,264 uncertain
+
+    BRCA1 has thousands of established pathogenic variants. A curator would have
+    believed that. In clinical genetics "uncertain" means VUS -- a positive
+    assertion that the evidence was weighed and found inconclusive. It is NOT a
+    synonym for "nobody told us". A field that is absent upstream must be
+    reported as UNKNOWN, never counted as a negative finding.
     """
-    pathogenic = benign = uncertain = 0
+    pathogenic = benign = uncertain = unclassified = 0
     for variant in variants:
         sigs = getattr(variant, "data_clinical_significance", None)
         if not sigs:
-            uncertain += 1
-        elif any(sig in _PATHOGENIC for sig in sigs):
+            unclassified += 1
+            continue
+        normalized = {_normalize_significance(sig) for sig in sigs}
+        if normalized & _PATHOGENIC:
             pathogenic += 1
-        elif any(sig in _BENIGN for sig in sigs):
+        elif normalized & _BENIGN:
             benign += 1
         else:
+            # Present, but neither a pathogenic nor a benign call (e.g. "risk
+            # factor", "association", "uncertain significance").
             uncertain += 1
-    return pathogenic, benign, uncertain
+    return SignificanceCounts(pathogenic, benign, uncertain, unclassified)
 
 
 class VariantService:
@@ -566,9 +609,7 @@ class VariantService:
 
             variants = self._parse_items(variant_data, GeneVariantItem)
 
-            pathogenic_count, benign_count, uncertain_count = _count_clinical_significance(
-                variants,
-            )
+            counts = _count_clinical_significance(variants)
 
             # Calculate total publications (sum of pmids_count)
             total_publications = sum(
@@ -579,9 +620,11 @@ class VariantService:
                 gene=gene_name,
                 variants=variants,
                 total_count=len(variants),
-                pathogenic_count=pathogenic_count,
-                benign_count=benign_count,
-                uncertain_count=uncertain_count,
+                pathogenic_count=counts.pathogenic,
+                benign_count=counts.benign,
+                uncertain_count=counts.uncertain,
+                unclassified_count=counts.unclassified,
+                classified_count=counts.classified,
                 total_publications=total_publications,
                 cached=cached,
             )
