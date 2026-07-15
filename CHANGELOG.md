@@ -4,6 +4,14 @@ All notable changes to litvar-link are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Re-vendored the behaviour conformance gate from genefoundry-router `56db958`
+  (`docs/conformance/behaviour.py` blob `c69801687`) and live-validated this
+  backend against the current behaviour gate.
+
 ## [6.0.0] - 2026-07-15
 
 Closes the 2026-07-14 live MCP audit ([#66](https://github.com/berntpopp/litvar-link/issues/66)).
@@ -87,8 +95,6 @@ The behaviour gate now reports **CONFORMANT (42 pass, 0 fail, 0 UNGATED)**; it w
   pinned to a digest, failing closed when it is unset. Nothing else changed:
   `container_name` (`litvar_link_server`, which NPM forwards to), the Compose project
   name, the healthcheck, networks and `command` are all preserved.
-
-## [Unreleased]
 
 ## [5.0.4] - 2026-07-13
 
