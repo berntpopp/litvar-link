@@ -96,8 +96,6 @@ The behaviour gate now reports **CONFORMANT (42 pass, 0 fail, 0 UNGATED)**; it w
   `container_name` (`litvar_link_server`, which NPM forwards to), the Compose project
   name, the healthcheck, networks and `command` are all preserved.
 
-## [Unreleased]
-
 ## [5.0.4] - 2026-07-13
 
 ### Build
