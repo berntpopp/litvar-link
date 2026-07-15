@@ -4,6 +4,14 @@ All notable changes to litvar-link are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Re-vendored the behaviour conformance gate from genefoundry-router `ba09fdc`
+  (`docs/conformance/behaviour.py` blob `30d639242b`) and live-validated this
+  backend against the current behaviour gate.
+
 ## [6.0.0] - 2026-07-15
 
 Closes the 2026-07-14 live MCP audit ([#66](https://github.com/berntpopp/litvar-link/issues/66)).
