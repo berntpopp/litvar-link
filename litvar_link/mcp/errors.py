@@ -98,8 +98,11 @@ def _classify(exc: Exception) -> tuple[ErrorCode, bool, str]:
             "Fix the offending argument per the message and retry with corrected input.",
         )
     if isinstance(exc, UntrustedTextLimitError):
+        # Was ``response_limit_exceeded`` -- outside the closed six-code enum, so a
+        # client branching on error_code could not handle it. ``invalid_input`` is
+        # the honest fit: the caller's own `limit` is what must change.
         return (
-            "response_limit_exceeded",
+            "invalid_input",
             False,
             "The response exceeded a Response-Envelope v1.1 untrusted-content "
             "ceiling (object count or byte size). Lower `limit` and retry.",

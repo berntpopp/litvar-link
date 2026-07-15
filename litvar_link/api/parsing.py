@@ -60,7 +60,16 @@ def parse_response_body(
     happy path, falling back to NDJSON when the body is newline-delimited.
     """
     text = response_text.strip()
-    looks_json = "application/json" in content_type or (text and text.startswith("{"))
+    # An EMPTY 2xx body means "no rows", not "the upstream is broken". LitVar2
+    # answers an unknown gene with HTTP 200 and a zero-length body; feeding that
+    # to a JSON decoder raised, which the client retried 3x (~8.7s) and then
+    # reported as a RETRYABLE `upstream_unavailable` -- so a typo'd gene symbol
+    # told the agent "LitVar is down, try again", burning another 8s on a call
+    # that could never succeed (issue #66 / audit #7). An empty collection is the
+    # honest answer.
+    if not text:
+        return []
+    looks_json = "application/json" in content_type or text.startswith("{")
     if looks_json:
         try:
             return json_loader()

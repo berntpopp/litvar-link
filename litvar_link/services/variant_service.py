@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from litvar_link.exceptions import LitVarAPIError, ValidationError
 from litvar_link.logging_config import log_error_with_context
@@ -11,13 +11,16 @@ from litvar_link.models import (
     GeneVariantsResponse,
     PublicationResponse,
     SensorResponse,
-    VariantDetails,
     VariantDetailsResponse,
     VariantSearchResponse,
 )
+from litvar_link.models.endpoint_specific import VariantDetailsItem
 from litvar_link.services.cache_hits import hits_before, was_cache_hit
+from litvar_link.services.identifiers import _is_canonical_variant_id, _is_variant_not_found
+from litvar_link.services.significance import _count_clinical_significance
 from litvar_link.utils.caching import create_service_cache_decorator
 from litvar_link.validation import (
+    MAX_LIMIT,
     validate_gene_name,
     validate_limit,
     validate_query,
@@ -32,49 +35,6 @@ if TYPE_CHECKING:
     from litvar_link.models.endpoint_specific import AutocompleteVariantItem
 
 _ModelT = TypeVar("_ModelT")
-
-_PATHOGENIC = ("pathogenic", "likely pathogenic")
-_BENIGN = ("benign", "likely benign")
-
-# Canonical LitVar variant ids look like "litvar@rs113993960##". The publications
-# endpoint only accepts this form, so non-canonical input (rsID/HGVS/free text)
-# must be resolved via autocomplete first.
-_CANONICAL_ID_PREFIX = "litvar@"
-
-# Upstream returns 400 with body {"detail": "Variant not found: ..."} for an id
-# that does not exist. That is a user-recoverable "not found", not an outage.
-_NOT_FOUND_STATUS = (400, 404)
-
-
-def _is_canonical_variant_id(value: str) -> bool:
-    """True for an already-canonical LitVar id like ``litvar@rs113993960##``."""
-    return value.startswith(_CANONICAL_ID_PREFIX)
-
-
-def _is_variant_not_found(exc: LitVarAPIError) -> bool:
-    """True when an upstream 4xx clearly means 'this variant id does not exist'."""
-    return exc.status_code in _NOT_FOUND_STATUS and "not found" in str(exc).lower()
-
-
-def _count_clinical_significance(variants: list[Any]) -> tuple[int, int, int]:
-    """Tally ``(pathogenic, benign, uncertain)`` counts across gene variants.
-
-    A variant with no ``data_clinical_significance`` (or empty) counts as
-    uncertain; otherwise the first matching pathogenic/benign bucket wins, else
-    uncertain.
-    """
-    pathogenic = benign = uncertain = 0
-    for variant in variants:
-        sigs = getattr(variant, "data_clinical_significance", None)
-        if not sigs:
-            uncertain += 1
-        elif any(sig in _PATHOGENIC for sig in sigs):
-            pathogenic += 1
-        elif any(sig in _BENIGN for sig in sigs):
-            benign += 1
-        else:
-            uncertain += 1
-    return pathogenic, benign, uncertain
 
 
 class VariantService:
@@ -102,21 +62,6 @@ class VariantService:
 
         # Apply caching decorators to methods
         self._setup_cached_methods()
-
-    def _generate_cache_key(self, operation: str, **kwargs: Any) -> str:
-        """Generate cache key for operation.
-
-        Args:
-            operation: Operation name
-            **kwargs: Parameters for cache key
-
-        Returns:
-            Cache key string
-        """
-        parts = [operation]
-        for key, value in sorted(kwargs.items()):
-            parts.append(f"{key}:{value}")
-        return ":".join(parts)
 
     @property
     def cache_stats(self) -> dict[str, Any]:
@@ -211,6 +156,24 @@ class VariantService:
                     )
         return parsed
 
+    @staticmethod
+    def _page_has_more(fetched: int, limit: int) -> bool:
+        """Did the OVER-FETCH prove more rows exist beyond this page?
+
+        The old code inferred ``has_more = len(variants) == limit``, which is the
+        "total == page size" lie: it cannot tell "the page is full and that is all
+        there is" from "the page is full and thousands more exist" (issue #66 D2).
+        Fetching one row past the page turns that guess into a fact.
+
+        LitVar2 rejects ``limit > 100``, so at the ceiling we cannot over-fetch and
+        a full page is reported as "more may exist" -- conservative by design.
+        Over-claiming completeness is the harm; under-claiming it is merely a
+        wasted call.
+        """
+        if limit < MAX_LIMIT:
+            return fetched > limit
+        return fetched >= MAX_LIMIT
+
     async def search_variants(
         self,
         query: str,
@@ -236,13 +199,15 @@ class VariantService:
             start_time = time.time()
 
             initial_hits = hits_before(self._cached_search_variants)
-            variant_data = await self._cached_search_variants(query, limit)
+            variant_data = await self._cached_search_variants(query, min(limit + 1, MAX_LIMIT))
             cached = was_cache_hit(self._cached_search_variants, before=initial_hits)
 
             # Parse variants using the endpoint-specific model
             from litvar_link.models.endpoint_specific import AutocompleteVariantItem
 
-            variants = self._parse_items(variant_data, AutocompleteVariantItem)
+            fetched = self._parse_items(variant_data, AutocompleteVariantItem)
+            has_more = self._page_has_more(len(fetched), limit)
+            variants = fetched[:limit]
 
             search_time = (time.time() - start_time) * 1000
 
@@ -251,7 +216,7 @@ class VariantService:
                 total_count=len(variants),
                 query=query,
                 limit=limit,
-                has_more=len(variants) == limit,
+                has_more=has_more,
                 search_time_ms=search_time,
                 cached=cached,
             )
@@ -267,17 +232,16 @@ class VariantService:
             raise
 
     async def get_variant_summary(self, variant_id: str) -> VariantDetailsResponse:
-        """Get detailed variant information.
+        """Get detailed variant information for a LitVar id, rsID, or HGVS/free text.
 
-        Args:
-            variant_id: Unique variant identifier
-
-        Returns:
-            Variant details response
+        ``variant_id`` may be a canonical LitVar id, an rsID, or HGVS/free text;
+        non-canonical input is resolved via autocomplete first (the variant/get
+        endpoint only accepts ``litvar@...##`` and 400s on anything else). The
+        resolved id is returned so the caller can see WHICH record answered.
 
         Raises:
-            ValidationError: For invalid input parameters
-            LitVarAPIError: For API-related errors
+            ValidationError: For invalid/unresolvable input
+            LitVarAPIError: For genuine upstream errors (rate limit, outage)
         """
         if not variant_id or not variant_id.strip():
             msg = "Variant ID cannot be empty"
@@ -285,28 +249,47 @@ class VariantService:
 
         variant_id = variant_id.strip()
         try:
-            initial_hits = hits_before(self._cached_get_variant_details)
-            variant_data = await self._cached_get_variant_details(variant_id)
-            cached = was_cache_hit(self._cached_get_variant_details, before=initial_hits)
+            return await self._fetch_variant_details(variant_id)
+        except ValidationError:
+            raise  # already a clean, user-recoverable message
+        except LitVarAPIError as e:
+            if _is_variant_not_found(e):
+                msg = (
+                    f"LitVar2 has no variant record for {variant_id!r} (variant not found). "
+                    "Use search_genetic_variants to find a valid variant id."
+                )
+                raise ValidationError(msg, field="variant_id") from e
+            self._log_summary_error(e, variant_id)
+            raise
+        except Exception as e:
+            self._log_summary_error(e, variant_id)
+            raise
 
-            # Parse variant details
-            variant = VariantDetails(**variant_data)
-
-            return VariantDetailsResponse(
-                # VariantDetails/VariantDetailsItem reconciliation is deferred to P3.
-                variant=cast("Any", variant),
-                cached=cached,
+    def _log_summary_error(self, exc: Exception, variant_id: str) -> None:
+        """Log an unexpected variant-details error with context (no-op if no logger)."""
+        if self.logger:
+            log_error_with_context(
+                self.logger, exc, "get_variant_summary", {"variant_id": variant_id}
             )
 
-        except Exception as e:
-            if self.logger:
-                log_error_with_context(
-                    self.logger,
-                    e,
-                    "get_variant_summary",
-                    {"variant_id": variant_id},
-                )
-            raise
+    async def _fetch_variant_details(self, variant_id: str) -> VariantDetailsResponse:
+        """Resolve the id, fetch the record, and build the DECLARED response model."""
+        resolved_id = await self._resolve_to_variant_id(variant_id)
+
+        initial_hits = hits_before(self._cached_get_variant_details)
+        variant_data = await self._cached_get_variant_details(resolved_id)
+        cached = was_cache_hit(self._cached_get_variant_details, before=initial_hits)
+
+        # Build the model the response actually DECLARES. This used to build a
+        # `VariantDetails` and launder it past mypy with `cast("Any", ...)`;
+        # pydantic rejected it at runtime on EVERY call, so the tool answered
+        # `internal` for its own canonical ids and was dead for ~every input.
+        # The cast is gone: mypy now proves the two types agree, forever.
+        return VariantDetailsResponse(
+            variant=VariantDetailsItem(**variant_data),
+            resolved_variant_id=resolved_id,
+            cached=cached,
+        )
 
     async def _resolve_to_variant_id(self, raw: str) -> str:
         """Resolve free-text / rsID / HGVS to a canonical LitVar id.
@@ -534,9 +517,7 @@ class VariantService:
 
             variants = self._parse_items(variant_data, GeneVariantItem)
 
-            pathogenic_count, benign_count, uncertain_count = _count_clinical_significance(
-                variants,
-            )
+            counts = _count_clinical_significance(variants)
 
             # Calculate total publications (sum of pmids_count)
             total_publications = sum(
@@ -547,9 +528,11 @@ class VariantService:
                 gene=gene_name,
                 variants=variants,
                 total_count=len(variants),
-                pathogenic_count=pathogenic_count,
-                benign_count=benign_count,
-                uncertain_count=uncertain_count,
+                pathogenic_count=counts.pathogenic,
+                benign_count=counts.benign,
+                uncertain_count=counts.uncertain,
+                unclassified_count=counts.unclassified,
+                classified_count=counts.classified,
                 total_publications=total_publications,
                 cached=cached,
             )

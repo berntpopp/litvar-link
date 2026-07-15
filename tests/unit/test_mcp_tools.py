@@ -67,6 +67,7 @@ async def test_search_tool_invokes_service_and_shapes() -> None:
                 )
             ],
             total_count=1,
+            has_more=False,
             cached=False,
         )
     )
@@ -82,6 +83,12 @@ async def test_search_tool_invokes_service_and_shapes() -> None:
     assert payload["_meta"]["tool"] == "search_genetic_variants"
     assert payload["_meta"]["unsafe_for_clinical_use"] is True
     assert payload["_meta"]["request_id"]
+    # Autocomplete supplies no count: null is honest, a fabricated total is not.
+    assert payload["_meta"]["pagination"] == {
+        "total_count": None,
+        "has_more": False,
+        "next_cursor": None,
+    }
 
 
 @pytest.mark.asyncio
@@ -225,14 +232,26 @@ async def test_rsid_tool_invokes_service() -> None:
 
 @pytest.mark.asyncio
 async def test_rsid_tool_invalid_raises() -> None:
-    svc = _service()
-    mcp = FastMCP(name="t")
-    register_all(mcp, service_factory=lambda: svc)
-    tool = await _tool_by_name(mcp, "resolve_rsid")
-    result = await tool.run({"variant_id": "not-an-rsid"})
-    payload = _error_payload(result)
+    """A malformed rsID is now rejected by the SCHEMA (`pattern`), not just the body.
+
+    That is the point of declaring the constraint: a schema-driven client can
+    catch it locally. Driven through the real facade, because the schema-level
+    rejection is turned into the `invalid_input` envelope by the middleware.
+    """
+    from fastmcp import Client
+
+    from litvar_link.mcp.facade import create_litvar_mcp
+
+    async with Client(create_litvar_mcp(service_factory=lambda: _service())) as client:
+        result = await client.call_tool(
+            "resolve_rsid", {"variant_id": "not-an-rsid"}, raise_on_error=False
+        )
+    payload: dict[str, Any] = result.structured_content or {}
+    assert result.is_error is True
     assert payload["error_code"] == "invalid_input"
-    assert "rsid" in payload["message"].lower()
+    # It must name the parameter AND the constraint the model has to satisfy.
+    assert "variant_id" in payload["message"]
+    assert "pattern" in payload["message"]
 
 
 @pytest.mark.asyncio
@@ -253,6 +272,8 @@ async def test_gene_tool_invokes_service_and_shapes() -> None:
             pathogenic_count=1,
             benign_count=0,
             uncertain_count=0,
+            unclassified_count=0,
+            classified_count=1,
             cached=False,
         )
     )
@@ -263,8 +284,43 @@ async def test_gene_tool_invokes_service_and_shapes() -> None:
     payload: dict[str, Any] = result.structured_content or {}
     assert payload["success"] is True
     assert payload["gene"] == "CFH"
-    assert payload["pathogenic_count"] == 1
     assert "match" not in payload["results"][0]
+    # Something WAS classified, so the counts are emitted.
+    assert payload["classifications_available"] is True
+    assert payload["pathogenic_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_gene_tool_omits_counts_when_upstream_classifies_nothing() -> None:
+    """LitVar2's gene endpoint carries no significance -- so report NONE, not zero.
+
+    `pathogenic_count: 0` over 13,264 BRCA1 variants is a false clinical claim
+    (issue #66 D3); silence is the only honest answer.
+    """
+    svc = _service()
+    svc.search_gene_variants = AsyncMock(
+        return_value=SimpleNamespace(
+            variants=[SimpleNamespace(model_dump=lambda: {"id": "litvar@rs1##", "pmids_count": 3})],
+            pathogenic_count=0,
+            benign_count=0,
+            uncertain_count=0,
+            unclassified_count=1,
+            classified_count=0,
+            cached=False,
+        )
+    )
+    mcp = FastMCP(name="t")
+    register_all(mcp, service_factory=lambda: svc)
+    tool = await _tool_by_name(mcp, "search_gene_variants")
+    result = await tool.run({"gene_symbol": "CFH", "limit": 10, "response_mode": "compact"})
+    payload: dict[str, Any] = result.structured_content or {}
+    assert payload["success"] is True
+    assert payload["classifications_available"] is False
+    assert payload["unclassified_count"] == 1
+    assert "pathogenic_count" not in payload
+    assert "benign_count" not in payload
+    assert "uncertain_count" not in payload
+    assert "not evidence of absent pathogenicity" in payload["classification_note"]
 
 
 @pytest.mark.asyncio

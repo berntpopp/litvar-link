@@ -23,6 +23,11 @@ def create_litvar_mcp(*, service_factory: Callable[[], Any]) -> FastMCP:
         version=__version__,
         instructions=INSTRUCTIONS,
         mask_error_details=True,
+        # Tool-Surface Budget v1 B4: the constructor defaults this to True and
+        # appends DereferenceRefsMiddleware, which inlines every $defs/$ref at
+        # every use site. Free to disable, and safe: 0 of our INPUT schemas
+        # contain a $ref, so no schema-driven client can be affected.
+        dereference_schemas=False,
     )
 
     # Guard the FastMCP-core not-found reflection surface: core echoes the

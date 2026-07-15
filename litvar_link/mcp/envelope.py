@@ -23,18 +23,18 @@ from typing import Any, Literal
 
 SOURCE_NAME = "litvar-link"
 
-# Closed error-code enum per Rules §2 (fleet-harmonized). ``response_limit_exceeded``
-# is a v1.1 untrusted-content addition (Response-Envelope Standard v1.1 §Limits):
-# a typed, non-masked classification for enforce_untrusted_text_limits ceilings --
-# distinct from ``internal`` so the client sees an actionable message instead of
-# an opaque masked one.
+# THE closed error-code enum (Response-Envelope Standard v1 Rules §2). Exactly
+# these six, and nothing else -- a client branching on error_code cannot handle a
+# code it has never heard of. litvar-link previously also shipped
+# ``response_limit_exceeded``; however sensible it read, it was outside the enum,
+# so it is now mapped onto ``invalid_input`` (the caller's fix is the same: lower
+# `limit` and retry).
 ErrorCode = Literal[
     "invalid_input",
     "not_found",
     "ambiguous_query",
     "upstream_unavailable",
     "rate_limited",
-    "response_limit_exceeded",
     "internal",
 ]
 

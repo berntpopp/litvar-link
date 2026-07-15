@@ -85,7 +85,9 @@ class TestVariantService:
         assert result.search_time_ms > 0
 
         # Verify client was called correctly
-        mock_client.search_variants.assert_called_once_with("CFH", limit=10)
+        # limit+1: the service OVER-FETCHES one row past the page so `has_more`
+        # is a fact rather than the old `len(rows) == limit` guess (issue #66 D2).
+        mock_client.search_variants.assert_called_once_with("CFH", limit=11)
 
     @pytest.mark.asyncio
     async def test_search_variants_caching(
@@ -448,10 +450,17 @@ class TestVariantService:
 
         result = await service.search_gene_variants("TEST")
 
-        # Verify statistics
+        # Verify statistics.
+        #
+        # NB: this test used to assert `uncertain_count == 2  # var3 + var4 (no
+        # clinical significance)` -- i.e. it RATIFIED issue #66 D3, the recoding
+        # of an absent field into a positive "uncertain" finding. var4 has no
+        # classification at all, so it is UNCLASSIFIED (unknown), not uncertain.
         assert result.pathogenic_count == 1
         assert result.benign_count == 1
-        assert result.uncertain_count == 2  # var3 + var4 (no clinical significance)
+        assert result.uncertain_count == 1  # var3 only: an explicit "uncertain significance"
+        assert result.unclassified_count == 1  # var4: LitVar2 said nothing
+        assert result.classified_count == 3
         assert result.total_publications == 19  # 10 + 5 + 3 + 1
 
     @pytest.mark.asyncio
@@ -775,8 +784,11 @@ class TestVariantService:
         # Mock client to raise exception
         mock_client.get_variant_details.side_effect = Exception("Details API error")
 
+        # A CANONICAL id, so the call goes straight to get_variant_details. A
+        # non-canonical id is now resolved via autocomplete first (issue #66 D1),
+        # which would never reach the details call this test is exercising.
         with pytest.raises(Exception, match="Details API error"):
-            await service.get_variant_summary("test_variant_id")
+            await service.get_variant_summary("litvar@rs1061170##")
 
     @pytest.mark.asyncio
     async def test_batch_variant_lookup_exception_handling(
@@ -810,24 +822,6 @@ class TestVariantService:
         assert len(results) == 2
         assert len(errors) == 1
         assert "Network error" in str(errors[0])
-
-    def test_cache_key_generation(self, service: VariantService) -> None:
-        """Test cache key generation logic."""
-        # Test the private method directly
-        key1 = service._generate_cache_key("search", query="BRCA1", limit=10)
-        key2 = service._generate_cache_key("search", query="BRCA1", limit=10)
-        key3 = service._generate_cache_key("search", query="CFH", limit=10)
-
-        # Same parameters should generate same key
-        assert key1 == key2
-
-        # Different parameters should generate different keys
-        assert key1 != key3
-
-        # Keys should contain operation and parameters
-        assert "search" in key1
-        assert "query:BRCA1" in key1
-        assert "limit:10" in key1
 
     def test_cache_config_handling(
         self,
@@ -875,7 +869,9 @@ class TestVariantService:
         assert result.query == "CFH"
 
         # Verify client was called with trimmed query
-        mock_client.search_variants.assert_called_with("CFH", limit=10)
+        # limit+1: the service OVER-FETCHES one row past the page so `has_more`
+        # is a fact rather than the old `len(rows) == limit` guess (issue #66 D2).
+        mock_client.search_variants.assert_called_with("CFH", limit=11)
 
     @pytest.mark.asyncio
     async def test_service_without_logger(

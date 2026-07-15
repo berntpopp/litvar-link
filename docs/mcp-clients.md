@@ -110,9 +110,14 @@ litvar-link gene CFH --limit 20
 
 - **`response_mode`** on data tools: `compact` (default, high-signal fields
   only) or `full` (the raw service payload).
-- **Limits and truncation**: list-returning tools take a `limit` and mark
-  over-limit results with `truncated: true` plus a total count, rather than
-  silently dropping data.
+- **Pagination**: list-returning tools take a `limit` and report
+  `_meta.pagination.{total_count, has_more, next_cursor}`. `total_count` is
+  LitVar2's real total where it supplies one, and `null` where it does not — the
+  autocomplete endpoint behind `search_genetic_variants` publishes no count, and
+  inventing one would tell you that you had seen everything when you had not.
+  `search_gene_variants` and `get_variant_literature` carry an opaque `cursor`
+  that pages through the entire set; an invalid cursor is an `invalid_input`
+  error, never a silent first page.
 - **`recommended_citation`**: literature results carry a PMID-based citation
   string. Paste it verbatim; never paraphrase or fabricate it.
 - **Errors** come in two classes. User-recoverable problems (empty query, out-of-

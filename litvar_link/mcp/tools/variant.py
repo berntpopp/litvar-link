@@ -14,36 +14,46 @@ from litvar_link.mcp.errors import ToolValidationError, run_tool
 from litvar_link.mcp.shaping import (
     collect_fenced_matches,
     fence_match_field,
-    untrusted_text_field_schema,
 )
 from litvar_link.mcp.untrusted_content import enforce_untrusted_text_limits
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
 
-_COMPACT_FIELDS = ("id", "rsid", "gene", "name", "pmids_count")
+# High-signal fields for compact mode. Includes the clinically meaningful ones a
+# curator actually asks this tool for (ClinGen ids, genomic position, reported
+# significance) -- the old projection dropped all three.
+_COMPACT_FIELDS = (
+    "id",
+    "rsid",
+    "gene",
+    "name",
+    "hgvs",
+    "pmids_count",
+    "clingen_ids",
+    "data_chromosome_base_position",
+    "data_clinical_significance",
+)
 
-_MATCH_SCHEMA, _MATCH_DEFS = untrusted_text_field_schema()
 
-# ``VariantDetails`` (the model ``get_variant_summary`` actually returns)
-# inherits ``match`` from ``Variant`` even though the "variant details"
-# upstream endpoint does not normally populate it -- fenced + schema-declared
-# defensively (missed-surface hunt) so an unexpected non-null value is never
-# passed through unfenced. See ``litvar_link/mcp/shaping.py`` module docstring.
-GET_VARIANT_SUMMARY_OUTPUT_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "result": {
-            "type": "object",
-            "properties": {"match": _MATCH_SCHEMA},
-            "additionalProperties": True,
-        },
-        "cached": {"type": "boolean"},
-    },
-    "required": ["result"],
-    "additionalProperties": True,
-    "$defs": _MATCH_DEFS,
-}
+# Parameter types hoisted to module level: the tool signature stays inside the
+# per-function LOC budget WITHOUT shortening a single description (descriptions
+# are what the model reads -- TOOL-SCHEMA-DOCUMENTATION-STANDARD S1/S6).
+VariantIdParam = Annotated[
+    str,
+    Field(
+        description=(
+            "LitVar2 variant id (litvar@rs...##), rsID, or HGVS/protein name. "
+            "Non-canonical input is resolved via autocomplete; the record that "
+            "actually answered is echoed back as `resolved_variant_id`."
+        ),
+        examples=["litvar@rs1061170##", "rs1061170"],
+    ),
+]
+ResponseModeParam = Annotated[
+    Literal["compact", "full"],
+    Field(description="compact (high-signal fields) or full (raw payload)."),
+]
 
 
 def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
@@ -53,17 +63,20 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
         name="get_variant_summary",
         title="Get Variant Summary",
         tags={"variant"},
-        output_schema=GET_VARIANT_SUMMARY_OUTPUT_SCHEMA,
+        output_schema=None,  # Tool-Surface Budget v1 B3: structuredContent is unaffected.
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def get_variant_summary(
-        variant_id: Annotated[str, Field(description="LitVar2 variant id or RSID/HGVS.")],
-        response_mode: Annotated[
-            Literal["compact", "full"],
-            Field(description="compact or full payload."),
-        ] = "compact",
+        variant_id: VariantIdParam,
+        response_mode: ResponseModeParam = "compact",
     ) -> dict[str, Any] | ToolResult:
-        """Return details for a known variant id. Research use only."""
+        """Return the LitVar2 record for a variant: gene, name, HGVS, ClinGen ids,
+        genomic position and the clinical significances LitVar2 reports for it.
+
+        Accepts a canonical LitVar id, an rsID, or HGVS/protein notation.
+
+        Research use only; not clinical decision support.
+        """
 
         async def body() -> dict[str, Any]:
             if not variant_id or not variant_id.strip():
@@ -82,6 +95,12 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
                 # Single-record tool: the default 128-object ceiling bounds
                 # this (at most one fenced field), per the fleet convention.
                 enforce_untrusted_text_limits(collect_fenced_matches([variant]))
-            return {"result": variant, "cached": data.get("cached", False)}
+            return {
+                "result": variant,
+                # Free text / an rsID is resolved via autocomplete, so the caller
+                # MUST be told which LitVar record actually answered.
+                "resolved_variant_id": data.get("resolved_variant_id"),
+                "cached": data.get("cached", False),
+            }
 
         return await run_tool("get_variant_summary", body)
