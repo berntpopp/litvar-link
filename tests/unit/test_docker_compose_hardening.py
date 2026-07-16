@@ -1,0 +1,73 @@
+"""Regression guards for the Compose files Strato actually deploys."""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+from typing import Any
+
+import pytest
+import yaml
+
+ROOT = Path(__file__).resolve().parents[2]  # tests/unit/<file> -> repository root
+DEPLOY_COMPOSE_FILES = (
+    "docker/docker-compose.yml",
+    "docker/docker-compose.npm.yml",
+)
+
+
+class ComposeLoader(yaml.SafeLoader):
+    """Safe YAML loader that preserves Compose extension-tag values."""
+
+
+def _construct_compose_tag(loader: ComposeLoader, _tag_suffix: str, node: yaml.Node) -> Any:
+    if isinstance(node, yaml.MappingNode):
+        return loader.construct_mapping(node)
+    if isinstance(node, yaml.SequenceNode):
+        return loader.construct_sequence(node)
+    return loader.construct_scalar(node)
+
+
+ComposeLoader.add_multi_constructor("!", _construct_compose_tag)
+
+
+def _load_compose(relative_path: str) -> dict[str, Any]:
+    content = (ROOT / relative_path).read_text(encoding="utf-8")
+    return yaml.load(content, Loader=ComposeLoader)  # noqa: S506 - local Compose config
+
+
+@pytest.mark.parametrize("compose_file", DEPLOY_COMPOSE_FILES)
+def test_deployed_compose_declares_runtime_hardening(compose_file: str) -> None:
+    service = _load_compose(compose_file)["services"]["litvar-link"]
+
+    assert service.get("read_only") is True
+    assert service.get("init") is True
+
+    tmpfs = service.get("tmpfs") or []
+    assert any(
+        isinstance(entry, str)
+        and entry.startswith("/tmp:")  # noqa: S108 - expected container mount path
+        and re.search(r"(?:^|,)size=\d+(?:[kmgt]b?|b)(?:,|$)", entry, re.IGNORECASE)
+        for entry in tmpfs
+    ), "litvar-link must mount a size-bounded tmpfs at /tmp"
+
+    assert "no-new-privileges:true" in (service.get("security_opt") or [])
+    assert "ALL" in (service.get("cap_drop") or [])
+
+
+def test_docker_npm_config_renders_only_the_files_strato_deploys() -> None:
+    lines = (ROOT / "Makefile").read_text(encoding="utf-8").splitlines()
+    target_index = next(
+        index for index, line in enumerate(lines) if line.startswith("docker-npm-config:")
+    )
+    recipe_lines = []
+    for line in lines[target_index + 1 :]:
+        if line.startswith("\t"):
+            recipe_lines.append(line)
+        elif recipe_lines:
+            break
+    recipe = "\n".join(recipe_lines)
+
+    assert "-f docker/docker-compose.yml" in recipe
+    assert "-f docker/docker-compose.npm.yml" in recipe
+    assert "docker/docker-compose.prod.yml" not in recipe
