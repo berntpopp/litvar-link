@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import shlex
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +38,15 @@ def _load_compose(relative_path: str) -> dict[str, Any]:
     return yaml.load(content, Loader=ComposeLoader)  # noqa: S506 - local Compose config
 
 
+def _is_hardened_tmpfs(entry: object) -> bool:
+    if not isinstance(entry, str) or not entry.startswith("/tmp:"):  # noqa: S108
+        return False
+    options = entry.removeprefix("/tmp:").split(",")  # noqa: S108 - container mount path
+    return "noexec" in options and any(
+        re.fullmatch(r"size=[1-9]\d*(?:[kmgt]b?|b)?", option, re.IGNORECASE) for option in options
+    )
+
+
 @pytest.mark.parametrize("compose_file", DEPLOY_COMPOSE_FILES)
 def test_deployed_compose_declares_runtime_hardening(compose_file: str) -> None:
     service = _load_compose(compose_file)["services"]["litvar-link"]
@@ -44,12 +55,9 @@ def test_deployed_compose_declares_runtime_hardening(compose_file: str) -> None:
     assert service.get("init") is True
 
     tmpfs = service.get("tmpfs") or []
-    assert any(
-        isinstance(entry, str)
-        and entry.startswith("/tmp:")  # noqa: S108 - expected container mount path
-        and re.search(r"(?:^|,)size=\d+(?:[kmgt]b?|b)(?:,|$)", entry, re.IGNORECASE)
-        for entry in tmpfs
-    ), "litvar-link must mount a size-bounded tmpfs at /tmp"
+    assert any(_is_hardened_tmpfs(entry) for entry in tmpfs), (
+        "litvar-link must mount a positive-size, noexec tmpfs at /tmp"
+    )
 
     assert "no-new-privileges:true" in (service.get("security_opt") or [])
     assert "ALL" in (service.get("cap_drop") or [])
@@ -67,7 +75,10 @@ def test_docker_npm_config_renders_only_the_files_strato_deploys() -> None:
         elif recipe_lines:
             break
     recipe = "\n".join(recipe_lines)
+    tokens = shlex.split(recipe)
+    compose_files = [operand for argument, operand in pairwise(tokens) if argument == "-f"]
 
-    assert "-f docker/docker-compose.yml" in recipe
-    assert "-f docker/docker-compose.npm.yml" in recipe
-    assert "docker/docker-compose.prod.yml" not in recipe
+    assert compose_files == [
+        "docker/docker-compose.yml",
+        "docker/docker-compose.npm.yml",
+    ]
