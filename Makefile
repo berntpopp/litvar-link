@@ -130,4 +130,4 @@ docker-prod-config: ## Render production Compose configuration
 
 docker-npm-config: ## Render NPM Compose configuration
 	LITVAR_LINK_IMAGE=$${LITVAR_LINK_IMAGE:-$(PLACEHOLDER_IMAGE)} \
-		$(DOCKER_COMPOSE) -f docker/docker-compose.yml -f docker/docker-compose.prod.yml -f docker/docker-compose.npm.yml --env-file .env.docker.example config
+		$(DOCKER_COMPOSE) -f docker/docker-compose.yml -f docker/docker-compose.npm.yml --env-file .env.docker.example config
