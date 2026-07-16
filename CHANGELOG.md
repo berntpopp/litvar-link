@@ -20,6 +20,11 @@ The behaviour gate now reports **CONFORMANT (42 pass, 0 fail, 0 UNGATED)**; it w
 
 ### Fixed
 
+- **The deployed container was not runtime-confined.** The hardening controls
+  existed only in an unused production overlay while Strato renders the base +
+  NPM Compose chain. Both actual deployment documents now enforce a read-only
+  root filesystem, bounded non-executable `/tmp`, no-new-privileges, dropped
+  capabilities, and an init process.
 - **`get_variant_summary` was a dead tool.** It answered `error_code: internal`
   for its own canonical id (the one `search_genetic_variants` hands back) and
   `invalid_input` for a bare rsID — every input form it advertised. The response

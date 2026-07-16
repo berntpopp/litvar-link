@@ -45,6 +45,17 @@ services:
     # explicit here so the NPM deployment contract remains visible in Compose.
     command: ["litvar-link", "serve", "unified", "--host", "0.0.0.0", "--port", "8000"]
 
+    # Override the base lists rather than appending duplicates in the deployed
+    # base+NPM Compose chain.
+    read_only: true
+    tmpfs: !override
+      - /tmp:rw,noexec,nosuid,size=64m,mode=1777
+    security_opt: !override
+      - no-new-privileges:true
+    cap_drop: !override
+      - ALL
+    init: true
+
     # Enhanced health check for NPM routing
     healthcheck:
       test: ["CMD", "curl", "-f", "-H", "Host: localhost", "http://localhost:8000/api/health/"]

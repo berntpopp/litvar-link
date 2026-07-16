@@ -39,6 +39,17 @@ services:
     # serves only the REST API and leaves /mcp unmounted (404); `serve unified` mounts
     # the MCP streamable-HTTP facade with its session-manager lifespan.
     command: ["litvar-link", "serve", "unified", "--host", "0.0.0.0", "--port", "8000"]
+
+    # Harden the runtime: the service is stateless, so its only writable path is
+    # bounded, non-executable scratch space at /tmp.
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    init: true
     
     # Health check
     healthcheck:
