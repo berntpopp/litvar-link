@@ -1,5 +1,8 @@
 # Phase 1 — Governance & Docs Implementation Plan
 
+> Historical record — this document records the plan as of its date. Current behavior is defined
+> by implemented code, standards, release evidence, and tests.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Land the sibling "house style" governance and documentation surface for litvar-link — `AGENTS.md` as source of truth, a minimal `CLAUDE.md`, a `1.0.0` CHANGELOG, refreshed `docs/`, an updated README, and a PR template — accurately describing P0 tooling while labelling the P3 module layout as the *target*.

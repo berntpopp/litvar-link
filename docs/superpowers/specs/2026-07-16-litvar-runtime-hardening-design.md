@@ -2,6 +2,10 @@
 
 - **Date:** 2026-07-16
 - **Status:** Approved for execution under the user's end-to-end release directive
+
+> Historical record — this document records the design as of its date. Current behavior is defined
+> by implemented code, standards, release evidence, and tests.
+
 - **Tracking issue:** [#67](https://github.com/berntpopp/litvar-link/issues/67)
 
 ## Context

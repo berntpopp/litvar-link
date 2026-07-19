@@ -1,5 +1,8 @@
 # litvar-link Stack Modernization — Master Plan
 
+> Historical record — this document records the plan as of its date. Current behavior is defined
+> by implemented code, standards, release evidence, and tests.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement the phase plans task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Bring `litvar-link` to the sibling `*-link` house style — modern Python tooling (hatchling + uv + ruff + mypy + make), a fast CI/CD suite, LLM-oriented governance docs (AGENTS.md + minimal CLAUDE.md), enforced file/function size budgets, and a DRY/KISS/SOLID refactor with an explicit MCP facade.

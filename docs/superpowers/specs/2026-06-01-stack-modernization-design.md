@@ -2,6 +2,10 @@
 
 - **Date:** 2026-06-01
 - **Status:** Revised after Claude review (2026-06-01); plan pending
+
+> Historical record — this document records the design as of its date. Current behavior is defined
+> by implemented code, standards, release evidence, and tests.
+
 - **Author:** Bernt Popp (with Claude Code)
 - **Topic:** Bring `litvar-link` to the sibling "house style" (`gnomad-link`, `autopvs1-link`, `pubtator-link`, `genereviews-link`) — modern Python tooling, LLM-oriented governance docs, file/function size discipline, and a DRY/KISS/SOLID code refactor.
 
