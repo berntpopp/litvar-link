@@ -6,11 +6,34 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [6.0.1] - 2026-07-30
+
+Consolidated Dependabot sweep. No runtime, REST or MCP surface changes.
+Research use only; not for clinical decision support.
+
 ### Changed
 
 - Re-vendored the behaviour conformance gate from genefoundry-router `56db958`
   (`docs/conformance/behaviour.py` blob `c69801687`) and live-validated this
   backend against the current behaviour gate.
+- **Lint policy is pinned to this repo instead of to Ruff's defaults.**
+  `[tool.ruff.lint]` now uses `select` rather than `extend-select`. Ruff 0.16
+  grew its implicit default rule set from 59 to 413 rules, so `extend-select`
+  would have silently enrolled the repo in ~350 rules it never opted into (47
+  findings, 22 of them false positives on the untrusted-content fixtures that
+  deliberately embed control and bidi characters). The rule list is unchanged
+  and already supersets Ruff's pre-0.16 default (`E4`/`E7`/`E9` + `F`), so the
+  enforced policy is byte-identical to 0.15.
+
+### Build
+
+- `fastapi` 0.139.0 -> 0.141.1, `prometheus-client` 0.25.0 -> 0.26.0,
+  `typer` 0.26.8 -> 0.27.0, `ruff` 0.15.21 -> 0.16.0,
+  `pre-commit` 4.6.0 -> 4.6.1.
+- Pinned GitHub Actions refreshed: `actions/checkout` v7.0.0 -> v7.0.1,
+  `actions/setup-python` v6.3.0 -> v7.0.0, `astral-sh/setup-uv` v8.3.2 ->
+  v9.0.0. Every SHA was verified against its upstream tag. The
+  `genefoundry-router` reusable-workflow pins are unchanged.
 
 ## [6.0.0] - 2026-07-15
 
