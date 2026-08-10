@@ -6,6 +6,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [6.0.3] - 2026-08-10
+
+Consolidated Dependabot maintenance release. No REST or MCP surface change.
+Research use only; not for clinical decision support.
+
+### Security
+
+- Updated locked `cryptography` to 50.0.0, closing CVE-2026-69247 while
+  preserving the fail-closed HIGH/CRITICAL container scan.
+
+### Changed
+
+- Updated Uvicorn to 0.52.1, Typer to 0.27.1, FastMCP to 3.4.6 and Ruff to
+  the current 0.16.x release.
+- Re-pinned both reusable container workflows to reviewed router v0.7.4.
+
 ## [6.0.2] - 2026-07-30
 
 CI now exercises the interpreter this project actually ships. No runtime, REST or
