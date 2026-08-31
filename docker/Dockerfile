@@ -39,9 +39,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     LITVAR_LINK_HOST=0.0.0.0 \
     LITVAR_LINK_PORT=8000
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    ca-certificates \
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
+        curl \
+        ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 

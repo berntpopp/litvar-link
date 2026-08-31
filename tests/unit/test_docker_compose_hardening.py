@@ -63,6 +63,11 @@ def test_deployed_compose_declares_runtime_hardening(compose_file: str) -> None:
     assert "ALL" in (service.get("cap_drop") or [])
 
 
+def test_production_compose_uses_an_approved_service_restart_policy() -> None:
+    service = _load_compose("docker/docker-compose.prod.yml")["services"]["litvar-link"]
+    assert service.get("restart") == "unless-stopped"
+
+
 def test_docker_npm_config_renders_only_the_files_strato_deploys() -> None:
     lines = (ROOT / "Makefile").read_text(encoding="utf-8").splitlines()
     target_index = next(
