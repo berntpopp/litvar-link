@@ -6,6 +6,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [6.0.4] - 2026-08-31
+
+- Consolidated current runtime, tooling, and workflow maintenance updates; both
+  reusable container workflows now pin the reviewed router v0.8.3 revision.
+
 ## [6.0.3] - 2026-08-10
 
 Consolidated Dependabot maintenance release. No REST or MCP surface change.
