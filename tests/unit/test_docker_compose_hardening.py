@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import shlex
 from itertools import pairwise
@@ -16,6 +17,7 @@ DEPLOY_COMPOSE_FILES = (
     "docker/docker-compose.yml",
     "docker/docker-compose.npm.yml",
 )
+NUMERIC_NON_ROOT_USER = re.compile(r"^[1-9][0-9]*:[1-9][0-9]*$")
 
 
 class ComposeLoader(yaml.SafeLoader):
@@ -87,3 +89,27 @@ def test_docker_npm_config_renders_only_the_files_strato_deploys() -> None:
         "docker/docker-compose.yml",
         "docker/docker-compose.npm.yml",
     ]
+
+
+def test_npm_compose_declares_a_numeric_non_root_user() -> None:
+    """The GeneFoundry fleet deploy contract wants a numeric non-root `user:` in the
+    deployed overlay so the controller's runtime observer can prove the effective uid from /proc."""
+    services = _load_compose("docker/docker-compose.npm.yml")["services"]
+    for name, service in services.items():
+        user = service.get("user")
+        assert user is not None and NUMERIC_NON_ROOT_USER.fullmatch(str(user)), (
+            f"{name} must declare a numeric non-root user (e.g. '10001:10001') "
+            f"in docker/docker-compose.npm.yml, got {user!r}"
+        )
+
+
+def test_release_compose_files_do_not_declare_user() -> None:
+    """The shared release gate (container_release.py validate-compose /
+    ALLOWED_SERVICE_KEYS) forbids `user` in the Compose files it builds and releases."""
+    release_config = json.loads((ROOT / "container-release.json").read_text(encoding="utf-8"))
+    for compose_file in release_config["service"]["compose_files"]:
+        services = _load_compose(compose_file)["services"]
+        for name, service in services.items():
+            assert "user" not in service, (
+                f"{name} must not declare user in release file {compose_file}"
+            )

@@ -68,6 +68,36 @@ Primary areas:
   fabricate citations. The `get_server_capabilities` tool documents the
   contract for cold clients.
 
+## Fleet Deploy Contract
+
+- `docker/docker-compose.npm.yml` is the overlay the GeneFoundry fleet
+  controller (`strato_v6_docker_npm`) actually deploys and validates. Every
+  service it defines must declare a numeric, non-root `user: "<uid>:<gid>"` —
+  this image's own value from `docker/Dockerfile` (`10001:10001` here), never
+  copied from a sibling `-link` repo. The controller's runtime observer proves
+  the effective uid from `/proc` at deploy time.
+- `user` must **not** appear in the Compose files listed in
+  `container-release.json` (`docker/docker-compose.yml`,
+  `docker/docker-compose.prod.yml`) — the shared release gate
+  (`container_release.py validate-compose`, `ALLOWED_SERVICE_KEYS`) forbids it
+  there and CI will fail the release build if it does.
+- `tests/unit/test_docker_compose_hardening.py` guards both sides of this
+  contract (`test_npm_compose_declares_a_numeric_non_root_user` and
+  `test_release_compose_files_do_not_declare_user`).
+- Release checklist this repo enforces: bump `pyproject.toml` by one PATCH,
+  `uv lock`, add a `CHANGELOG.md` heading `## [x.y.z] - YYYY-MM-DD`, bump
+  `version:` in `CITATION.cff` (a generated file — see below), tag `vx.y.z`,
+  then approve the `release` GitHub Environment gate via
+  `gh api repos/berntpopp/litvar-link/actions/runs/<id>/pending_deployments`
+  (it can gate twice; `status: waiting` is the approval gate, not a slow
+  build).
+- `CITATION.cff` is regenerated externally by `genefoundry-router`
+  (`make citation-write`) and its `date-released` is **not** asserted by any
+  test in this repo to track `CHANGELOG.md` — it lags real releases (e.g. it
+  can still read an older version/date between router syncs). A manual
+  release bump here should update only `version:` and leave `date-released`
+  alone unless a future test starts enforcing it.
+
 ## Commands
 
 Required checks before claiming completion:
