@@ -39,6 +39,30 @@ make docker-prod-config    # render the production Compose config (syntax/policy
 make docker-npm-config     # render the NPM Compose config
 ```
 
+### Fleet deploy contract (numeric user)
+
+`docker-compose.npm.yml` is the overlay the GeneFoundry fleet controller
+(`strato_v6_docker_npm`) deploys and validates; it declares
+`user: "10001:10001"` (this image's own uid:gid from `docker/Dockerfile`) so
+the controller's runtime observer can prove the effective uid from `/proc`.
+That `user` key must **not** appear in `docker-compose.yml` or
+`docker-compose.prod.yml` — the shared release gate forbids it there.
+`tests/unit/test_docker_compose_hardening.py` guards both sides. To self-check
+the merged render before deploying:
+
+```bash
+export LITVAR_LINK_IMAGE=ghcr.io/berntpopp/litvar-link@sha256:<digest>
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.npm.yml \
+  config --format json > /tmp/litvar-link-rendered.json
+# from a strato_v6_docker_npm checkout:
+uv run python -c "
+import sys, json; sys.path.insert(0, 'scripts')
+from utils.deployment_preflight import canonical_projection
+p = canonical_projection(json.load(open('/tmp/litvar-link-rendered.json')), project='litvar-link')
+for n, s in p['services'].items(): print(n, 'user=', s.get('user'))
+print('PROJECTION OK')"
+```
+
 ### The production overlay is digest-pinned
 
 `docker-compose.prod.yml` requires `LITVAR_LINK_IMAGE` and **refuses to render
