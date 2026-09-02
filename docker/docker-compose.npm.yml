@@ -69,7 +69,15 @@ services:
       retries: 3
       start_period: 60s
     
-    # Production resource limits
+    # Production resource limits. Restart policy is intentionally NOT set here:
+    # `restart: unless-stopped` (docker-compose.yml) is the only restart policy
+    # this service declares. Compose applies `deploy.restart_policy` instead of
+    # `restart` whenever both are present, so adding one here would silently
+    # swap the container onto `on-failure:3` -- it would not come back after a
+    # host reboot or a Docker upgrade, and the fleet controller's runtime
+    # observer would refuse to deploy it ("restart policy differs from
+    # Compose"). Keep this service on plain `restart: unless-stopped`, like
+    # every sibling -link service.
     deploy:
       resources:
         limits:
@@ -78,15 +86,7 @@ services:
         reservations:
           memory: 512M
           cpus: '0.5'
-      
-      # Production restart policy. max_attempts is only valid with
-      # condition: on-failure (Docker rejects it with condition: any).
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-        window: 120s
-    
+
     # Production logging with rotation
     logging:
       driver: "json-file"
