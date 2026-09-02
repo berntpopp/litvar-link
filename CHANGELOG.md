@@ -6,6 +6,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [6.0.7] - 2026-09-02
+
+- Deploy: declare `expose: ["8000"]` in `docker/docker-compose.npm.yml` (routing already
+  publishes no host port) so the fleet controller's `validate-deployed-overlay` gate passes;
+  bump both reusable container workflows to the reviewed router v0.8.5 revision and declare
+  `deployed_compose_files` in `container-release.json`.
+
 ## [6.0.6] - 2026-09-02
 
 - Deploy: drop the contradictory `deploy.restart_policy`; the container now restarts

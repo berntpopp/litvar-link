@@ -91,6 +91,15 @@ def test_docker_npm_config_renders_only_the_files_strato_deploys() -> None:
     ]
 
 
+def test_npm_compose_declares_expose_for_the_container_port() -> None:
+    """The fleet controller's validate-deployed-overlay gate refuses a rendered model
+    with no `expose` entry naming the image's container port: an undeclared port reads
+    as 'exposed ports differ from Compose'. docker-compose.npm.yml resets `ports` to
+    empty (NPM handles routing), so it must declare `expose: ["8000"]` itself."""
+    service = _load_compose("docker/docker-compose.npm.yml")["services"]["litvar-link"]
+    assert [str(port) for port in service.get("expose") or []] == ["8000"]
+
+
 def test_npm_compose_declares_a_numeric_non_root_user() -> None:
     """The GeneFoundry fleet deploy contract wants a numeric non-root `user:` in the
     deployed overlay so the controller's runtime observer can prove the effective uid from /proc."""
