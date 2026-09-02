@@ -103,6 +103,23 @@ def test_npm_compose_declares_a_numeric_non_root_user() -> None:
         )
 
 
+@pytest.mark.parametrize("compose_file", DEPLOY_COMPOSE_FILES)
+def test_no_service_declares_deploy_restart_policy(compose_file: str) -> None:
+    """Compose applies `deploy.restart_policy` instead of `restart` whenever both are
+    present, so a `deploy.restart_policy` block would silently swap the deployed
+    container onto Swarm's `on-failure` semantics -- it would not come back after a
+    host reboot or a Docker upgrade, and the fleet controller's runtime observer would
+    refuse to deploy it. Every service must rely solely on the top-level `restart:` key.
+    """
+    services = _load_compose(compose_file)["services"]
+    for name, service in services.items():
+        deploy = service.get("deploy") or {}
+        assert "restart_policy" not in deploy, (
+            f"{name} must not declare deploy.restart_policy in {compose_file}; "
+            "use restart: unless-stopped instead"
+        )
+
+
 def test_release_compose_files_do_not_declare_user() -> None:
     """The shared release gate (container_release.py validate-compose /
     ALLOWED_SERVICE_KEYS) forbids `user` in the Compose files it builds and releases."""
