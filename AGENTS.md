@@ -81,9 +81,25 @@ Primary areas:
   `docker/docker-compose.prod.yml`) — the shared release gate
   (`container_release.py validate-compose`, `ALLOWED_SERVICE_KEYS`) forbids it
   there and CI will fail the release build if it does.
-- `tests/unit/test_docker_compose_hardening.py` guards both sides of this
-  contract (`test_npm_compose_declares_a_numeric_non_root_user` and
-  `test_release_compose_files_do_not_declare_user`).
+- `docker/docker-compose.npm.yml` also declares `expose: ["8000"]` even
+  though `ports: !reset []` publishes nothing to the host: the controller's
+  `validate-deployed-overlay` gate refuses a rendered model with no `expose`
+  entry naming the image's container port.
+- `tests/unit/test_docker_compose_hardening.py` guards both sides of the
+  `user` contract (`test_npm_compose_declares_a_numeric_non_root_user` and
+  `test_release_compose_files_do_not_declare_user`) and the `expose`
+  declaration (`test_npm_compose_declares_expose_for_the_container_port`).
+- `container-release.json` declares `deployed_compose_files`
+  (`docker/docker-compose.yml`, `docker/docker-compose.npm.yml` — the exact
+  set Strato deploys, no `docker-compose.prod.yml`) so the shared reusable
+  workflow's `validate-deployed-overlay` gate checks the file set the
+  controller actually deploys rather than the release-only `compose_files`.
+  `container-release.yml` and `container-ci.yml` both pin their shared
+  workflow at `genefoundry-router` `v0.8.5`
+  (`31ea81cee5475fc3655c047c63a89739948f99a9`) — both must move together,
+  since both validate `container-release.json` against the same
+  `ReleaseConfig` pydantic schema (`extra="forbid"`); bumping only one leaves
+  the other rejecting `deployed_compose_files` as an unknown field.
 - Release checklist this repo enforces: bump `pyproject.toml` by one PATCH,
   `uv lock`, add a `CHANGELOG.md` heading `## [x.y.z] - YYYY-MM-DD`, bump
   `version:` in `CITATION.cff` (a generated file — see below), tag `vx.y.z`,

@@ -47,8 +47,17 @@ make docker-npm-config     # render the NPM Compose config
 the controller's runtime observer can prove the effective uid from `/proc`.
 That `user` key must **not** appear in `docker-compose.yml` or
 `docker-compose.prod.yml` — the shared release gate forbids it there.
-`tests/unit/test_docker_compose_hardening.py` guards both sides. To self-check
-the merged render before deploying:
+`docker-compose.npm.yml` also declares `expose: ["8000"]` (even though
+`ports: !reset []` publishes nothing) because the controller's
+`validate-deployed-overlay` gate refuses a rendered model with no `expose`
+entry naming the image's container port. `container-release.json`'s
+`deployed_compose_files` lists exactly the two files above — the set Strato
+deploys — so that gate checks what is actually deployed. `container-
+release.yml` and `container-ci.yml` both pin their shared workflow at
+`genefoundry-router` `v0.8.5` (`31ea81cee5475fc3655c047c63a89739948f99a9`), and
+must move together since both validate `container-release.json` against the
+same schema. `tests/unit/test_docker_compose_hardening.py` guards all of the
+above. To self-check the merged render before deploying:
 
 ```bash
 export LITVAR_LINK_IMAGE=ghcr.io/berntpopp/litvar-link@sha256:<digest>
