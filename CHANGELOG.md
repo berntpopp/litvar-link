@@ -6,6 +6,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [6.0.8] - 2026-09-18
+
+- Consolidated Dependabot dependency updates (pydantic, typer, gunicorn, ruff, mypy).
+- Updated action pins and reusable workflows to genefoundry-router v0.9.1.
+- Configured Dependabot grouping for python and github-actions ecosystems.
+
 ## [6.0.7] - 2026-09-02
 
 - Deploy: declare `expose: ["8000"]` in `docker/docker-compose.npm.yml` (routing already
