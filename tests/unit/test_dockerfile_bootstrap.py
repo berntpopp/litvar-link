@@ -29,3 +29,14 @@ def test_prepared_stage_applies_current_debian_security_upgrades() -> None:
     prepared = text.split("FROM scratch AS production", 1)[0]
 
     assert "apt-get upgrade -y --no-install-recommends" in prepared
+
+
+def test_runtime_image_removes_unused_package_installers() -> None:
+    """pip/setuptools and their vendored modules must not ship in production."""
+    text = (ROOT / "docker" / "Dockerfile").read_text(encoding="utf-8")
+    prepared = text.split("FROM scratch AS production", 1)[0]
+
+    assert "/usr/local/lib/python*/site-packages/pip*" in prepared
+    assert "/opt/venv/lib/python*/site-packages/pip*" in prepared
+    assert "/usr/local/lib/python*/site-packages/setuptools*" in prepared
+    assert "/opt/venv/lib/python*/site-packages/setuptools*" in prepared
