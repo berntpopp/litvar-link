@@ -60,7 +60,16 @@ COPY --chown=app:app ./docker/gunicorn_conf.py ./
 
 RUN /opt/venv/bin/pip install -e . --no-deps
 
-RUN rm -rf /root/.cache/pip /usr/local/lib/python*/ensurepip/_bundled/*.whl \
+# The runtime never installs packages. Remove pip and setuptools from both Python
+# installations so their vendored dependencies cannot ship inside the final image.
+RUN rm -rf /root/.cache/pip \
+    /usr/local/lib/python*/ensurepip/_bundled/*.whl \
+    /usr/local/lib/python*/site-packages/pip* \
+    /usr/local/lib/python*/site-packages/setuptools* \
+    /opt/venv/lib/python*/site-packages/pip* \
+    /opt/venv/lib/python*/site-packages/setuptools* \
+    /usr/local/bin/pip* /usr/local/bin/easy_install* \
+    /opt/venv/bin/pip* /opt/venv/bin/easy_install* \
     && find / -xdev -type d -name __pycache__ -prune -exec rm -rf '{}' + \
     && find / -xdev -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
 
