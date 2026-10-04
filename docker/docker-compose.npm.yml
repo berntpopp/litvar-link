@@ -65,6 +65,7 @@ services:
       - no-new-privileges:true
     cap_drop: !override
       - ALL
+    pids_limit: 256
     init: true
 
     # Enhanced health check for NPM routing
@@ -89,6 +90,7 @@ services:
         limits:
           memory: 1G
           cpus: '1.0'
+          pids: 256
         reservations:
           memory: 512M
           cpus: '0.5'

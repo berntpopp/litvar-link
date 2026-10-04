@@ -112,6 +112,14 @@ def test_npm_compose_declares_a_numeric_non_root_user() -> None:
         )
 
 
+def test_npm_compose_caps_the_running_process_count() -> None:
+    """The deployed service must map to a finite Docker HostConfig.PidsLimit."""
+    service = _load_compose("docker/docker-compose.npm.yml")["services"]["litvar-link"]
+
+    assert service.get("pids_limit") == 256
+    assert service["deploy"]["resources"]["limits"].get("pids") == 256
+
+
 @pytest.mark.parametrize("compose_file", DEPLOY_COMPOSE_FILES)
 def test_no_service_declares_deploy_restart_policy(compose_file: str) -> None:
     """Compose applies `deploy.restart_policy` instead of `restart` whenever both are

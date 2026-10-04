@@ -6,6 +6,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [6.0.10] - 2026-10-04
+
+- Cap the NPM deployment container at 256 processes in both Compose resource contracts.
+
 ## [6.0.9] - 2026-10-03
 
 - Update PyJWT to 2.15.0, AnyIO to 4.14.2, and virtualenv to 21.7.13; preserve the open orjson and Ruff targets.
