@@ -6,6 +6,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [6.0.11] - 2026-10-04
+
+### Fixed
+
+- Add HGVS normalization pass stripping transcript version decimals from RefSeq and Ensembl accession prefixes before querying NCBI LitVar2 (#134).
+
 ## [6.0.10] - 2026-10-04
 
 - Cap the NPM deployment container at 256 processes in both Compose resource contracts.

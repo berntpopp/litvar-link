@@ -7,6 +7,8 @@ both ``api.client`` and ``services.variant_service``. Every failure raises
 
 from __future__ import annotations
 
+import re
+
 from litvar_link.exceptions import ValidationError
 
 MAX_QUERY_LENGTH = 100
@@ -15,19 +17,34 @@ MIN_LIMIT = 1
 MAX_LIMIT = 100
 _MIN_RSID_LENGTH = 3
 
+_HGVS_VERSION_PATTERN = re.compile(r"\b([A-Za-z]{2,}_[0-9]+|ENS[A-Z]+[0-9]+)\.[0-9]+(?=:|\b)")
+
+
+def normalize_hgvs(text: str) -> str:
+    """Normalize HGVS notation by stripping transcript version decimals.
+
+    NCBI LitVar2 autocomplete/search does not match versioned RefSeq transcript
+    accessions (e.g. 'NM_001458.5:c.6651del' or 'NM_001458.5'), but succeeds when
+    queried with unversioned accessions ('NM_001458:c.6651del' or 'NM_001458').
+    """
+    if not text:
+        return text
+    return _HGVS_VERSION_PATTERN.sub(r"\1", text)
+
 
 def validate_query(query: str | None) -> str:
     """Validate and normalize a free-text search query.
 
-    Returns the stripped query. Raises ``ValidationError(field="query")``.
+    Returns the stripped and HGVS-normalized query. Raises ``ValidationError(field="query")``.
     """
     if not query or not query.strip():
         msg = "Query cannot be empty"
         raise ValidationError(msg, field="query")
-    if len(query) > MAX_QUERY_LENGTH:
+    normalized = normalize_hgvs(query.strip())
+    if len(normalized) > MAX_QUERY_LENGTH:
         msg = f"Query too long (max {MAX_QUERY_LENGTH} characters)"
         raise ValidationError(msg, field="query")
-    return query.strip()
+    return normalized
 
 
 def validate_limit(limit: int) -> int:

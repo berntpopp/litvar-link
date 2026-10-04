@@ -6,6 +6,7 @@ import pytest
 
 from litvar_link.exceptions import ValidationError
 from litvar_link.validation import (
+    normalize_hgvs,
     validate_gene_name,
     validate_limit,
     validate_query,
@@ -66,3 +67,32 @@ class TestValidateGeneName:
         with pytest.raises(ValidationError) as exc:
             validate_gene_name("G" * 51)
         assert exc.value.field == "gene_name"
+
+
+class TestNormalizeHgvs:
+    def test_strips_refseq_transcript_version(self) -> None:
+        assert normalize_hgvs("NM_001458.5:c.6651del") == "NM_001458:c.6651del"
+
+    def test_strips_refseq_genomic_version(self) -> None:
+        assert normalize_hgvs("NC_000001.11:g.12345A>G") == "NC_000001:g.12345A>G"
+
+    def test_strips_refseq_protein_version(self) -> None:
+        assert normalize_hgvs("NP_001449.1:p.Val600Glu") == "NP_001449:p.Val600Glu"
+
+    def test_strips_ensembl_version(self) -> None:
+        assert normalize_hgvs("ENST00000380152.8:c.6651del") == "ENST00000380152:c.6651del"
+
+    def test_strips_bare_refseq_accession_version(self) -> None:
+        assert normalize_hgvs("NM_001458.5") == "NM_001458"
+
+    def test_strips_version_in_spaced_query(self) -> None:
+        assert normalize_hgvs("NM_001458.5 c.6651del") == "NM_001458 c.6651del"
+
+    def test_leaves_unversioned_hgvs_unchanged(self) -> None:
+        assert normalize_hgvs("NM_001458:c.6651del") == "NM_001458:c.6651del"
+
+    def test_leaves_rsid_unchanged(self) -> None:
+        assert normalize_hgvs("rs1061170") == "rs1061170"
+
+    def test_validate_query_normalizes_hgvs_version(self) -> None:
+        assert validate_query("NM_001458.5:c.6651del") == "NM_001458:c.6651del"

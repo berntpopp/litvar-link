@@ -21,6 +21,7 @@ from litvar_link.services.significance import _count_clinical_significance
 from litvar_link.utils.caching import create_service_cache_decorator
 from litvar_link.validation import (
     MAX_LIMIT,
+    normalize_hgvs,
     validate_gene_name,
     validate_limit,
     validate_query,
@@ -247,7 +248,7 @@ class VariantService:
             msg = "Variant ID cannot be empty"
             raise ValidationError(msg, field="variant_id")
 
-        variant_id = variant_id.strip()
+        variant_id = normalize_hgvs(variant_id.strip())
         try:
             return await self._fetch_variant_details(variant_id)
         except ValidationError:
@@ -300,6 +301,7 @@ class VariantService:
         matches, so an unresolvable variant reads as a clear "not found" rather
         than a masked retry-later internal error.
         """
+        raw = normalize_hgvs(raw.strip())
         if _is_canonical_variant_id(raw):
             return raw
         search = await self.search_variants(raw, limit=1)
@@ -370,7 +372,7 @@ class VariantService:
             msg = "Variant ID cannot be empty"
             raise ValidationError(msg, field="variant_id")
 
-        variant_id = variant_id.strip()
+        variant_id = normalize_hgvs(variant_id.strip())
         try:
             resolved_id = await self._resolve_to_variant_id(variant_id)
             return await self._fetch_publication_response(resolved_id)

@@ -791,6 +791,26 @@ class TestVariantService:
             await service.get_variant_summary("litvar@rs1061170##")
 
     @pytest.mark.asyncio
+    async def test_get_variant_summary_normalizes_versioned_hgvs(
+        self,
+        service: VariantService,
+        mock_client: AsyncMock,
+        sample_variant_data: dict,
+    ) -> None:
+        """Test that get_variant_summary strips transcript version decimals from HGVS."""
+        mock_client.search_variants.return_value = [sample_variant_data]
+        mock_client.get_variant_details.return_value = {
+            "id": sample_variant_data["_id"],
+            "rsid": "rs113993960",
+            "gene": ["CFTR"],
+            "name": "c.1521_1523delCTT",
+        }
+
+        resp = await service.get_variant_summary("NM_001458.5:c.6651del")
+        assert resp.resolved_variant_id == sample_variant_data["_id"]
+        mock_client.search_variants.assert_awaited_once_with("NM_001458:c.6651del", limit=2)
+
+    @pytest.mark.asyncio
     async def test_batch_variant_lookup_exception_handling(
         self,
         service: VariantService,
