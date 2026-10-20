@@ -96,7 +96,7 @@ Primary areas:
   controller actually deploys rather than the release-only `compose_files`.
   `container-release.yml` and `container-ci.yml` both pin their shared
   workflow at `genefoundry-router` `v0.10.5`
-  (`e8931f0114bba3568517d1c7b1f990bea2be31af`) — both must move together,
+  (`bab3fb6bc9a9b2a9c87bd3d5aa9883a42bae039b`) — both must move together,
   since both validate `container-release.json` against the same
   `ReleaseConfig` pydantic schema (`extra="forbid"`); bumping only one leaves
   the other rejecting `deployed_compose_files` as an unknown field.

@@ -54,7 +54,7 @@ entry naming the image's container port. `container-release.json`'s
 `deployed_compose_files` lists exactly the two files above — the set Strato
 deploys — so that gate checks what is actually deployed. `container-
 release.yml` and `container-ci.yml` both pin their shared workflow at
-`genefoundry-router` `v0.10.5` (`e8931f0114bba3568517d1c7b1f990bea2be31af`), and
+`genefoundry-router` `v0.10.7` (`bab3fb6bc9a9b2a9c87bd3d5aa9883a42bae039b`), and
 must move together since both validate `container-release.json` against the
 same schema. `tests/unit/test_docker_compose_hardening.py` guards all of the
 above. To self-check the merged render before deploying:
