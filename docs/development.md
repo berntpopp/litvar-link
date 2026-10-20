@@ -5,7 +5,7 @@ runner. Do not use `pip` directly; `uv.lock` is the lock source of truth.
 
 ## Prerequisites
 
-- Python **3.12** (the project floor; see `.python-version`).
+- Python **3.14** (the project floor; see `.python-version`).
 - [`uv`](https://docs.astral.sh/uv/) installed.
 - GNU Make.
 
@@ -62,7 +62,7 @@ make test-cov       # coverage with fail_under=90
 | `make lint-fix` | Run Ruff lint with `--fix`. |
 | `make lint-ci` | Ruff lint in CI mode. |
 | `make lint-loc` | Enforce the 600-line file cap + ~60-line function cap. |
-| `make typecheck` | Run mypy (strict, py3.12). |
+| `make typecheck` | Run mypy (strict, py3.14). |
 | `make typecheck-fast` | Run mypy via the daemon, falling back to a fresh run. |
 
 ### Tests
@@ -129,6 +129,6 @@ uv run pre-commit run --all-files
 
 - Modern typing: `list[str]`, `dict[str, int]`, `str | None`.
 - Ruff is the single linter/formatter (line length 100).
-- mypy strict, targeting Python 3.12.
+- mypy strict, targeting Python 3.14.
 - Keep modules under 600 lines and functions under ~60 lines (see
   `AGENTS.md`).

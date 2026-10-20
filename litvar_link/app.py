@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Application lifespan manager."""
     logger = configure_logging()
     log_server_startup(logger, "startup", settings.host, settings.port)
@@ -77,7 +77,7 @@ def create_app(extra_lifespan: Any = None) -> FastAPI:
     else:
 
         @asynccontextmanager
-        async def app_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+        async def app_lifespan(app: FastAPI) -> AsyncGenerator[None]:
             async with lifespan(app), extra_lifespan(app):
                 yield
 

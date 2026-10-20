@@ -18,6 +18,7 @@ def test_repo_slug_uses_origin_in_an_isolated_worktree(
 
     class Result:
         stdout = "https://github.com/berntpopp/litvar-link.git\n"
+        returncode = 0
 
     monkeypatch.setattr(module.subprocess, "run", lambda *args, **kwargs: Result())
     assert module.repo_slug() == "litvar-link"

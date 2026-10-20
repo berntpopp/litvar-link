@@ -73,7 +73,7 @@ def parse_response_body(
     if looks_json:
         try:
             return json_loader()
-        except (ValueError, json.JSONDecodeError):
+        except ValueError, json.JSONDecodeError:
             if "\n" in text:
                 return parse_ndjson(text, logger)
             raise

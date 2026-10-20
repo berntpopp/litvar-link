@@ -171,7 +171,7 @@ class LitVar2Client:
                 raise UpstreamPolicyError(
                     "LitVar2 request blocked by the outbound URL/size policy.",
                 ) from None
-            except (LitVarAPIError, RateLimitError, ServiceUnavailableError):
+            except LitVarAPIError, RateLimitError, ServiceUnavailableError:
                 raise
             except httpx.TimeoutException as exc:
                 last_error = ServiceUnavailableError(f"Request timeout: {url}")
