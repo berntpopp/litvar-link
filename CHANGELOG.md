@@ -6,6 +6,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [6.0.12] - 2026-10-20
+
+### Security
+
+- Raise the `mcp` floor to `>=1.30.0` and lock `mcp` 1.30.0 to clear the open Dependabot alert (medium).
+
+### Changed
+
+- Dependency bumps: `mcp` 1.30.0, `fastapi`, `pydantic`, `pydantic-core`, `pydantic-settings`, `ruff`, `mypy`, `pre-commit`, `typer`, and other transitive packages.
+- GitHub Actions bumps: `astral-sh/setup-uv` v10.3.0, `actions/upload-artifact` v7.0.2, `github/codeql-action` v4.38.3.
+- Pin the genefoundry-router reusable workflows to v0.10.4.
+
 ## [6.0.11] - 2026-10-04
 
 ### Fixed
