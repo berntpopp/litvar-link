@@ -21,7 +21,7 @@ def get_logger() -> FilteringBoundLogger:
 
 async def get_litvar_client(
     logger: Annotated[FilteringBoundLogger, Depends(get_logger)],
-) -> AsyncGenerator[LitVar2Client, None]:
+) -> AsyncGenerator[LitVar2Client]:
     """Get LitVar2 API client instance."""
     config = get_api_config()
     client = LitVar2Client(config=config, logger=logger)

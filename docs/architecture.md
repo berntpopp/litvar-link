@@ -64,7 +64,7 @@ litvar-link/
 |- uv.lock                            # committed
 |- README.md
 |- .pre-commit-config.yaml
-|- .python-version                    # 3.12
+|- .python-version                    # 3.14
 |- .editorconfig
 |- .env.example, .env.docker.example
 |- .loc-allowlist

@@ -1,6 +1,6 @@
 # litvar-link
 
-[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![CI](https://github.com/berntpopp/litvar-link/actions/workflows/ci.yml/badge.svg)](https://github.com/berntpopp/litvar-link/actions/workflows/ci.yml)
 [![Conformance](https://github.com/berntpopp/litvar-link/actions/workflows/conformance.yml/badge.svg)](https://github.com/berntpopp/litvar-link/actions/workflows/conformance.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -39,7 +39,7 @@ The GeneFoundry fleet hosts an instance — nothing to install:
 claude mcp add --transport http litvar https://litvar-link.genefoundry.org/mcp
 ```
 
-To run your own (Python 3.12+, [uv](https://docs.astral.sh/uv/), GNU Make). There is **no
+To run your own (Python 3.14+, [uv](https://docs.astral.sh/uv/), GNU Make). There is **no
 data build step** — LitVar-Link proxies the live LitVar2 API:
 
 ```bash
