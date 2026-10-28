@@ -816,7 +816,7 @@ wheels = [
 
 [[package]]
 name = "litvar-link"
-version = "6.0.14"
+version = "6.0.15"
 source = { editable = "." }
 dependencies = [
     { name = "asgi-correlation-id" },
