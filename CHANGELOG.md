@@ -6,6 +6,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [6.0.14] - 2026-10-28
+
+### Security
+
+- Authlib 1.9.1 (CVE-2026-96760 critical, CVE-2026-114615/114616 high) and dnspython 2.9.0
+  (CVE-2026-114605 high); both transitive, lock-only bump.
+
 ## [6.0.13] - 2026-10-20
 
 ### Security
