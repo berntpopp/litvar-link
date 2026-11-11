@@ -6,6 +6,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [6.0.16] - 2026-11-11
+
+### Security
+
+- Fleet dependency sweep: joserfc 1.8.0 (GHSA joserfc alerts 51/52), fastmcp/fastmcp-slim 3.4.11 (floor
+  raised to >=3.4.10), filelock 4.2.10, virtualenv 21.15.6, plus a full `uv lock --upgrade`.
+- GitHub Actions: setup-python v7.1.0, setup-uv v10.3.3, codeql-action v4.39.1.
+
 ## [6.0.15] - 2026-10-28
 
 ### Fixed
