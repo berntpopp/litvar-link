@@ -95,8 +95,8 @@ Primary areas:
   workflow's `validate-deployed-overlay` gate checks the file set the
   controller actually deploys rather than the release-only `compose_files`.
   `container-release.yml` and `container-ci.yml` both pin their shared
-  workflow at `genefoundry-router` `v0.10.5`
-  (`5fed6be02ea0a598b56f7d1a69efcc47ff5796c8`) — both must move together,
+  workflow at `genefoundry-router` `v0.10.17`
+  (`2cd86e35373cc7b1bdd8686ed9c69ca584b00ed9`) — both must move together,
   since both validate `container-release.json` against the same
   `ReleaseConfig` pydantic schema (`extra="forbid"`); bumping only one leaves
   the other rejecting `deployed_compose_files` as an unknown field.
