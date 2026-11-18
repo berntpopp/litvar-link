@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 from litvar_link.mcp.errors import ToolValidationError, run_tool
 

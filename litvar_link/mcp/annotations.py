@@ -18,10 +18,10 @@ from mcp.types import ToolAnnotations
 def read_only_annotations(*, open_world: bool = True) -> ToolAnnotations:
     """Return a complete read-only / non-destructive / idempotent annotation."""
     return ToolAnnotations(
-        readOnlyHint=True,
-        destructiveHint=False,
-        idempotentHint=True,
-        openWorldHint=open_world,
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=open_world,
     )
 
 

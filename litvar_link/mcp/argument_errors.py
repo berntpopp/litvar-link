@@ -38,7 +38,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 from pydantic import ValidationError as PydanticValidationError
 
 from litvar_link.mcp.envelope import error_envelope

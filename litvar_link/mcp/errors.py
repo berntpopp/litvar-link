@@ -29,7 +29,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 from litvar_link.exceptions import (
     LitVarAPIError,

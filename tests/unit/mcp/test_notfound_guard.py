@@ -38,7 +38,7 @@ from fastmcp import Client
 from fastmcp.server.providers.base import Provider
 from mcp.shared.memory import create_client_server_memory_streams
 from mcp.shared.message import SessionMessage
-from mcp.types import JSONRPCMessage, JSONRPCNotification, JSONRPCRequest
+from mcp.types import JSONRPCNotification, JSONRPCRequest
 
 from litvar_link.mcp.facade import create_litvar_mcp
 from litvar_link.mcp.notfound_guard import _SCRUBBED_MESSAGE
@@ -82,6 +82,7 @@ _SERVER_LOG_LOGGERS = (
     "fastmcp.server.server",
     "fastmcp.server.mixins.mcp_operations",
     "mcp.server.lowlevel.server",
+    "mcp.server.runner",
     "mcp.shared.session",
 )
 #: Client-side (caller/host) loggers -- excluded: a separate process in the fleet.
@@ -169,18 +170,17 @@ async def _raw_request(method: str, params: dict[str, Any]) -> tuple[str, str]:
                         server_read,
                         server_write,
                         srv.create_initialization_options(),
-                        stateless=False,
                         raise_exceptions=False,
                     )
                 )
 
                 async def send(obj: Any) -> None:
-                    await client_write.send(SessionMessage(JSONRPCMessage(obj)))
+                    await client_write.send(SessionMessage(obj))
 
                 async def recv(req_id: int) -> str:
                     with anyio.move_on_after(2.0):
                         async for msg in client_read:
-                            root = msg.message.root if not isinstance(msg, Exception) else None
+                            root = msg.message if not isinstance(msg, Exception) else None
                             if root is not None and getattr(root, "id", None) == req_id:
                                 return str(root.model_dump_json())
                     return "<timeout>"
@@ -238,6 +238,7 @@ async def test_unknown_tool_name_not_reflected_via_client() -> None:
 async def test_unknown_tool_name_not_reflected_via_raw() -> None:
     """The raw tools/call path: caller frame + all server logs are name-free."""
     response, logs = await _raw_request("tools/call", {"name": HOSTILE_TOOL_NAME, "arguments": {}})
+    assert json.loads(response)["result"]["isError"] is True
     _assert_no_leak(response)
     _assert_no_leak(logs)
 
@@ -264,6 +265,7 @@ async def test_unknown_prompt_name_not_reflected_via_raw() -> None:
     response, logs = await _raw_request(
         "prompts/get", {"name": HOSTILE_PROMPT_NAME, "arguments": {}}
     )
+    assert json.loads(response)["error"]["code"] == -32602
     _assert_no_leak(response)
     _assert_no_leak(logs)
 
@@ -276,6 +278,7 @@ async def test_hostile_resource_uri_no_caller_or_log_leak_raw(uri: str) -> None:
     """A raw JSON-RPC ``resources/read`` with a hostile URI must not reflect it into
     the caller-visible JSON-RPC error or any server log record."""
     response, logs = await _raw_request("resources/read", {"uri": uri})
+    assert json.loads(response)["error"]["code"] == -32602
     _assert_no_leak(response)
     _assert_no_leak(logs)
 
