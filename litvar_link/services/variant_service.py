@@ -37,6 +37,10 @@ if TYPE_CHECKING:
 
 _ModelT = TypeVar("_ModelT")
 
+# Autocomplete candidates fetched when resolving free text, so the response can
+# say honestly whether the top hit was the only match.
+_RESOLVE_CANDIDATES = 10
+
 
 class VariantService:
     """Service for variant operations with caching and business logic."""
@@ -293,25 +297,44 @@ class VariantService:
         )
 
     async def _resolve_to_variant_id(self, raw: str) -> str:
-        """Resolve free-text / rsID / HGVS to a canonical LitVar id.
+        """Resolve free-text / rsID / HGVS to a canonical LitVar id (top hit)."""
+        resolved_id, _ = await self._resolve_variant(raw, candidates=1)
+        return resolved_id
+
+    async def _resolve_variant(
+        self, raw: str, *, candidates: int = _RESOLVE_CANDIDATES
+    ) -> tuple[str, dict[str, Any]]:
+        """Resolve free-text / rsID / HGVS to a canonical LitVar id + provenance.
 
         Already-canonical ids (``litvar@...``) pass through untouched; otherwise
-        the autocomplete endpoint resolves the top hit. Raises ``ValidationError``
-        (a user-recoverable error the tool surfaces verbatim) when nothing
-        matches, so an unresolvable variant reads as a clear "not found" rather
-        than a masked retry-later internal error.
+        the autocomplete endpoint's TOP hit is used and the returned dict names
+        it, plus how many other candidates matched, so a caller can never get
+        literature for a different variant than it meant without being told.
+        Raises ``ValidationError`` (user-recoverable) when nothing matches.
         """
         raw = normalize_hgvs(raw.strip())
         if _is_canonical_variant_id(raw):
-            return raw
-        search = await self.search_variants(raw, limit=1)
+            return raw, {"query": raw, "variant_id": raw, "resolved_from": "canonical_id"}
+        search = await self.search_variants(raw, limit=candidates)
         if not search.variants:
             msg = (
                 f"No LitVar2 variant found for {raw!r}. "
                 "Use search_genetic_variants to find the variant id."
             )
             raise ValidationError(msg, field="variant_id")
-        return search.variants[0].id
+        top = search.variants[0]
+        return top.id, {
+            "query": raw,
+            "variant_id": top.id,
+            "rsid": top.rsid,
+            "gene": top.gene,
+            "name": top.name,
+            "hgvs": top.hgvs,
+            "resolved_from": "autocomplete_top_hit",
+            "other_candidates_count": len(search.variants) - 1,
+            # True when the candidate list was capped: the count is a lower bound.
+            "other_candidates_truncated": search.has_more,
+        }
 
     async def _fetch_publication_response(self, resolved_id: str) -> PublicationResponse:
         """Fetch + shape publications for an already-canonical LitVar id."""
@@ -374,8 +397,10 @@ class VariantService:
 
         variant_id = normalize_hgvs(variant_id.strip())
         try:
-            resolved_id = await self._resolve_to_variant_id(variant_id)
-            return await self._fetch_publication_response(resolved_id)
+            resolved_id, resolved = await self._resolve_variant(variant_id)
+            response = await self._fetch_publication_response(resolved_id)
+            response.resolved_variant = resolved
+            return response
         except ValidationError:
             raise  # already a clean, user-recoverable message
         except LitVarAPIError as e:

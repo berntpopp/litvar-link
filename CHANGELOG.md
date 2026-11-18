@@ -6,6 +6,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [6.2.0] - 2026-11-18
+
+### Added
+
+- `get_variant_literature` now names the variant whose PMIDs it lists
+  (`resolved_variant`: original query, LitVar id, rsID, gene, name, HGVS and
+  `resolved_from`). Free text resolves to the top autocomplete hit; the response
+  reports `other_candidates_count` (+ `other_candidates_truncated`) and, when other
+  candidates exist, `_meta.next_commands` points to `search_genetic_variants` (#167).
+
 ## [6.1.0] - 2026-11-18
 
 ### Changed

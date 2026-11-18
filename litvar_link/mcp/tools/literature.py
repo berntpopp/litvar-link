@@ -84,7 +84,14 @@ async def _literature_body(
     # permanently unreachable through the MCP surface).
     shaped = paginate(rows, limit=limit, offset=offset, total_count=len(rows))
     shaped["variant_id"] = variant_id.strip()
+    # Free text resolves to the TOP autocomplete hit: name the variant actually used.
+    resolved = resp.resolved_variant or {}
+    shaped["resolved_variant"] = resolved
     shaped["cached"] = resp.cached
+    if resolved.get("other_candidates_count"):
+        shaped["_meta"]["next_commands"] = [
+            {"tool": "search_genetic_variants", "arguments": {"query": resolved["query"]}}
+        ]
     return shaped
 
 
@@ -105,8 +112,10 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
     ) -> dict[str, Any] | ToolResult:
         """Return PMIDs for a variant; each row carries a recommended_citation.
 
-        Accepts a canonical LitVar id, an rsID, or HGVS/free text -- non-canonical
-        input is auto-resolved to the LitVar id via autocomplete. An unresolvable
+        Accepts a canonical LitVar id, an rsID, or HGVS/free text. Resolves free
+        text to the top LitVar match and reports which variant was used
+        (`resolved_variant`, with `other_candidates_count`; when >0,
+        `_meta.next_commands` points to search_genetic_variants). An unresolvable
         variant returns a recoverable "not found" message (use
         search_genetic_variants), not an internal error.
 
