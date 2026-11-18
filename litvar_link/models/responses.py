@@ -86,6 +86,13 @@ class PublicationResponse(BaseResponse):
         default=False,
         description="Whether results were served from cache",
     )
+    resolved_variant: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "The LitVar variant whose PMIDs are listed, the original query, how it "
+            "was resolved, and how many other autocomplete candidates matched"
+        ),
+    )
 
     @property
     def pmids(self) -> list[str]:

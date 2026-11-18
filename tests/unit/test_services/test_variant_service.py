@@ -542,6 +542,37 @@ class TestVariantService:
         assert result.total_count == 2
 
     @pytest.mark.asyncio
+    async def test_get_variant_literature_reports_resolved_top_hit_and_others(
+        self,
+        service: VariantService,
+        mock_client: AsyncMock,
+    ) -> None:
+        """Issue #167: free text resolves to the top autocomplete hit, and the
+        response names that variant and counts the other candidates."""
+        mock_client.search_variants.return_value = [
+            {
+                "_id": "litvar@rs28934578##",
+                "rsid": "rs28934578",
+                "gene": ["TP53"],
+                "name": "p.R175H",
+                "pmids_count": 9,
+            },
+            {"_id": "litvar@rs1##", "gene": ["X"], "name": "p.R175H", "pmids_count": 1},
+        ]
+        mock_client.get_variant_publications.return_value = ["1"]
+
+        result = await service.get_variant_literature("R175H")
+
+        resolved = result.resolved_variant
+        assert resolved is not None
+        assert resolved["query"] == "R175H"
+        assert resolved["variant_id"] == "litvar@rs28934578##"
+        assert resolved["gene"] == ["TP53"]
+        assert resolved["resolved_from"] == "autocomplete_top_hit"
+        assert resolved["other_candidates_count"] == 1
+        assert resolved["other_candidates_truncated"] is False
+
+    @pytest.mark.asyncio
     async def test_get_variant_literature_canonical_id_skips_resolution(
         self,
         service: VariantService,
@@ -557,6 +588,11 @@ class TestVariantService:
             "litvar@rs1061170##",
         )
         assert result.variant_id == "litvar@rs1061170##"
+        assert result.resolved_variant == {
+            "query": "litvar@rs1061170##",
+            "variant_id": "litvar@rs1061170##",
+            "resolved_from": "canonical_id",
+        }
 
     @pytest.mark.asyncio
     async def test_get_variant_literature_unresolvable_raises_validation(

@@ -170,6 +170,7 @@ async def test_literature_tool_adds_recommended_citation() -> None:
         return_value=SimpleNamespace(
             publications=[SimpleNamespace(pmid="32511357"), SimpleNamespace(pmid="123")],
             cached=True,
+            resolved_variant={"query": "litvar@rs1##", "resolved_from": "canonical_id"},
         )
     )
     mcp = FastMCP(name="t")
@@ -183,6 +184,33 @@ async def test_literature_tool_adds_recommended_citation() -> None:
     assert first["pmid"] == "32511357"
     assert "32511357" in first["recommended_citation"]
     assert payload["cached"] is True
+
+
+@pytest.mark.asyncio
+async def test_literature_tool_names_resolved_variant_and_points_to_search() -> None:
+    """Issue #167: an ambiguous free-text query must say which variant answered."""
+    resolved = {
+        "query": "R175H",
+        "variant_id": "litvar@rs28934578##",
+        "resolved_from": "autocomplete_top_hit",
+        "other_candidates_count": 9,
+        "other_candidates_truncated": True,
+    }
+    svc = _service()
+    svc.get_variant_literature = AsyncMock(
+        return_value=SimpleNamespace(
+            publications=[SimpleNamespace(pmid="1")], cached=False, resolved_variant=resolved
+        )
+    )
+    mcp = FastMCP(name="t")
+    register_all(mcp, service_factory=lambda: svc)
+    tool = await _tool_by_name(mcp, "get_variant_literature")
+    result = await tool.run({"variant_id": "R175H", "limit": 25})
+    payload: dict[str, Any] = result.structured_content or {}
+    assert payload["resolved_variant"] == resolved
+    assert payload["_meta"]["next_commands"] == [
+        {"tool": "search_genetic_variants", "arguments": {"query": "R175H"}}
+    ]
 
 
 @pytest.mark.asyncio
