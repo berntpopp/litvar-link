@@ -37,10 +37,10 @@ async def test_every_tool_has_complete_readonly_annotations() -> None:
     for name in _ALL_TOOLS:
         ann = tools[name].annotations
         assert ann is not None, f"{name} missing ToolAnnotations"
-        assert ann.readOnlyHint is True, f"{name} readOnlyHint must be True"
-        assert ann.destructiveHint is False, f"{name} destructiveHint must be False"
-        assert ann.idempotentHint is True, f"{name} idempotentHint must be True"
-        assert ann.openWorldHint is not None, f"{name} openWorldHint must be set"
+        assert ann.read_only_hint is True, f"{name} readOnlyHint must be True"
+        assert ann.destructive_hint is False, f"{name} destructiveHint must be False"
+        assert ann.idempotent_hint is True, f"{name} idempotentHint must be True"
+        assert ann.open_world_hint is not None, f"{name} openWorldHint must be set"
 
 
 @pytest.mark.asyncio
@@ -83,5 +83,5 @@ async def test_data_tools_are_open_world_capabilities_is_closed() -> None:
     # The five LitVar2-backed tools reach an external API (open world); the
     # static capabilities tool does not.
     for name in _ALL_TOOLS - {"get_server_capabilities"}:
-        assert tools[name].annotations.openWorldHint is True, name
-    assert tools["get_server_capabilities"].annotations.openWorldHint is False
+        assert tools[name].annotations.open_world_hint is True, name
+    assert tools["get_server_capabilities"].annotations.open_world_hint is False

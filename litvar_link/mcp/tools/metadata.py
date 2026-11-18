@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 from litvar_link.mcp.annotations import READ_ONLY_CLOSED_WORLD
 from litvar_link.mcp.capabilities import server_capabilities
