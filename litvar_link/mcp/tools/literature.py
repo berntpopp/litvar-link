@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Annotated, Any
 from fastmcp.tools import ToolResult
 from pydantic import Field
 
-from litvar_link.exceptions import ValidationError
 from litvar_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from litvar_link.mcp.errors import ToolValidationError, run_tool
 from litvar_link.mcp.shaping import (
@@ -68,11 +67,10 @@ async def _literature_body(
     if not variant_id or not variant_id.strip():
         msg = "variant_id cannot be empty"
         raise ToolValidationError(msg)
-    try:
-        offset = decode_cursor(cursor)
-        resp = await service.get_variant_literature(variant_id.strip())
-    except ValidationError as exc:
-        raise ToolValidationError(str(exc)) from exc
+    # Service ValidationError / VariantNotFoundError reach run_tool unwrapped so
+    # an unknown variant classifies `not_found`, not `invalid_input` (issue #170).
+    offset = decode_cursor(cursor)
+    resp = await service.get_variant_literature(variant_id.strip())
 
     rows = [
         {"pmid": pub.pmid, "recommended_citation": recommended_citation(pub.pmid)}

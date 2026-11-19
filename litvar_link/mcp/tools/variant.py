@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal
 from fastmcp.tools import ToolResult
 from pydantic import Field
 
-from litvar_link.exceptions import ValidationError
 from litvar_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from litvar_link.mcp.errors import ToolValidationError, run_tool
 from litvar_link.mcp.shaping import (
@@ -82,10 +81,8 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
             if not variant_id or not variant_id.strip():
                 msg = "variant_id cannot be empty"
                 raise ToolValidationError(msg)
-            try:
-                resp = await service_factory().get_variant_summary(variant_id.strip())
-            except ValidationError as exc:
-                raise ToolValidationError(str(exc)) from exc
+            # Unwrapped: run_tool maps VariantNotFoundError to `not_found` (#170).
+            resp = await service_factory().get_variant_summary(variant_id.strip())
             data: dict[str, Any] = resp.model_dump()
             variant = data.get("variant") or {}
             if response_mode == "compact":

@@ -906,3 +906,15 @@ class TestMakeRequestDecomposition:
 
         assert hasattr(mod.LitVar2Client, "_send_request_once")
         assert hasattr(mod.LitVar2Client, "_record_success")
+
+
+@pytest.mark.asyncio
+async def test_health_check_upstream_probe_is_cached() -> None:
+    """Issue #170: a health check must not hit LitVar2 on every probe."""
+    config = APIConfig(base_url="https://test-litvar.api.example.com/")
+    async with LitVar2Client(config=config) as client:
+        with patch.object(client, "search_variants", AsyncMock(return_value=[])) as probe:
+            first = await client.health_check()
+            second = await client.health_check()
+        assert first["status"] == second["status"] == "healthy"
+        assert probe.await_count == 1

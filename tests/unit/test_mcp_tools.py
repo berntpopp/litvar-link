@@ -411,3 +411,30 @@ async def test_call_tool_masks_internal_detail_but_keeps_request_id() -> None:
     payload = _error_payload(result)
     assert "secret" not in payload["message"]  # no upstream detail leaks
     assert payload["_meta"]["request_id"]  # but a support handle reaches the agent
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool_name", "method"),
+    [
+        ("get_variant_literature", "get_variant_literature"),
+        ("get_variant_summary", "get_variant_summary"),
+    ],
+)
+async def test_unknown_variant_is_not_found_not_invalid_input(tool_name: str, method: str) -> None:
+    """Issue #170: a well-formed id LitVar2 has no record for is `not_found`."""
+    from litvar_link.exceptions import VariantNotFoundError
+
+    svc = _service()
+    setattr(
+        svc,
+        method,
+        AsyncMock(side_effect=VariantNotFoundError("No LitVar2 variant found", field="variant_id")),
+    )
+    mcp = FastMCP(name="t")
+    register_all(mcp, service_factory=lambda: svc)
+    tool = await _tool_by_name(mcp, tool_name)
+    result = await tool.run({"variant_id": "rs000000000"})
+    payload = _error_payload(result)
+    assert payload["error_code"] == "not_found"
+    assert payload["retryable"] is False

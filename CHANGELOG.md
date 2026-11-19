@@ -6,6 +6,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [6.2.1] - 2026-11-19
+
+### Fixed
+
+- An unknown variant in `get_variant_literature` / `get_variant_summary` is now
+  `not_found` (was `invalid_input`, which made models rewrite valid ids) (#170).
+- `mcp_argument_error` log lines name the failing fields and pydantic error types
+  (`fields=limit:int_parsing`), never the value (#170).
+- `/api/health/` caches its LitVar2 probe for 5 min, so the 30 s container
+  healthcheck no longer calls LitVar2 on every run (#170).
+
 ## [6.2.0] - 2026-11-18
 
 ### Added

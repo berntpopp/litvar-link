@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from litvar_link.exceptions import LitVarAPIError, ValidationError
+from litvar_link.exceptions import LitVarAPIError, ValidationError, VariantNotFoundError
 from litvar_link.logging_config import log_error_with_context
 from litvar_link.models import (
     GeneVariantsResponse,
@@ -263,7 +263,7 @@ class VariantService:
                     f"LitVar2 has no variant record for {variant_id!r} (variant not found). "
                     "Use search_genetic_variants to find a valid variant id."
                 )
-                raise ValidationError(msg, field="variant_id") from e
+                raise VariantNotFoundError(msg, field="variant_id") from e
             self._log_summary_error(e, variant_id)
             raise
         except Exception as e:
@@ -321,7 +321,7 @@ class VariantService:
                 f"No LitVar2 variant found for {raw!r}. "
                 "Use search_genetic_variants to find the variant id."
             )
-            raise ValidationError(msg, field="variant_id")
+            raise VariantNotFoundError(msg, field="variant_id")
         top = search.variants[0]
         return top.id, {
             "query": raw,
@@ -410,7 +410,7 @@ class VariantService:
                     "(variant not found). Use search_genetic_variants to find a "
                     "valid variant id."
                 )
-                raise ValidationError(msg, field="variant_id") from e
+                raise VariantNotFoundError(msg, field="variant_id") from e
             self._log_literature_error(e, variant_id)
             raise
         except Exception as e:

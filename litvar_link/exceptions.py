@@ -49,6 +49,15 @@ class ValidationError(LitVarAPIError):
         return self.message
 
 
+class VariantNotFoundError(ValidationError):
+    """The input is well-formed but LitVar2 has no matching variant (maps to ``not_found``)."""
+
+    def __init__(self, message: str, field: str | None = None) -> None:
+        """Initialize with HTTP 404 so the MCP error mapping answers ``not_found``."""
+        super().__init__(message, field=field)
+        self.status_code = 404
+
+
 class RateLimitError(LitVarAPIError):
     """Exception raised when rate limit is exceeded."""
 

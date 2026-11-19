@@ -420,3 +420,21 @@ async def test_d4_error_messages_never_echo_a_caller_supplied_value() -> None:
     # but it MUST still tell the model what IS allowed
     assert "response_mode" in blob
     assert "compact" in blob and "full" in blob
+
+
+@pytest.mark.asyncio
+async def test_argument_error_log_names_fields_never_values(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Issue #170: the log names the failing field + error type, never the value."""
+    hostile_value = "SECRET_VALUE_XYZ"
+    with caplog.at_level("WARNING", logger="litvar_link.mcp.notfound_guard"):
+        async with build_client() as client:
+            await call(
+                client, "get_variant_literature", {"variant_id": "rs1", "limit": hostile_value}
+            )
+
+    lines = [r.getMessage() for r in caplog.records if "mcp_argument_error" in r.getMessage()]
+    assert lines, "argument error was not logged"
+    assert "fields=limit:int_parsing" in lines[0]
+    assert hostile_value not in caplog.text
