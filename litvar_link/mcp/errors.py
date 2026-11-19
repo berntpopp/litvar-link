@@ -36,6 +36,7 @@ from litvar_link.exceptions import (
     RateLimitError,
     ServiceUnavailableError,
     UpstreamPolicyError,
+    VariantNotFoundError,
 )
 from litvar_link.exceptions import ValidationError as LitVarValidationError
 from litvar_link.mcp.envelope import ErrorCode, error_envelope, success_envelope
@@ -91,6 +92,8 @@ def _classify(exc: Exception) -> tuple[ErrorCode, bool, str]:
     both subclass ``LitVarAPIError``, so they MUST be checked first or they fall
     through to the generic (status-code-driven) ``LitVarAPIError`` branch.
     """
+    if isinstance(exc, VariantNotFoundError):  # #170: before its ValidationError parent
+        return _classify_api_error(exc)
     if isinstance(exc, ToolValidationError | LitVarValidationError):
         return (
             "invalid_input",
@@ -98,9 +101,7 @@ def _classify(exc: Exception) -> tuple[ErrorCode, bool, str]:
             "Fix the offending argument per the message and retry with corrected input.",
         )
     if isinstance(exc, UntrustedTextLimitError):
-        # Was ``response_limit_exceeded`` -- outside the closed six-code enum, so a
-        # client branching on error_code could not handle it. ``invalid_input`` is
-        # the honest fit: the caller's own `limit` is what must change.
+        # Was off-enum ``response_limit_exceeded``; the caller's `limit` must change.
         return (
             "invalid_input",
             False,

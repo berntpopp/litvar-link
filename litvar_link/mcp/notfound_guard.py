@@ -64,7 +64,7 @@ from fastmcp.tools import ToolResult
 from mcp.shared.exceptions import MCPError
 from mcp_types import INVALID_PARAMS, METHOD_NOT_FOUND
 
-from litvar_link.mcp.argument_errors import argument_error_result
+from litvar_link.mcp.argument_errors import argument_error_fields, argument_error_result
 from litvar_link.mcp.envelope import error_envelope
 
 logger = logging.getLogger(__name__)
@@ -149,7 +149,11 @@ class NotFoundGuard(Middleware):
             # argument error on a real tool. Answer with a message the model can
             # act on, built only from our own schema (never from caller values).
             schema = getattr(tool, "parameters", None)
-            logger.warning("mcp_argument_error tool=%s", name if isinstance(name, str) else "?")
+            logger.warning(
+                "mcp_argument_error tool=%s fields=%s",
+                name if isinstance(name, str) else "?",
+                argument_error_fields(exc),
+            )
             return argument_error_result(
                 str(name),
                 schema if isinstance(schema, dict) else {},

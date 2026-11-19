@@ -66,6 +66,8 @@ class LitVar2Client:
 
     # Keep only the most recent response times for statistics.
     _RESPONSE_TIME_WINDOW = 100
+    # A 30 s container healthcheck must not call LitVar2 every time (issue #170).
+    _HEALTH_TTL_SECONDS = 300.0
 
     def __init__(
         self,
@@ -85,6 +87,7 @@ class LitVar2Client:
         self.total_requests = 0
         self.successful_requests = 0
         self.response_times: list[float] = []
+        self._health_cache: tuple[float, dict[str, Any]] | None = None
 
         # Initialize rate limiter
         self.rate_limiter = TokenBucketRateLimiter(
@@ -393,8 +396,19 @@ class LitVar2Client:
         """Perform health check on LitVar2 API.
 
         Returns:
-            Health status dictionary
+            Health status dictionary (the upstream probe result is cached for
+            ``_HEALTH_TTL_SECONDS``, failures included, so a probe storm or a
+            transient 429 cannot hammer LitVar2 or flap health).
         """
+        cached = self._health_cache
+        if cached and time.monotonic() - cached[0] < self._HEALTH_TTL_SECONDS:
+            return cached[1]
+        result = await self._probe_upstream()
+        self._health_cache = (time.monotonic(), result)
+        return result
+
+    async def _probe_upstream(self) -> dict[str, Any]:
+        """One live autocomplete call against LitVar2."""
         try:
             # Use a simple autocomplete query as health check
             start_time = time.time()

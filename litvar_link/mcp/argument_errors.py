@@ -129,6 +129,18 @@ def _pydantic_errors(exc: Exception) -> list[Any]:
     return []
 
 
+def argument_error_fields(exc: Exception) -> str:
+    """``name:type`` pairs for the log -- field NAMES and pydantic error types only.
+
+    Never a value; a caller-chosen name is grammar-gated like the message.
+    """
+    pairs = [
+        f"{_safe_name(str((e.get('loc') or ('?',))[0]))}:{_safe_name(str(e.get('type') or '?'))}"
+        for e in _pydantic_errors(exc)
+    ]
+    return ",".join(_dedupe(pairs)) or "?"
+
+
 def describe_argument_error(tool_name: str, schema: dict[str, Any], exc: Exception) -> str:
     """Build the caller-visible message. Contains NO caller-supplied value."""
     properties: dict[str, Any] = dict(schema.get("properties") or {})
