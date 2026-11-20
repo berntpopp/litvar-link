@@ -8,6 +8,7 @@ both ``api.client`` and ``services.variant_service``. Every failure raises
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from litvar_link.exceptions import ForeignIdentifierError, ValidationError
 
@@ -96,22 +97,25 @@ def validate_gene_name(gene_name: str | None, *, field: str = "gene_name") -> st
 # UniProt accessions are deliberately absent: their shape collides with real gene
 # symbols (P2RY12), so they cannot be told apart without a lookup.
 _XREF = "hgnc_resolve_gene_by_xref"
+# re.ASCII everywhere: \d must not accept non-ASCII digits, since matched text is
+# echoed into next_commands arguments.
+_FLAGS = re.IGNORECASE | re.ASCII
 _FOREIGN_GENE_FORMS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("Ensembl gene id", re.compile(r"ENSG\d{11}(\.\d+)?", re.IGNORECASE)),
-    ("Ensembl transcript id", re.compile(r"ENST\d{11}(\.\d+)?", re.IGNORECASE)),
-    ("HGNC id", re.compile(r"HGNC:\d+", re.IGNORECASE)),
-    ("RefSeq accession", re.compile(r"[NX][MRP]_\d+(\.\d+)?", re.IGNORECASE)),
-    ("NCBI Gene id", re.compile(r"(?:NCBIGENE:|GENEID:|ENTREZ:)?(\d+)", re.IGNORECASE)),
+    ("Ensembl gene id", re.compile(r"ENSG\d{11}(\.\d+)?", _FLAGS)),
+    ("Ensembl transcript id", re.compile(r"ENST\d{11}(\.\d+)?", _FLAGS)),
+    ("HGNC id", re.compile(r"HGNC:\d+", _FLAGS)),
+    ("RefSeq accession", re.compile(r"[NX][MRP]_\d+(\.\d+)?", _FLAGS)),
+    ("NCBI Gene id", re.compile(r"(?:NCBIGENE:|GENEID:|ENTREZ:)?(\d+)", _FLAGS)),
 )
 _GENE_ALLOWED = ["HGNC gene symbol, e.g. KRAS"]
 
-# chr12:25245350, 12-25245350-C-T, 12:25245350:C:T, chr12:25245350C>T, 12:100-200
-_GENOMIC_COORDINATE = re.compile(
-    r"(?:chr)?(?:[1-9]|1\d|2[0-2]|X|Y|MT?)[:\-_]\d+"
-    r"(?:[:\-_]?[ACGTN]+[:\-_>/][ACGTN]+|-\d+)?",
-    re.IGNORECASE,
-)
-_GENOMIC_HGVS = re.compile(r"(?:NC_\d+(?:\.\d+)?|chr[0-9XYM]+):g\.\S+", re.IGNORECASE)
+_CHROM_POS = r"(?:chr)?(?:[1-9]|1\d|2[0-2]|X|Y|MT?)[:\-_]\d+"
+# 12-25245350-C-T, 12:25245350:C:T, chr12:25245350C>T
+_COORDINATE_ALLELES = re.compile(_CHROM_POS + r"[:\-_]?[ACGTN]+[:\-_>/][ACGTN]+", _FLAGS)
+# chr12:25245350, 7:100-200 -- a position or range names no variant
+_COORDINATE_POSITION = re.compile(_CHROM_POS + r"(?:-\d+)?", _FLAGS)
+# Printable ASCII only after ``:g.``, and capped: this text is echoed to the recoder.
+_GENOMIC_HGVS = re.compile(r"NC_\d+(?:\.\d+)?:g\.[!-~]{1,200}", _FLAGS)
 _VARIANT_ALLOWED = [
     "rsID, e.g. rs1061170",
     "LitVar id, e.g. litvar@rs1061170##",
@@ -155,22 +159,34 @@ def genomic_variant_error(
 ) -> ForeignIdentifierError | None:
     """Return the ``invalid_input`` error for a genomic coordinate / g. HGVS, else None.
 
-    LitVar2 indexes variants by rsID and by gene-anchored HGVS; it has no
-    position lookup, so a coordinate must be converted (vep-link recodes
-    coordinates <-> rsID <-> HGVS). ``coordinates_only`` skips genomic HGVS: the
-    service lets LitVar2 try that first, and the MCP tools call this again with
-    the caller's own (still versioned) text once LitVar2 has not resolved it.
+    LitVar2 indexes variants by rsID and by gene-anchored HGVS; it has no position
+    lookup. Only an ``NC_...:g.`` HGVS gets a converter call (vep-link's recoder reads
+    rsID, HGVS and SPDI): no fleet tool is verified to turn CHR-POS-REF-ALT into an
+    rsID, and a position or range without alleles names no variant at all.
+
+    ``coordinates_only`` skips genomic HGVS: the service lets LitVar2 try that first,
+    and the MCP tools call this again with the caller's own (still versioned) text
+    once LitVar2 has not resolved it.
     """
     value = value.strip()
-    if not _GENOMIC_COORDINATE.fullmatch(value) and (
-        coordinates_only or not _GENOMIC_HGVS.fullmatch(value)
-    ):
+    commands: list[dict[str, Any]] = []
+    if _COORDINATE_ALLELES.fullmatch(value):
+        what = "a genomic coordinate"
+        hint = "LitVar2 needs the variant's rsID or HGVS; look it up and retry with that."
+    elif _COORDINATE_POSITION.fullmatch(value):
+        what = "a genomic position or range without alleles, which names no variant"
+        hint = "Give the variant itself as an rsID or HGVS; a position alone is not enough."
+    elif not coordinates_only and _GENOMIC_HGVS.fullmatch(value):
+        what = "a genomic (g.) HGVS"
+        hint = "Convert it to an rsID or a c./p. HGVS first, then retry with that."
+        commands = [{"tool": "vep_recode_variant", "arguments": {"variants": [value]}}]
+    else:
         return None
     return ForeignIdentifierError(
-        f"{field} looks like a genomic coordinate; LitVar2 has no position lookup, so this "
-        "says nothing about whether the variant has literature.",
+        f"{field} looks like {what}; LitVar2 has no position lookup, so this says "
+        "nothing about whether the variant has literature.",
         field=field,
         allowed_values=_VARIANT_ALLOWED,
-        hint="Convert the coordinate to an rsID or HGVS first, then retry with that.",
-        next_commands=[{"tool": "vep_recode_variant", "arguments": {"variants": [value]}}],
+        hint=hint,
+        next_commands=commands,
     )

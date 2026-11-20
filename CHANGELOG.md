@@ -17,10 +17,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Ensembl transcript id is named as such, with no converter call
   (genefoundry-router #343).
 - `get_variant_literature` / `get_variant_summary` given a genomic coordinate
-  (`12-25245350-C-T`, `chr12:25245350`, or an `NC_…:g.` HGVS that LitVar2 does not
-  resolve) return `invalid_input` pointing to `vep_recode_variant` instead of
-  `not_found` naming `search_genetic_variants`, which cannot read coordinates either.
-  A bare coordinate is no longer sent to the free-text autocomplete.
+  (`12-25245350-C-T`, `chr12:25245350`) return `invalid_input` saying LitVar2 needs an
+  rsID or HGVS, instead of `not_found` naming `search_genetic_variants`, which cannot
+  read coordinates either. A bare coordinate is no longer sent to the free-text
+  autocomplete. No converter call is attached to a coordinate; an `NC_…:g.` HGVS that
+  LitVar2 does not resolve points to `vep_recode_variant`.
 - `search_genetic_variants` returns the same `invalid_input` when it finds nothing
   for one of these identifier forms; free text without hits stays an empty page.
 - The REST gene route answers such gene ids with 400 instead of an empty list.

@@ -482,9 +482,29 @@ async def test_gene_tool_real_symbol_without_variants_stays_an_honest_empty() ->
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("method", ["get_variant_literature", "get_variant_summary"])
-@pytest.mark.parametrize("variant", ["12-25245350-C-T", "NC_000012.12:g.25245350C>T"])
-async def test_unresolved_genomic_form_points_to_the_recoder(method: str, variant: str) -> None:
-    """A coordinate LitVar2 could not resolve is `invalid_input`, not "no literature"."""
+@pytest.mark.parametrize(
+    ("variant", "commands"),
+    [
+        ("12-25245350-C-T", None),
+        ("chr12:25245350", None),
+        (
+            "NC_000012.12:g.25245350C>T",
+            [
+                {
+                    "tool": "vep_recode_variant",
+                    "arguments": {"variants": ["NC_000012.12:g.25245350C>T"]},
+                }
+            ],
+        ),
+    ],
+)
+async def test_unresolved_genomic_form_is_invalid_input(
+    method: str, variant: str, commands: list[dict[str, Any]] | None
+) -> None:
+    """A coordinate LitVar2 could not resolve is `invalid_input`, not "no literature".
+
+    Only the g. HGVS carries a converter call (the caller's own text, version kept).
+    """
     from litvar_link.exceptions import VariantNotFoundError
 
     svc = _service()
@@ -495,10 +515,8 @@ async def test_unresolved_genomic_form_points_to_the_recoder(method: str, varian
     payload = _error_payload(await tool.run({"variant_id": variant}))
     assert payload["error_code"] == "invalid_input"
     assert payload["field"] == "variant_id"
-    # The caller's own text (version kept) goes to the converter, not back to this tool.
-    assert payload["_meta"]["next_commands"] == [
-        {"tool": "vep_recode_variant", "arguments": {"variants": [variant]}}
-    ]
+    assert "rsID" in payload["hint"]
+    assert payload["_meta"].get("next_commands") == commands
 
 
 @pytest.mark.asyncio

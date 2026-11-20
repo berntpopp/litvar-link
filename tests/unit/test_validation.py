@@ -6,6 +6,7 @@ import pytest
 
 from litvar_link.exceptions import ForeignIdentifierError, ValidationError
 from litvar_link.validation import (
+    foreign_gene_error,
     genomic_variant_error,
     normalize_hgvs,
     validate_gene_name,
@@ -137,15 +138,44 @@ class TestForeignIdentifierForms:
         assert validate_gene_name(symbol) == symbol.upper()
 
     @pytest.mark.parametrize(
-        "value",
-        ["12-25245350-C-T", "chr12:25245350", "12:25245350:C:T", "chr12:25245350C>T", "X-100-200"],
+        ("value", "word"),
+        [
+            ("12-25245350-C-T", "rsID"),
+            ("12:25245350:C:T", "rsID"),
+            ("chr12:25245350C>T", "rsID"),
+            ("chr12:25245350", "position alone"),
+            ("X-100-200", "position alone"),
+        ],
     )
-    def test_coordinate_points_to_the_recoder(self, value: str) -> None:
+    def test_coordinate_gets_no_converter_call(self, value: str, word: str) -> None:
+        """No fleet tool is verified to turn a coordinate into an rsID: name none."""
         error = genomic_variant_error(value, coordinates_only=True)
         assert error is not None
+        assert error.next_commands == []
+        assert word in error.hint
+
+    def test_genomic_hgvs_points_to_the_recoder(self) -> None:
+        hgvs = "NC_000012.12:g.25245350C>T"
+        error = genomic_variant_error(hgvs)
+        assert error is not None
         assert error.next_commands == [
-            {"tool": "vep_recode_variant", "arguments": {"variants": [value]}}
+            {"tool": "vep_recode_variant", "arguments": {"variants": [hgvs]}}
         ]
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "NC_000012.12:g.25245350C>T\u200b",  # zero-width space
+            "NC_000012.12:g.\u202e25245350C>T",  # bidi override
+            "NC_000012.12:g." + "A" * 201,  # over the cap
+            "\u0661\u0662-25245350-C-T",  # Arabic-Indic digits
+            "ENSG\u0660\u0660\u0660\u0660\u0660133703",
+            "\u0663\u0668\u0664\u0665",
+        ],
+    )
+    def test_hostile_text_is_never_echoed_into_a_command(self, value: str) -> None:
+        assert genomic_variant_error(value) is None
+        assert foreign_gene_error(value, field="gene_symbol") is None
 
     def test_genomic_hgvs_only_when_asked(self) -> None:
         hgvs = "NC_000012.12:g.25245350C>T"

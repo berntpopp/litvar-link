@@ -33,7 +33,7 @@ VariantIdParam = Annotated[
         description=(
             "LitVar id (litvar@rs...##), rsID, or HGVS/free text. "
             "Non-canonical input is resolved via autocomplete. Genomic coordinates "
-            "are rejected with the converter call to run first."
+            "are not accepted: pass an rsID or HGVS."
         ),
         examples=["rs1061170", "litvar@rs1061170##"],
     ),
