@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 from fastmcp.tools import ToolResult
 from pydantic import Field
 
+from litvar_link.exceptions import VariantNotFoundError
 from litvar_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from litvar_link.mcp.errors import ToolValidationError, run_tool
 from litvar_link.mcp.shaping import (
@@ -17,6 +18,7 @@ from litvar_link.mcp.shaping import (
     paginate,
     recommended_citation,
 )
+from litvar_link.validation import genomic_variant_error
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -30,7 +32,8 @@ VariantIdParam = Annotated[
     Field(
         description=(
             "LitVar id (litvar@rs...##), rsID, or HGVS/free text. "
-            "Non-canonical input is resolved via autocomplete."
+            "Non-canonical input is resolved via autocomplete. Genomic coordinates "
+            "are rejected with the converter call to run first."
         ),
         examples=["rs1061170", "litvar@rs1061170##"],
     ),
@@ -70,7 +73,10 @@ async def _literature_body(
     # Service ValidationError / VariantNotFoundError reach run_tool unwrapped so
     # an unknown variant classifies `not_found`, not `invalid_input` (issue #170).
     offset = decode_cursor(cursor)
-    resp = await service.get_variant_literature(variant_id.strip())
+    try:
+        resp = await service.get_variant_literature(variant_id.strip())
+    except VariantNotFoundError as exc:
+        raise genomic_variant_error(variant_id) or exc from exc
 
     rows = [
         {"pmid": pub.pmid, "recommended_citation": recommended_citation(pub.pmid)}

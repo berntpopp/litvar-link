@@ -438,3 +438,84 @@ async def test_unknown_variant_is_not_found_not_invalid_input(tool_name: str, me
     payload = _error_payload(result)
     assert payload["error_code"] == "not_found"
     assert payload["retryable"] is False
+
+
+# --- genefoundry-router #343: identifiers in a namespace LitVar2 does not take ---
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("gene", ["ENSG00000133703", "HGNC:6407", "3845"])
+async def test_gene_tool_foreign_id_is_invalid_input_with_converter(gene: str) -> None:
+    svc = _service()
+    mcp = FastMCP(name="t")
+    register_all(mcp, service_factory=lambda: svc)
+    tool = await _tool_by_name(mcp, "search_gene_variants")
+    payload = _error_payload(await tool.run({"gene_symbol": gene}))
+    assert payload["error_code"] == "invalid_input"
+    assert payload["field"] == "gene_symbol"
+    assert payload["allowed_values"] == ["HGNC gene symbol, e.g. KRAS"]
+    assert payload["hint"]
+    first = payload["_meta"]["next_commands"][0]
+    assert first["tool"] in {"hgnc_resolve_symbol", "hgnc_resolve_gene_by_xref"}
+    assert gene in first["arguments"].values()
+    svc.search_gene_variants.assert_not_called()  # never sent upstream as a "symbol"
+
+
+@pytest.mark.asyncio
+async def test_gene_tool_real_symbol_without_variants_stays_an_honest_empty() -> None:
+    svc = _service()
+    svc.search_gene_variants = AsyncMock(
+        return_value=SimpleNamespace(
+            variants=[], classified_count=0, unclassified_count=0, cached=False
+        )
+    )
+    mcp = FastMCP(name="t")
+    register_all(mcp, service_factory=lambda: svc)
+    tool = await _tool_by_name(mcp, "search_gene_variants")
+    result = await tool.run({"gene_symbol": "KRAS"})
+    assert result.is_error is False
+    payload = result.structured_content
+    assert payload["success"] is True
+    assert payload["results"] == []
+    assert payload["_meta"]["pagination"]["total_count"] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["get_variant_literature", "get_variant_summary"])
+@pytest.mark.parametrize("variant", ["12-25245350-C-T", "NC_000012.12:g.25245350C>T"])
+async def test_unresolved_genomic_form_points_to_the_recoder(method: str, variant: str) -> None:
+    """A coordinate LitVar2 could not resolve is `invalid_input`, not "no literature"."""
+    from litvar_link.exceptions import VariantNotFoundError
+
+    svc = _service()
+    setattr(svc, method, AsyncMock(side_effect=VariantNotFoundError("x", field="variant_id")))
+    mcp = FastMCP(name="t")
+    register_all(mcp, service_factory=lambda: svc)
+    tool = await _tool_by_name(mcp, method)
+    payload = _error_payload(await tool.run({"variant_id": variant}))
+    assert payload["error_code"] == "invalid_input"
+    assert payload["field"] == "variant_id"
+    # The caller's own text (version kept) goes to the converter, not back to this tool.
+    assert payload["_meta"]["next_commands"] == [
+        {"tool": "vep_recode_variant", "arguments": {"variants": [variant]}}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_search_tool_empty_for_a_foreign_id_is_invalid_input() -> None:
+    svc = _service()
+    svc.search_variants = AsyncMock(
+        return_value=SimpleNamespace(variants=[], has_more=False, cached=False)
+    )
+    mcp = FastMCP(name="t")
+    register_all(mcp, service_factory=lambda: svc)
+    tool = await _tool_by_name(mcp, "search_genetic_variants")
+    payload = _error_payload(await tool.run({"query": "ENSG00000133703"}))
+    assert payload["error_code"] == "invalid_input"
+    assert payload["field"] == "query"
+    assert payload["_meta"]["next_commands"][0]["tool"] == "hgnc_resolve_symbol"
+    # Free text with no hits, and a bare number, keep the honest empty page.
+    for query in ("no such variant text", "12345"):
+        result = await tool.run({"query": query})
+        assert result.is_error is False
+        assert result.structured_content["results"] == []

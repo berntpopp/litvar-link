@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal
 from fastmcp.tools import ToolResult
 from pydantic import Field
 
-from litvar_link.exceptions import ValidationError
+from litvar_link.exceptions import ForeignIdentifierError, ValidationError
 from litvar_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from litvar_link.mcp.errors import ToolValidationError, run_tool
 from litvar_link.mcp.shaping import (
@@ -30,7 +30,13 @@ if TYPE_CHECKING:
 # are what the model reads -- TOOL-SCHEMA-DOCUMENTATION-STANDARD S1/S6).
 GeneSymbolParam = Annotated[
     str,
-    Field(description="HGNC gene symbol, e.g. CFH.", examples=["BRCA1"]),
+    Field(
+        description=(
+            "HGNC gene symbol, e.g. CFH. Symbols only: an Ensembl, HGNC, NCBI or RefSeq "
+            "id is rejected with the converter call to run first."
+        ),
+        examples=["BRCA1"],
+    ),
 ]
 LimitParam = Annotated[
     int,
@@ -96,8 +102,10 @@ async def _gene_body(
 ) -> dict[str, Any]:
     """Fetch a gene's variants and shape an honest page."""
     try:
-        clean = validate_gene_name(gene_symbol)
+        clean = validate_gene_name(gene_symbol, field="gene_symbol")
         offset = decode_cursor(cursor)
+    except ForeignIdentifierError:
+        raise  # keeps its field / allowed_values / next_commands (router #343)
     except ValidationError as exc:
         raise ToolValidationError(str(exc)) from exc
 

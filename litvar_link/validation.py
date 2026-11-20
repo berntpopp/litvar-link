@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-from litvar_link.exceptions import ValidationError
+from litvar_link.exceptions import ForeignIdentifierError, ValidationError
 
 MAX_QUERY_LENGTH = 100
 MAX_GENE_NAME_LENGTH = 50
@@ -71,12 +71,103 @@ def validate_rsid(rsid: str | None) -> str:
     return normalized
 
 
-def validate_gene_name(gene_name: str | None) -> str:
-    """Validate and normalize a gene symbol. Returns stripped uppercase symbol."""
+def validate_gene_name(gene_name: str | None, *, field: str = "gene_name") -> str:
+    """Validate and normalize a gene symbol. Returns stripped uppercase symbol.
+
+    A well-formed gene id from another namespace (Ensembl, HGNC, NCBI, RefSeq)
+    raises ``ForeignIdentifierError``: LitVar2's gene endpoint is keyed by symbol
+    only and answers such an id with an empty list.
+    """
     if not gene_name or not gene_name.strip():
         msg = "Gene name cannot be empty"
-        raise ValidationError(msg, field="gene_name")
+        raise ValidationError(msg, field=field)
     if len(gene_name) > MAX_GENE_NAME_LENGTH:
         msg = f"Gene name too long (max {MAX_GENE_NAME_LENGTH} characters)"
-        raise ValidationError(msg, field="gene_name")
-    return gene_name.strip().upper()
+        raise ValidationError(msg, field=field)
+    clean = gene_name.strip().upper()
+    foreign = foreign_gene_error(clean, field=field)
+    if foreign:
+        raise foreign
+    return clean
+
+
+# --- Identifiers in a namespace LitVar2 does not take (genefoundry-router #343) ---
+# Converters are other fleet backends, named by their router-namespaced tool name.
+# UniProt accessions are deliberately absent: their shape collides with real gene
+# symbols (P2RY12), so they cannot be told apart without a lookup.
+_XREF = "hgnc_resolve_gene_by_xref"
+_FOREIGN_GENE_FORMS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("Ensembl gene id", re.compile(r"ENSG\d{11}(\.\d+)?", re.IGNORECASE)),
+    ("Ensembl transcript id", re.compile(r"ENST\d{11}(\.\d+)?", re.IGNORECASE)),
+    ("HGNC id", re.compile(r"HGNC:\d+", re.IGNORECASE)),
+    ("RefSeq accession", re.compile(r"[NX][MRP]_\d+(\.\d+)?", re.IGNORECASE)),
+    ("NCBI Gene id", re.compile(r"(?:NCBIGENE:|GENEID:|ENTREZ:)?(\d+)", re.IGNORECASE)),
+)
+_GENE_ALLOWED = ["HGNC gene symbol, e.g. KRAS"]
+
+# chr12:25245350, 12-25245350-C-T, 12:25245350:C:T, chr12:25245350C>T, 12:100-200
+_GENOMIC_COORDINATE = re.compile(
+    r"(?:chr)?(?:[1-9]|1\d|2[0-2]|X|Y|MT?)[:\-_]\d+"
+    r"(?:[:\-_]?[ACGTN]+[:\-_>/][ACGTN]+|-\d+)?",
+    re.IGNORECASE,
+)
+_GENOMIC_HGVS = re.compile(r"(?:NC_\d+(?:\.\d+)?|chr[0-9XYM]+):g\.\S+", re.IGNORECASE)
+_VARIANT_ALLOWED = [
+    "rsID, e.g. rs1061170",
+    "LitVar id, e.g. litvar@rs1061170##",
+    "HGVS c./p. or protein change with its gene, e.g. BRAF V600E",
+]
+
+
+def foreign_gene_error(value: str, *, field: str) -> ForeignIdentifierError | None:
+    """Return the ``invalid_input`` error for a gene id in a foreign namespace, else None."""
+    value = value.strip()
+    for form, pattern in _FOREIGN_GENE_FORMS:
+        match = pattern.fullmatch(value)
+        if not match:
+            continue
+        commands = [{"tool": "hgnc_resolve_symbol", "arguments": {"query": value}}]
+        if form == "NCBI Gene id":
+            number = match.group(1)
+            commands = [{"tool": _XREF, "arguments": {"source": "entrez_id", "value": number}}]
+            if value.isdigit():  # a bare number may also be an HGNC id: offer both, guess neither
+                commands.append(
+                    {"tool": "hgnc_resolve_symbol", "arguments": {"query": f"HGNC:{number}"}}
+                )
+        elif form == "Ensembl transcript id":
+            commands = [{"tool": _XREF, "arguments": {"source": "mane_select", "value": value}}]
+        return ForeignIdentifierError(
+            f"{field} is not a gene symbol (shape: {form}). LitVar2 is keyed by gene symbol "
+            "and cannot look that up, so this says nothing about the gene's variants.",
+            field=field,
+            allowed_values=_GENE_ALLOWED,
+            hint="Convert the identifier to its gene symbol first, then retry with the symbol.",
+            next_commands=commands,
+        )
+    return None
+
+
+def genomic_variant_error(
+    value: str, *, field: str = "variant_id", coordinates_only: bool = False
+) -> ForeignIdentifierError | None:
+    """Return the ``invalid_input`` error for a genomic coordinate / g. HGVS, else None.
+
+    LitVar2 indexes variants by rsID and by gene-anchored HGVS; it has no
+    position lookup, so a coordinate must be converted (vep-link recodes
+    coordinates <-> rsID <-> HGVS). ``coordinates_only`` skips genomic HGVS: the
+    service lets LitVar2 try that first, and the MCP tools call this again with
+    the caller's own (still versioned) text once LitVar2 has not resolved it.
+    """
+    value = value.strip()
+    if not _GENOMIC_COORDINATE.fullmatch(value) and (
+        coordinates_only or not _GENOMIC_HGVS.fullmatch(value)
+    ):
+        return None
+    return ForeignIdentifierError(
+        f"{field} looks like a genomic coordinate; LitVar2 has no position lookup, so this "
+        "says nothing about whether the variant has literature.",
+        field=field,
+        allowed_values=_VARIANT_ALLOWED,
+        hint="Convert the coordinate to an rsID or HGVS first, then retry with that.",
+        next_commands=[{"tool": "vep_recode_variant", "arguments": {"variants": [value]}}],
+    )

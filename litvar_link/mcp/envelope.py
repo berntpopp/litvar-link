@@ -21,6 +21,8 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from litvar_link.exceptions import ForeignIdentifierError
+
 SOURCE_NAME = "litvar-link"
 
 # THE closed error-code enum (Response-Envelope Standard v1 Rules §2). Exactly
@@ -101,17 +103,27 @@ def error_envelope(
     message: str,
     retryable: bool,
     recovery_action: str,
+    exc: Exception | None = None,
 ) -> dict[str, Any]:
-    """Build the flat, in-band execution-error frame (Rules §2)."""
+    """Build the flat, in-band execution-error frame (Rules §2).
+
+    A ``ForeignIdentifierError`` adds the fleet's structured recovery fields
+    (``field`` / ``allowed_values`` / ``hint`` / ``_meta.next_commands``, §2b).
+    """
+    extra: dict[str, Any] = {}
+    meta: dict[str, Any] = {}
+    if isinstance(exc, ForeignIdentifierError):
+        extra = {"field": exc.field, "allowed_values": exc.allowed_values, "hint": exc.hint}
+        meta = {"next_commands": exc.next_commands}
     return {
         "success": False,
         "error_code": error_code,
         "message": message,
         "retryable": retryable,
         "recovery_action": recovery_action,
-        "_meta": provenance_meta(
-            tool_name=tool_name,
-            request_id=request_id,
-            elapsed_ms=elapsed_ms,
-        ),
+        **extra,
+        "_meta": {
+            **meta,
+            **provenance_meta(tool_name=tool_name, request_id=request_id, elapsed_ms=elapsed_ms),
+        },
     }

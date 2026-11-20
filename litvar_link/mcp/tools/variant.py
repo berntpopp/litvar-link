@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal
 from fastmcp.tools import ToolResult
 from pydantic import Field
 
+from litvar_link.exceptions import VariantNotFoundError
 from litvar_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from litvar_link.mcp.errors import ToolValidationError, run_tool
 from litvar_link.mcp.shaping import (
@@ -15,6 +16,7 @@ from litvar_link.mcp.shaping import (
     fence_match_field,
 )
 from litvar_link.mcp.untrusted_content import enforce_untrusted_text_limits
+from litvar_link.validation import genomic_variant_error
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -44,7 +46,8 @@ VariantIdParam = Annotated[
         description=(
             "LitVar2 variant id (litvar@rs...##), rsID, or HGVS/protein name. "
             "Non-canonical input is resolved via autocomplete; the record that "
-            "actually answered is echoed back as `resolved_variant_id`."
+            "actually answered is echoed back as `resolved_variant_id`. Genomic "
+            "coordinates are rejected with the converter call to run first."
         ),
         examples=["litvar@rs1061170##", "rs1061170"],
     ),
@@ -82,7 +85,10 @@ def register(mcp: FastMCP, *, service_factory: Callable[[], Any]) -> None:
                 msg = "variant_id cannot be empty"
                 raise ToolValidationError(msg)
             # Unwrapped: run_tool maps VariantNotFoundError to `not_found` (#170).
-            resp = await service_factory().get_variant_summary(variant_id.strip())
+            try:
+                resp = await service_factory().get_variant_summary(variant_id.strip())
+            except VariantNotFoundError as exc:
+                raise genomic_variant_error(variant_id) or exc from exc
             data: dict[str, Any] = resp.model_dump()
             variant = data.get("variant") or {}
             if response_mode == "compact":

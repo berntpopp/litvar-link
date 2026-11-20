@@ -1244,3 +1244,15 @@ class TestValidationDelegation:
         with pytest.raises(ValidationError):
             await client.sensor_lookup("notanrsid")
         await client.close()
+
+
+@pytest.mark.asyncio
+async def test_bare_coordinate_is_rejected_before_any_upstream_call() -> None:
+    """Router #343: a coordinate is never handed to the free-text autocomplete."""
+    from litvar_link.exceptions import ForeignIdentifierError
+
+    service = VariantService.__new__(VariantService)
+    service.search_variants = AsyncMock()  # type: ignore[method-assign]
+    with pytest.raises(ForeignIdentifierError):
+        await service._resolve_variant("12-25245350-C-T")
+    service.search_variants.assert_not_called()

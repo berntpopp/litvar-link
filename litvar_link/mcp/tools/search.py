@@ -20,7 +20,13 @@ from litvar_link.mcp.shaping import (
     shape_variant_row,
 )
 from litvar_link.mcp.untrusted_content import enforce_untrusted_text_limits
-from litvar_link.validation import MAX_QUERY_LENGTH, validate_limit, validate_query
+from litvar_link.validation import (
+    MAX_QUERY_LENGTH,
+    foreign_gene_error,
+    genomic_variant_error,
+    validate_limit,
+    validate_query,
+)
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -42,6 +48,17 @@ async def _search_body(
 
     response = await service.search_variants(query=clean_query, limit=clean_limit)
     rows = [shape_variant_row(v.model_dump(), mode=response_mode) for v in response.variants]
+    # No rows for an id LitVar2 cannot read is "not understood", not "no variants" (#343).
+    # A bare number is left alone here: in free text it need not be a gene id.
+    foreign = (
+        not rows
+        and not clean_query.isdigit()
+        and (
+            foreign_gene_error(query, field="query") or genomic_variant_error(query, field="query")
+        )
+    )
+    if foreign:
+        raise foreign
 
     # total_count=None: LitVar's autocomplete supplies NO count, and the honest
     # answer to "how many are there?" is "upstream does not say". Inventing one
