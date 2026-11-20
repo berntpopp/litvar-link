@@ -58,6 +58,30 @@ class VariantNotFoundError(ValidationError):
         self.status_code = 404
 
 
+class ForeignIdentifierError(ValidationError):
+    """A well-formed identifier in a namespace the tool does not take (router #343).
+
+    Maps to ``invalid_input`` and carries the fleet's structured recovery fields.
+    ``message`` and ``hint`` are fixed, server-authored strings; ``next_commands``
+    holds ready-to-send converter calls whose arguments are grammar-validated.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        field: str,
+        allowed_values: list[str],
+        hint: str,
+        next_commands: list[dict[str, Any]],
+    ) -> None:
+        """Initialize with the structured recovery fields."""
+        super().__init__(message, field=field)
+        self.allowed_values = allowed_values
+        self.hint = hint
+        self.next_commands = next_commands
+
+
 class RateLimitError(LitVarAPIError):
     """Exception raised when rate limit is exceeded."""
 

@@ -233,6 +233,7 @@ async def run_tool(
             message=message,
             retryable=retryable,
             recovery_action=recovery_action,
+            exc=exc,
         )
         return ToolResult(structured_content=payload, is_error=True)
 

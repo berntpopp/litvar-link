@@ -21,6 +21,7 @@ from litvar_link.services.significance import _count_clinical_significance
 from litvar_link.utils.caching import create_service_cache_decorator
 from litvar_link.validation import (
     MAX_LIMIT,
+    genomic_variant_error,
     normalize_hgvs,
     validate_gene_name,
     validate_limit,
@@ -315,6 +316,10 @@ class VariantService:
         raw = normalize_hgvs(raw.strip())
         if _is_canonical_variant_id(raw):
             return raw, {"query": raw, "variant_id": raw, "resolved_from": "canonical_id"}
+        # A bare coordinate is never sent to the free-text autocomplete: a hit
+        # there would be a guess, not a position match (router #343).
+        if coordinate := genomic_variant_error(raw, coordinates_only=True):
+            raise coordinate
         search = await self.search_variants(raw, limit=candidates)
         if not search.variants:
             msg = (
