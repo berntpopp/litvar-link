@@ -114,7 +114,7 @@ def error_envelope(
     meta: dict[str, Any] = {}
     if isinstance(exc, ForeignIdentifierError):
         extra = {"field": exc.field, "allowed_values": exc.allowed_values, "hint": exc.hint}
-        meta = {"next_commands": exc.next_commands}
+        meta = {"next_commands": exc.next_commands} if exc.next_commands else {}
     return {
         "success": False,
         "error_code": error_code,

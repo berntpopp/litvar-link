@@ -115,11 +115,6 @@ class TestForeignIdentifierForms:
                 "hgnc_resolve_gene_by_xref",
                 {"source": "entrez_id", "value": "3845"},
             ),
-            (
-                "ENST00000311936",
-                "hgnc_resolve_gene_by_xref",
-                {"source": "mane_select", "value": "ENST00000311936"},
-            ),
         ],
     )
     def test_foreign_gene_id_names_its_converter(
@@ -130,6 +125,12 @@ class TestForeignIdentifierForms:
         assert exc.value.field == "gene_symbol"
         assert exc.value.next_commands[0] == {"tool": tool, "arguments": arguments}
         assert value not in str(exc.value)  # fixed message: the input is never echoed
+
+    def test_transcript_id_is_named_without_a_converter(self) -> None:
+        with pytest.raises(ForeignIdentifierError) as exc:
+            validate_gene_name("ENST00000311936", field="gene_symbol")
+        assert "transcript" in exc.value.hint
+        assert exc.value.next_commands == []
 
     @pytest.mark.parametrize("symbol", ["KRAS", "P2RY12", "C4orf3", "H2AX", "NMT1", "ENSA"])
     def test_real_symbols_pass(self, symbol: str) -> None:

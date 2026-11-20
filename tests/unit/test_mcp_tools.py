@@ -519,3 +519,14 @@ async def test_search_tool_empty_for_a_foreign_id_is_invalid_input() -> None:
         result = await tool.run({"query": query})
         assert result.is_error is False
         assert result.structured_content["results"] == []
+
+
+@pytest.mark.asyncio
+async def test_gene_tool_transcript_id_offers_no_converter_call() -> None:
+    mcp = FastMCP(name="t")
+    register_all(mcp, service_factory=_service)
+    tool = await _tool_by_name(mcp, "search_gene_variants")
+    payload = _error_payload(await tool.run({"gene_symbol": "ENST00000311936"}))
+    assert payload["error_code"] == "invalid_input"
+    assert "transcript" in payload["hint"]
+    assert "next_commands" not in payload["_meta"]

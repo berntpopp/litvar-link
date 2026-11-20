@@ -127,6 +127,7 @@ def foreign_gene_error(value: str, *, field: str) -> ForeignIdentifierError | No
         if not match:
             continue
         commands = [{"tool": "hgnc_resolve_symbol", "arguments": {"query": value}}]
+        hint = "Convert the identifier to its gene symbol first, then retry with the symbol."
         if form == "NCBI Gene id":
             number = match.group(1)
             commands = [{"tool": _XREF, "arguments": {"source": "entrez_id", "value": number}}]
@@ -135,13 +136,15 @@ def foreign_gene_error(value: str, *, field: str) -> ForeignIdentifierError | No
                     {"tool": "hgnc_resolve_symbol", "arguments": {"query": f"HGNC:{number}"}}
                 )
         elif form == "Ensembl transcript id":
-            commands = [{"tool": _XREF, "arguments": {"source": "mane_select", "value": value}}]
+            # No fleet converter is guaranteed for an arbitrary transcript: name none.
+            commands = []
+            hint = "This is a transcript id; this tool takes the gene's HGNC symbol instead."
         return ForeignIdentifierError(
             f"{field} is not a gene symbol (shape: {form}). LitVar2 is keyed by gene symbol "
             "and cannot look that up, so this says nothing about the gene's variants.",
             field=field,
             allowed_values=_GENE_ALLOWED,
-            hint="Convert the identifier to its gene symbol first, then retry with the symbol.",
+            hint=hint,
             next_commands=commands,
         )
     return None

@@ -13,8 +13,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `search_gene_variants` no longer answers an Ensembl, HGNC, NCBI Gene or RefSeq id
   with an empty success. It returns `invalid_input` with `field`, `allowed_values`,
   `hint` and a ready-to-send converter call in `_meta.next_commands`
-  (`hgnc_resolve_symbol`, or `hgnc_resolve_gene_by_xref` for NCBI Gene ids and
-  Ensembl transcripts) (genefoundry-router #343).
+  (`hgnc_resolve_symbol`, or `hgnc_resolve_gene_by_xref` for NCBI Gene ids). An
+  Ensembl transcript id is named as such, with no converter call
+  (genefoundry-router #343).
 - `get_variant_literature` / `get_variant_summary` given a genomic coordinate
   (`12-25245350-C-T`, `chr12:25245350`, or an `NC_…:g.` HGVS that LitVar2 does not
   resolve) return `invalid_input` pointing to `vep_recode_variant` instead of
