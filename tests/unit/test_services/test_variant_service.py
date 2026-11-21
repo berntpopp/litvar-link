@@ -827,7 +827,7 @@ class TestVariantService:
             await service.get_variant_summary("litvar@rs1061170##")
 
     @pytest.mark.asyncio
-    async def test_versioned_transcript_hgvs_is_sent_as_given(
+    async def test_get_variant_literature_keeps_transcript_version(
         self,
         service: VariantService,
         mock_client: AsyncMock,
@@ -856,6 +856,26 @@ class TestVariantService:
         mock_client.search_variants.assert_awaited_once_with("NM_004004.6:c.35del", limit=11)
         assert result.variant_id == "litvar@rs80338939##"
         assert result.resolved_variant["rsid"] == "rs80338939"
+
+    @pytest.mark.asyncio
+    async def test_get_variant_summary_keeps_transcript_version(
+        self,
+        service: VariantService,
+        mock_client: AsyncMock,
+        sample_variant_data: dict,
+    ) -> None:
+        """Issue #174 (flips the #134 test): the summary path keeps the version too."""
+        mock_client.search_variants.return_value = [sample_variant_data]
+        mock_client.get_variant_details.return_value = {
+            "id": sample_variant_data["_id"],
+            "rsid": "rs113993960",
+            "gene": ["CFTR"],
+            "name": "c.1521_1523delCTT",
+        }
+
+        resp = await service.get_variant_summary("NM_000492.4:c.1521_1523del")
+        assert resp.resolved_variant_id == sample_variant_data["_id"]
+        mock_client.search_variants.assert_awaited_once_with("NM_000492.4:c.1521_1523del", limit=2)
 
     @pytest.mark.asyncio
     async def test_batch_variant_lookup_exception_handling(

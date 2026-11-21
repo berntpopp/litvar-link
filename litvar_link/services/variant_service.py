@@ -322,7 +322,8 @@ class VariantService:
         search = await self.search_variants(raw, limit=candidates)
         if not search.variants:
             msg = (
-                f"No LitVar2 variant found for {raw!r}. "
+                f"No LitVar2 variant found for {raw!r}: LitVar2 did not recognise this "
+                "text; this does not prove there is no literature. "
                 "Use search_genetic_variants to find the variant id."
             )
             raise VariantNotFoundError(msg, field="variant_id")
