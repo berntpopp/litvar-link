@@ -17,6 +17,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A transcript HGVS that LitVar2 still cannot match now returns `invalid_input` saying
   the HGVS was not mapped (not "no literature"), with a ready `vep_recode_variant` call
   in `_meta.next_commands` to get the rsID.
+- ClinVar's name form `NM_004004.6(GJB2):c.35del` has the `(GJB2)` label dropped
+  before the query; LitVar2 matches it only without the label.
 
 ## [6.3.0] - 2026-11-20
 

@@ -75,6 +75,10 @@ class TestQueryKeepsTranscriptVersion:
         """Issue #174: LitVar2 matches only the versioned synonym; never strip it."""
         assert validate_query(" NM_004004.6:c.35del ") == "NM_004004.6:c.35del"
 
+    def test_validate_query_drops_clinvar_gene_label(self) -> None:
+        """ClinVar's name form: LitVar2 matches only the label-free synonym (live)."""
+        assert validate_query("NM_004004.6(GJB2):c.35del") == "NM_004004.6:c.35del"
+
 
 class TestForeignIdentifierForms:
     """genefoundry-router #343: a foreign-namespace id is named, never read as "no data"."""
@@ -155,7 +159,12 @@ class TestForeignIdentifierForms:
 
     @pytest.mark.parametrize(
         "hgvs",
-        ["NM_004004.6:c.35del", "NM_001754.5:c.351+1G>C", "NP_000248.2:p.Lys1459Asn"],
+        [
+            "NM_004004.6:c.35del",
+            "NM_001754.5:c.351+1G>C",
+            "NP_000248.2:p.Lys1459Asn",
+            "NM_001754.5(RUNX1):c.351+1G>C",  # ClinVar name form; the recoder reads it
+        ],
     )
     def test_unmapped_transcript_hgvs_points_to_the_recoder(self, hgvs: str) -> None:
         """Issue #174: a transcript HGVS LitVar2 did not map is not "no literature"."""

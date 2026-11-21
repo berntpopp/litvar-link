@@ -17,6 +17,8 @@ MAX_GENE_NAME_LENGTH = 50
 MIN_LIMIT = 1
 MAX_LIMIT = 100
 _MIN_RSID_LENGTH = 3
+# ClinVar's name form NM_004004.6(GJB2):c.35del: LitVar2 matches it only without "(GJB2)".
+_CLINVAR_GENE_LABEL = re.compile(r"(?<=\d)\([A-Za-z0-9-]{1,30}\)(?=:)", re.ASCII)
 
 
 def validate_query(query: str | None) -> str:
@@ -28,7 +30,7 @@ def validate_query(query: str | None) -> str:
     if not query or not query.strip():
         msg = "Query cannot be empty"
         raise ValidationError(msg, field="query")
-    normalized = query.strip()
+    normalized = _CLINVAR_GENE_LABEL.sub("", query.strip(), count=1)
     if len(normalized) > MAX_QUERY_LENGTH:
         msg = f"Query too long (max {MAX_QUERY_LENGTH} characters)"
         raise ValidationError(msg, field="query")
@@ -105,7 +107,9 @@ _COORDINATE_POSITION = re.compile(_CHROM_POS + r"(?:-\d+)?", _FLAGS)
 _GENOMIC_HGVS = re.compile(r"NC_\d+(?:\.\d+)?:g\.[!-~]{1,200}", _FLAGS)
 # NM_004004.6:c.35del, NP_000248.2:p.Lys1459Asn -- LitVar2 matches these only as
 # a stored versioned synonym, so a miss says nothing about the variant (#174).
-_TRANSCRIPT_HGVS = re.compile(r"(?:[NX][MRP]_\d+|ENST\d{11})(?:\.\d+)?:[cnp]\.[!-~]{1,200}", _FLAGS)
+_TRANSCRIPT_HGVS = re.compile(
+    r"(?:[NX][MRP]_\d+|ENST\d{11})(?:\.\d+)?(?:\([A-Za-z0-9-]{1,30}\))?:[cnp]\.[!-~]{1,200}", _FLAGS
+)
 _VARIANT_ALLOWED = [
     "rsID, e.g. rs1061170",
     "LitVar id, e.g. litvar@rs1061170##",
