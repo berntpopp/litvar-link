@@ -22,7 +22,6 @@ from litvar_link.utils.caching import create_service_cache_decorator
 from litvar_link.validation import (
     MAX_LIMIT,
     genomic_variant_error,
-    normalize_hgvs,
     validate_gene_name,
     validate_limit,
     validate_query,
@@ -253,7 +252,7 @@ class VariantService:
             msg = "Variant ID cannot be empty"
             raise ValidationError(msg, field="variant_id")
 
-        variant_id = normalize_hgvs(variant_id.strip())
+        variant_id = variant_id.strip()
         try:
             return await self._fetch_variant_details(variant_id)
         except ValidationError:
@@ -313,7 +312,7 @@ class VariantService:
         literature for a different variant than it meant without being told.
         Raises ``ValidationError`` (user-recoverable) when nothing matches.
         """
-        raw = normalize_hgvs(raw.strip())
+        raw = raw.strip()
         if _is_canonical_variant_id(raw):
             return raw, {"query": raw, "variant_id": raw, "resolved_from": "canonical_id"}
         # A bare coordinate is never sent to the free-text autocomplete: a hit
@@ -400,7 +399,7 @@ class VariantService:
             msg = "Variant ID cannot be empty"
             raise ValidationError(msg, field="variant_id")
 
-        variant_id = normalize_hgvs(variant_id.strip())
+        variant_id = variant_id.strip()
         try:
             resolved_id, resolved = await self._resolve_variant(variant_id)
             response = await self._fetch_publication_response(resolved_id)

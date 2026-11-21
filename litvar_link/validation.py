@@ -18,30 +18,17 @@ MIN_LIMIT = 1
 MAX_LIMIT = 100
 _MIN_RSID_LENGTH = 3
 
-_HGVS_VERSION_PATTERN = re.compile(r"\b([A-Za-z]{2,}_[0-9]+|ENS[A-Z]+[0-9]+)\.[0-9]+(?=:|\b)")
-
-
-def normalize_hgvs(text: str) -> str:
-    """Normalize HGVS notation by stripping transcript version decimals.
-
-    NCBI LitVar2 autocomplete/search does not match versioned RefSeq transcript
-    accessions (e.g. 'NM_001458.5:c.6651del' or 'NM_001458.5'), but succeeds when
-    queried with unversioned accessions ('NM_001458:c.6651del' or 'NM_001458').
-    """
-    if not text:
-        return text
-    return _HGVS_VERSION_PATTERN.sub(r"\1", text)
-
 
 def validate_query(query: str | None) -> str:
     """Validate and normalize a free-text search query.
 
-    Returns the stripped and HGVS-normalized query. Raises ``ValidationError(field="query")``.
+    Returns the stripped query. Raises ``ValidationError(field="query")``.
+    A transcript HGVS keeps its version: LitVar2 matches only the versioned synonym (#174).
     """
     if not query or not query.strip():
         msg = "Query cannot be empty"
         raise ValidationError(msg, field="query")
-    normalized = normalize_hgvs(query.strip())
+    normalized = query.strip()
     if len(normalized) > MAX_QUERY_LENGTH:
         msg = f"Query too long (max {MAX_QUERY_LENGTH} characters)"
         raise ValidationError(msg, field="query")
@@ -116,6 +103,9 @@ _COORDINATE_ALLELES = re.compile(_CHROM_POS + r"[:\-_]?[ACGTN]+[:\-_>/][ACGTN]+"
 _COORDINATE_POSITION = re.compile(_CHROM_POS + r"(?:-\d+)?", _FLAGS)
 # Printable ASCII only after ``:g.``, and capped: this text is echoed to the recoder.
 _GENOMIC_HGVS = re.compile(r"NC_\d+(?:\.\d+)?:g\.[!-~]{1,200}", _FLAGS)
+# NM_004004.6:c.35del, NP_000248.2:p.Lys1459Asn -- LitVar2 matches these only as
+# a stored versioned synonym, so a miss says nothing about the variant (#174).
+_TRANSCRIPT_HGVS = re.compile(r"(?:[NX][MRP]_\d+|ENST\d{11})(?:\.\d+)?:[cnp]\.[!-~]{1,200}", _FLAGS)
 _VARIANT_ALLOWED = [
     "rsID, e.g. rs1061170",
     "LitVar id, e.g. litvar@rs1061170##",
@@ -164,12 +154,15 @@ def genomic_variant_error(
     rsID, HGVS and SPDI): no fleet tool is verified to turn CHR-POS-REF-ALT into an
     rsID, and a position or range without alleles names no variant at all.
 
-    ``coordinates_only`` skips genomic HGVS: the service lets LitVar2 try that first,
-    and the MCP tools call this again with the caller's own (still versioned) text
+    A transcript HGVS LitVar2 did not match gets the same converter call (#174).
+
+    ``coordinates_only`` skips genomic and transcript HGVS: the service lets LitVar2
+    try those first, and the MCP tools call this again with the caller's own (still versioned) text
     once LitVar2 has not resolved it.
     """
     value = value.strip()
     commands: list[dict[str, Any]] = []
+    why = "LitVar2 has no position lookup"
     if _COORDINATE_ALLELES.fullmatch(value):
         what = "a genomic coordinate"
         hint = "LitVar2 needs the variant's rsID or HGVS; look it up and retry with that."
@@ -180,10 +173,15 @@ def genomic_variant_error(
         what = "a genomic (g.) HGVS"
         hint = "Convert it to an rsID or a c./p. HGVS first, then retry with that."
         commands = [{"tool": "vep_recode_variant", "arguments": {"variants": [value]}}]
+    elif not coordinates_only and _TRANSCRIPT_HGVS.fullmatch(value):
+        what = "a transcript HGVS"
+        why = "LitVar2 matched no stored synonym for it"
+        hint = "Convert it to an rsID first, then retry with the rsID."
+        commands = [{"tool": "vep_recode_variant", "arguments": {"variants": [value]}}]
     else:
         return None
     return ForeignIdentifierError(
-        f"{field} looks like {what}; LitVar2 has no position lookup, so this says "
+        f"{field} looks like {what}; {why}, so this says "
         "nothing about whether the variant has literature.",
         field=field,
         allowed_values=_VARIANT_ALLOWED,

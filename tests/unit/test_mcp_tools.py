@@ -496,6 +496,10 @@ async def test_gene_tool_real_symbol_without_variants_stays_an_honest_empty() ->
                 }
             ],
         ),
+        (  # issue #174: an unmapped transcript HGVS is not "no literature"
+            "NM_001754.5:c.351+1G>C",
+            [{"tool": "vep_recode_variant", "arguments": {"variants": ["NM_001754.5:c.351+1G>C"]}}],
+        ),
     ],
 )
 async def test_unresolved_genomic_form_is_invalid_input(

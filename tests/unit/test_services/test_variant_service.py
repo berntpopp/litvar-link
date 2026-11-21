@@ -827,24 +827,35 @@ class TestVariantService:
             await service.get_variant_summary("litvar@rs1061170##")
 
     @pytest.mark.asyncio
-    async def test_get_variant_summary_normalizes_versioned_hgvs(
+    async def test_versioned_transcript_hgvs_is_sent_as_given(
         self,
         service: VariantService,
         mock_client: AsyncMock,
-        sample_variant_data: dict,
     ) -> None:
-        """Test that get_variant_summary strips transcript version decimals from HGVS."""
-        mock_client.search_variants.return_value = [sample_variant_data]
-        mock_client.get_variant_details.return_value = {
-            "id": sample_variant_data["_id"],
-            "rsid": "rs113993960",
-            "gene": ["CFTR"],
-            "name": "c.1521_1523delCTT",
-        }
+        """Issue #174: LitVar2 matches transcript HGVS only as its versioned synonym.
 
-        resp = await service.get_variant_summary("NM_001458.5:c.6651del")
-        assert resp.resolved_variant_id == sample_variant_data["_id"]
-        mock_client.search_variants.assert_awaited_once_with("NM_001458:c.6651del", limit=2)
+        Live 2026-11-21: ``NM_004004.6:c.35del`` hits rs80338939 (903 PMIDs);
+        the version-stripped ``NM_004004:c.35del`` (sent since #134) returns [].
+        """
+        # Trimmed live autocomplete row for query=NM_004004.6:c.35del.
+        mock_client.search_variants.return_value = [
+            {
+                "_id": "litvar@rs80338939##",
+                "rsid": "rs80338939",
+                "gene": ["GJB2"],
+                "name": "c.35delG",
+                "hgvs": "c.35delG",
+                "pmids_count": 903,
+                "match": "Matched on synonyms <m>NM_004004.6:c.35del</m>",
+            }
+        ]
+        mock_client.get_variant_publications.return_value = ["10500000", "10600000"]
+
+        result = await service.get_variant_literature("NM_004004.6:c.35del")
+
+        mock_client.search_variants.assert_awaited_once_with("NM_004004.6:c.35del", limit=11)
+        assert result.variant_id == "litvar@rs80338939##"
+        assert result.resolved_variant["rsid"] == "rs80338939"
 
     @pytest.mark.asyncio
     async def test_batch_variant_lookup_exception_handling(

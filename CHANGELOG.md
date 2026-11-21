@@ -6,6 +6,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [6.3.1] - 2026-11-21
+
+### Fixed
+
+- `get_variant_literature`, `get_variant_summary` and `search_genetic_variants` send a
+  transcript HGVS with its version kept (`NM_004004.6:c.35del`). LitVar2 matches such
+  input only as a stored versioned synonym; stripping the version (added in 6.0.11 for
+  #134) turned every one of these into a false `not_found` (#174).
+- A transcript HGVS that LitVar2 still cannot match now returns `invalid_input` saying
+  the HGVS was not mapped (not "no literature"), with a ready `vep_recode_variant` call
+  in `_meta.next_commands` to get the rsID.
+
 ## [6.3.0] - 2026-11-20
 
 ### Changed
