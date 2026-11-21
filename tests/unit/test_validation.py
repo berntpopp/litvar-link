@@ -8,7 +8,6 @@ from litvar_link.exceptions import ForeignIdentifierError, ValidationError
 from litvar_link.validation import (
     foreign_gene_error,
     genomic_variant_error,
-    normalize_hgvs,
     validate_gene_name,
     validate_limit,
     validate_query,
@@ -71,33 +70,14 @@ class TestValidateGeneName:
         assert exc.value.field == "gene_name"
 
 
-class TestNormalizeHgvs:
-    def test_strips_refseq_transcript_version(self) -> None:
-        assert normalize_hgvs("NM_001458.5:c.6651del") == "NM_001458:c.6651del"
+class TestQueryKeepsTranscriptVersion:
+    def test_validate_query_keeps_hgvs_version(self) -> None:
+        """Issue #174: LitVar2 matches only the versioned synonym; never strip it."""
+        assert validate_query(" NM_004004.6:c.35del ") == "NM_004004.6:c.35del"
 
-    def test_strips_refseq_genomic_version(self) -> None:
-        assert normalize_hgvs("NC_000001.11:g.12345A>G") == "NC_000001:g.12345A>G"
-
-    def test_strips_refseq_protein_version(self) -> None:
-        assert normalize_hgvs("NP_001449.1:p.Val600Glu") == "NP_001449:p.Val600Glu"
-
-    def test_strips_ensembl_version(self) -> None:
-        assert normalize_hgvs("ENST00000380152.8:c.6651del") == "ENST00000380152:c.6651del"
-
-    def test_strips_bare_refseq_accession_version(self) -> None:
-        assert normalize_hgvs("NM_001458.5") == "NM_001458"
-
-    def test_strips_version_in_spaced_query(self) -> None:
-        assert normalize_hgvs("NM_001458.5 c.6651del") == "NM_001458 c.6651del"
-
-    def test_leaves_unversioned_hgvs_unchanged(self) -> None:
-        assert normalize_hgvs("NM_001458:c.6651del") == "NM_001458:c.6651del"
-
-    def test_leaves_rsid_unchanged(self) -> None:
-        assert normalize_hgvs("rs1061170") == "rs1061170"
-
-    def test_validate_query_normalizes_hgvs_version(self) -> None:
-        assert validate_query("NM_001458.5:c.6651del") == "NM_001458:c.6651del"
+    def test_validate_query_drops_clinvar_gene_label(self) -> None:
+        """ClinVar's name form: LitVar2 matches only the label-free synonym (live)."""
+        assert validate_query("NM_004004.6(GJB2):c.35del") == "NM_004004.6:c.35del"
 
 
 class TestForeignIdentifierForms:
@@ -177,13 +157,32 @@ class TestForeignIdentifierForms:
         assert genomic_variant_error(value) is None
         assert foreign_gene_error(value, field="gene_symbol") is None
 
+    @pytest.mark.parametrize(
+        "hgvs",
+        [
+            "NM_004004.6:c.35del",
+            "NM_001754.5:c.351+1G>C",
+            "NP_000248.2:p.Lys1459Asn",
+            "NM_001754.5(RUNX1):c.351+1G>C",  # ClinVar name form; the recoder reads it
+        ],
+    )
+    def test_unmapped_transcript_hgvs_points_to_the_recoder(self, hgvs: str) -> None:
+        """Issue #174: a transcript HGVS LitVar2 did not map is not "no literature"."""
+        error = genomic_variant_error(hgvs)
+        assert error is not None
+        assert "rsID" in error.hint
+        assert error.next_commands == [
+            {"tool": "vep_recode_variant", "arguments": {"variants": [hgvs]}}
+        ]
+        assert genomic_variant_error(hgvs, coordinates_only=True) is None
+
     def test_genomic_hgvs_only_when_asked(self) -> None:
         hgvs = "NC_000012.12:g.25245350C>T"
         assert genomic_variant_error(hgvs, coordinates_only=True) is None
         assert genomic_variant_error(hgvs) is not None
 
     @pytest.mark.parametrize(
-        "value", ["rs1061170", "litvar@rs1061170##", "BRAF V600E", "NM_004333:c.1799T>A", "12"]
+        "value", ["rs1061170", "litvar@rs1061170##", "BRAF V600E", "BRAF c.1799T>A", "12"]
     )
     def test_variant_forms_litvar_reads_pass(self, value: str) -> None:
         assert genomic_variant_error(value) is None

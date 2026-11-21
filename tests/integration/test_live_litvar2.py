@@ -54,3 +54,16 @@ async def test_resolve_rsid_then_literature_chain_live() -> None:
         lit = await service.get_variant_literature(resolved.variant_id)
         assert lit.total_count > 0
         assert all(p.pmid.isdigit() for p in lit.publications)
+
+
+@pytest.mark.asyncio
+async def test_versioned_transcript_hgvs_resolves_live() -> None:
+    """Issue #174: LitVar2 matches transcript HGVS only with its version kept."""
+    from litvar_link.config import get_cache_config
+    from litvar_link.services.variant_service import VariantService
+
+    async with LitVar2Client(get_api_config()) as client:
+        service = VariantService(client=client, cache_config=get_cache_config())
+        lit = await service.get_variant_literature("NM_004004.6:c.35del")
+    assert lit.variant_id == "litvar@rs80338939##"
+    assert lit.total_count > 0
