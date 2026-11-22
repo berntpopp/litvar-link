@@ -7,6 +7,7 @@ from datetime import datetime
 
 from fastapi import APIRouter
 
+from litvar_link import __version__
 from litvar_link.models import CacheStatsResponse, HealthResponse
 
 from .dependencies import ClientDep, LoggerDep, ServiceDep
@@ -63,7 +64,7 @@ async def health_check(
 
     return HealthResponse(
         status=overall_status,
-        version="0.1.0",
+        version=__version__,
         uptime_seconds=uptime,
         litvar_api_status=litvar_status,
         cache_status=cache_status,
