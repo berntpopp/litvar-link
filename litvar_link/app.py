@@ -84,7 +84,7 @@ def create_app(extra_lifespan: Any = None) -> FastAPI:
     app = FastAPI(
         title="LitVar-Link",
         description="High-performance MCP/API server for NCBI's LitVar2 genetic variant database",
-        version="0.1.0",
+        version=__version__,
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
@@ -99,7 +99,7 @@ def create_app(extra_lifespan: Any = None) -> FastAPI:
         """Root endpoint with service information."""
         return {
             "name": "LitVar-Link",
-            "version": "0.1.0",
+            "version": __version__,
             "description": "High-performance MCP/API server for NCBI's LitVar2 genetic variant database",
             "docs": "/docs",
             "health": "/api/health",

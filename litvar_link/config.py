@@ -7,6 +7,8 @@ from typing import Any, Literal, cast
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from litvar_link import __version__
+
 
 class APIConfigModel(BaseModel):
     """LitVar2 API configuration model."""
@@ -46,7 +48,7 @@ class APIConfigModel(BaseModel):
         description="Delay between retry attempts in seconds",
     )
     user_agent: str = Field(
-        default="LitVar-Link/0.1.0",
+        default=f"LitVar-Link/{__version__}",
         description="User agent string for API requests",
     )
     max_response_bytes: int = Field(

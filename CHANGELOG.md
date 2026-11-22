@@ -6,6 +6,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [6.3.2] - 2026-11-22
+
+### Fixed
+
+- `/api/health`, the OpenAPI app version, the root `/` info and the default
+  `User-Agent` reported a hardcoded `0.1.0`; they now use the installed package
+  version (`litvar_link.__version__`). A guard test fails if a version literal
+  returns (#176).
+
 ## [6.3.1] - 2026-11-21
 
 ### Fixed
