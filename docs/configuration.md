@@ -79,7 +79,7 @@ LITVAR_LINK_API__RATE_LIMIT_PER_SECOND=2.0 # requests/second, 0-10
 LITVAR_LINK_API__BURST_SIZE=5              # token-bucket burst, 1-20
 LITVAR_LINK_API__MAX_RETRIES=3             # 0-10
 LITVAR_LINK_API__RETRY_DELAY=1.0           # seconds between retries, 0.1-10
-LITVAR_LINK_API__USER_AGENT=LitVar-Link/1.0.0
+LITVAR_LINK_API__USER_AGENT=LitVar-Link/<version>  # default: the installed package version
 ```
 
 ### Caching (nested `cache.*`)
