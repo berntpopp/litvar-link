@@ -8,7 +8,7 @@ clingen-link's ``mcp/envelope.py``) keeps that module focused on classification
 and control flow.
 
 - SUCCESS: ``{"success": True, <tool payload>, "_meta": {tool, request_id,
-  elapsed_ms, source, unsafe_for_clinical_use}}``.
+  elapsed_ms, source, data_version, retrieved_at, unsafe_for_clinical_use}}``.
 - FAILURE: a FLAT (never nested) ``{"success": False, "error_code", "message",
   "retryable", "recovery_action", "_meta": {...}}``.
 
@@ -23,7 +23,11 @@ from typing import Any, Literal
 
 from litvar_link.exceptions import ForeignIdentifierError
 
-SOURCE_NAME = "litvar-link"
+# Provenance (Response-Envelope Standard v1.2). `source` names the data, not the
+# server. LitVar2 is queried live and reports no release, so data_version is the
+# literal `live` and retrieved_at dates the data.
+SOURCE_NAME = "litvar"
+DATA_VERSION = "live"
 
 # THE closed error-code enum (Response-Envelope Standard v1 Rules §2). Exactly
 # these six, and nothing else -- a client branching on error_code cannot handle a
@@ -72,8 +76,11 @@ def success_envelope(
     tool_name: str,
     request_id: str,
     elapsed_ms: int,
+    retrieved_at: str,
 ) -> dict[str, Any]:
     """Wrap a tool body's payload dict in the flat success banner.
+
+    ``retrieved_at`` is the oldest upstream fetch behind the payload (RFC 3339 UTC).
 
     Any ``_meta`` the body already set is preserved and merged under (not
     replaced by) the provenance block, so a future tool can add domain-specific
@@ -90,6 +97,8 @@ def success_envelope(
             request_id=request_id,
             elapsed_ms=elapsed_ms,
         ),
+        "data_version": DATA_VERSION,
+        "retrieved_at": retrieved_at,
     }
     return envelope
 

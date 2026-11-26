@@ -130,7 +130,7 @@ class TestErrors:
 
         result = await run_tool("search_genetic_variants", body)
         assert isinstance(result, dict)
-        assert result["_meta"]["source"] == "litvar-link"
+        assert result["_meta"]["source"] == "litvar"
         assert isinstance(result["_meta"]["elapsed_ms"], int)
         assert result["_meta"]["elapsed_ms"] >= 0
 

@@ -5,11 +5,13 @@ from __future__ import annotations
 import functools
 import time
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from async_lru import alru_cache
 
 from litvar_link.logging_config import log_cache_operation
+from litvar_link.provenance import note_fetch
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Coroutine
@@ -33,6 +35,20 @@ def _cache_log_namespace(func_name: str, key_pattern: str | None) -> str:
     arguments; this value is used solely for structured logging.
     """
     return key_pattern or func_name
+
+
+def _stamped[T](
+    func: Callable[..., Awaitable[T]],
+) -> Callable[..., Coroutine[Any, Any, tuple[T, datetime]]]:
+    """Wrap ``func`` so its cache entry keeps the time of the fetch that filled it.
+
+    Response-Envelope Standard v1.2: a cache hit reports that time as ``_meta.retrieved_at``.
+    """
+
+    async def stamped(*args: Any, **kwargs: Any) -> tuple[T, datetime]:
+        return await func(*args, **kwargs), datetime.now(UTC)
+
+    return stamped
 
 
 class CacheManager:
@@ -95,9 +111,7 @@ class CacheManager:
         """
 
         def decorator(func: Callable[..., Awaitable[R]]) -> Callable[..., Awaitable[R]]:
-            cached_func = alru_cache(maxsize=maxsize, ttl=ttl)(
-                cast("Callable[..., Coroutine[Any, Any, R]]", func),
-            )
+            cached_func = alru_cache(maxsize=maxsize, ttl=ttl)(_stamped(func))
             self._cached_functions.append(cached_func)
 
             @functools.wraps(func)
@@ -107,7 +121,8 @@ class CacheManager:
                 initial_hits = cached_func.cache_info().hits
                 start_time = time.time()
 
-                result = await cached_func(*args, **kwargs)
+                result, fetched_at = await cached_func(*args, **kwargs)
+                note_fetch(fetched_at)
 
                 cache_info_after = cached_func.cache_info()
                 was_cache_hit = cache_info_after.hits > initial_hits

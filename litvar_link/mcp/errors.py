@@ -41,6 +41,7 @@ from litvar_link.exceptions import (
 from litvar_link.exceptions import ValidationError as LitVarValidationError
 from litvar_link.mcp.envelope import ErrorCode, error_envelope, success_envelope
 from litvar_link.mcp.untrusted_content import FORBIDDEN_CODEPOINTS, UntrustedTextLimitError
+from litvar_link.provenance import begin_fetch_log, retrieved_at
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +211,7 @@ async def run_tool(
     """
     request_id = uuid.uuid4().hex[:12]
     start = time.perf_counter()
+    fetches = begin_fetch_log()
     try:
         result = await body()
     except Exception as exc:  # error boundary: catch-all is intentional
@@ -243,4 +245,5 @@ async def run_tool(
         tool_name=tool_name,
         request_id=request_id,
         elapsed_ms=elapsed_ms,
+        retrieved_at=retrieved_at(fetches),
     )
