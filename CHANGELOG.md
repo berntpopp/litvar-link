@@ -6,6 +6,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [6.4.0] - 2026-11-26
+
+### Added
+
+- Provenance on every successful result (Response-Envelope Standard v1.2):
+  `_meta.data_version` (`live`: LitVar2 is queried live and reports no release) and
+  `_meta.retrieved_at` (UTC time of the upstream fetch; a cached result keeps the time of the
+  fetch that filled the cache entry).
+- The vendored envelope JSON Schema (genefoundry-envelope v1.2.0) validates every data tool's
+  result in the test suite.
+
+### Changed
+
+- `_meta.source` is `litvar` (was the server name `litvar-link`): it names the data.
+
 ## [6.3.2] - 2026-11-22
 
 ### Fixed
