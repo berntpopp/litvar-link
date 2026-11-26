@@ -20,6 +20,7 @@ from litvar_link.services.identifiers import _is_canonical_variant_id, _is_varia
 from litvar_link.services.significance import _count_clinical_significance
 from litvar_link.utils.caching import create_service_cache_decorator
 from litvar_link.validation import (
+    ACCEPTED_VARIANT_FORMS,
     MAX_LIMIT,
     genomic_variant_error,
     validate_gene_name,
@@ -40,11 +41,6 @@ _ModelT = TypeVar("_ModelT")
 # Autocomplete candidates fetched when resolving free text, so the response can
 # say honestly whether the top hit was the only match.
 _RESOLVE_CANDIDATES = 10
-# Fixed text only: a not-found message never echoes the caller's value (GTS-CORE-TXT-04).
-_ACCEPTED_FORMS = (
-    "Accepted forms: rsID (rs1061170), LitVar id (litvar@rs1061170##), "
-    "or gene-anchored HGVS / protein change (BRAF V600E). "
-)
 
 
 class VariantService:
@@ -266,8 +262,7 @@ class VariantService:
             if _is_variant_not_found(e):
                 msg = (
                     "LitVar2 has no variant record for the given variant_id (variant not found). "
-                    f"{_ACCEPTED_FORMS}"
-                    "Use search_genetic_variants to find a valid variant id."
+                    f"{ACCEPTED_VARIANT_FORMS}"
                 )
                 raise VariantNotFoundError(msg, field="variant_id") from e
             self._log_summary_error(e, variant_id)
@@ -330,8 +325,7 @@ class VariantService:
             msg = (
                 "No LitVar2 variant found for the given variant_id: LitVar2 did not recognise "
                 "it; this does not prove there is no literature. "
-                f"{_ACCEPTED_FORMS}"
-                "Use search_genetic_variants to find the variant id."
+                f"{ACCEPTED_VARIANT_FORMS}"
             )
             raise VariantNotFoundError(msg, field="variant_id")
         top = search.variants[0]
@@ -418,10 +412,8 @@ class VariantService:
         except LitVarAPIError as e:
             if _is_variant_not_found(e):
                 msg = (
-                    "LitVar2 has no literature record for the given variant_id "
-                    "(variant not found). "
-                    f"{_ACCEPTED_FORMS}"
-                    "Use search_genetic_variants to find a valid variant id."
+                    "LitVar2 has no literature record for the given variant_id (variant not found). "
+                    f"{ACCEPTED_VARIANT_FORMS}"
                 )
                 raise VariantNotFoundError(msg, field="variant_id") from e
             self._log_literature_error(e, variant_id)

@@ -121,6 +121,12 @@ _GENOMIC_HGVS = re.compile(r"NC_\d+(?:\.\d+)?:g\.[!-~]{1,200}", _FLAGS)
 _TRANSCRIPT_HGVS = re.compile(
     r"(?:[NX][MRP]_\d+|ENST\d{11})(?:\.\d+)?(?:\([A-Za-z0-9-]{1,30}\))?:[cnp]\.[!-~]{1,200}", _FLAGS
 )
+# Fixed text only: a not-found message never echoes the caller's value (GTS-CORE-TXT-04).
+ACCEPTED_VARIANT_FORMS = (
+    "Accepted forms: rsID (rs1061170), LitVar id (litvar@rs1061170##), "
+    "or gene-anchored HGVS / protein change (BRAF V600E). "
+    "Use search_genetic_variants to find a valid variant id."
+)
 _VARIANT_ALLOWED = [
     "rsID, e.g. rs1061170",
     "LitVar id, e.g. litvar@rs1061170##",
