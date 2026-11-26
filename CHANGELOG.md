@@ -6,6 +6,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [6.4.1] - 2026-11-26
+
+### Fixed
+
+- The not-found error message of `get_variant_summary` and `get_variant_literature` no longer
+  interpolates the caller's `variant_id` (GTS-CORE-TXT-04); it names the parameter and the
+  accepted forms in fixed text.
+- `_meta.next_commands` of `get_variant_literature` no longer forwards the caller's free-text
+  query when it contains control or format characters or exceeds 200 characters
+  (GTS-CORE-TXT-04).
+
 ## [6.4.0] - 2026-11-26
 
 ### Added

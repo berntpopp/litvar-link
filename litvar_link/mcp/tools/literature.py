@@ -18,7 +18,7 @@ from litvar_link.mcp.shaping import (
     paginate,
     recommended_citation,
 )
-from litvar_link.validation import genomic_variant_error
+from litvar_link.validation import genomic_variant_error, safe_echo_query
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -92,9 +92,10 @@ async def _literature_body(
     resolved = resp.resolved_variant or {}
     shaped["resolved_variant"] = resolved
     shaped["cached"] = resp.cached
-    if resolved.get("other_candidates_count"):
+    query = safe_echo_query(str(resolved.get("query", "")))
+    if resolved.get("other_candidates_count") and query:
         shaped["_meta"]["next_commands"] = [
-            {"tool": "search_genetic_variants", "arguments": {"query": resolved["query"]}}
+            {"tool": "search_genetic_variants", "arguments": {"query": query}}
         ]
     return shaped
 
