@@ -8,6 +8,7 @@ both ``api.client`` and ``services.variant_service``. Every failure raises
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Any
 
 from litvar_link.exceptions import ForeignIdentifierError, ValidationError
@@ -19,6 +20,16 @@ MAX_LIMIT = 100
 _MIN_RSID_LENGTH = 3
 # ClinVar's name form NM_004004.6(GJB2):c.35del: LitVar2 matches it only without "(GJB2)".
 _CLINVAR_GENE_LABEL = re.compile(r"(?<=\d)\([A-Za-z0-9-]{1,30}\)(?=:)", re.ASCII)
+
+
+def safe_echo_query(query: str) -> str | None:
+    """Return ``query`` if it may be repeated in a next step, else None (GTS-CORE-TXT-04).
+
+    Allowed only at most 200 characters and free of control/format characters (Cc, Cf).
+    """
+    if len(query) > 200 or any(unicodedata.category(c) in ("Cc", "Cf") for c in query):
+        return None
+    return query
 
 
 def validate_query(query: str | None) -> str:
@@ -109,6 +120,12 @@ _GENOMIC_HGVS = re.compile(r"NC_\d+(?:\.\d+)?:g\.[!-~]{1,200}", _FLAGS)
 # a stored versioned synonym, so a miss says nothing about the variant (#174).
 _TRANSCRIPT_HGVS = re.compile(
     r"(?:[NX][MRP]_\d+|ENST\d{11})(?:\.\d+)?(?:\([A-Za-z0-9-]{1,30}\))?:[cnp]\.[!-~]{1,200}", _FLAGS
+)
+# Fixed text only: a not-found message never echoes the caller's value (GTS-CORE-TXT-04).
+ACCEPTED_VARIANT_FORMS = (
+    "Accepted forms: rsID (rs1061170), LitVar id (litvar@rs1061170##), "
+    "or gene-anchored HGVS / protein change (BRAF V600E). "
+    "Use search_genetic_variants to find a valid variant id."
 )
 _VARIANT_ALLOWED = [
     "rsID, e.g. rs1061170",
